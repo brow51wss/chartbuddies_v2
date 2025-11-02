@@ -12,7 +12,7 @@ export default function Home() {
             Welcome to Chartbuddies V2
           </h2>
           <p className="text-gray-600 dark:text-gray-300 mb-4">
-            This is your MAR demo application built with:
+            This is your EHR demo application built with:
           </p>
           <ul className="list-disc list-inside space-y-2 text-gray-600 dark:text-gray-300 mb-8">
             <li>Next.js 12 with TypeScript</li>
