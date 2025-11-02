@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import Head from 'next/head'
+import { useRouter } from 'next/router'
 import { supabase } from '../lib/supabase'
 
 export default function Admissions() {
+  const router = useRouter()
   const [formData, setFormData] = useState({
     firstName: '',
     middleName: '',
@@ -60,11 +62,10 @@ export default function Admissions() {
     if (error) {
       setSubmitMessage(`Error: ${error.message}`)
       console.error('Error submitting form:', error)
-    } else {
-      setSubmitMessage('Admission record saved successfully!')
+    } else if (data && data.length > 0) {
       console.log('Data saved:', data)
-      // Clear form
-      setFormData({ firstName: '', middleName: '', lastName: '', dob: '', sex: '', dateOfAdmission: '' })
+      // Redirect to dashboard with admission_id
+      router.push(`/dashboard?admission_id=${data[0].id}`)
     }
   }
 
