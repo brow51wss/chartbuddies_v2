@@ -26,3 +26,49 @@ body {
     rgb(var(--background-start-rgb));
 }
 
+/* Feedback system styles */
+.feedback-highlight {
+  outline: 4px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+  animation: feedback-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes feedback-pulse {
+  0%, 100% {
+    outline-color: #3b82f6;
+  }
+  50% {
+    outline-color: #60a5fa;
+  }
+}
+
+.feedback-marker {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  background: #3b82f6;
+  border-radius: 50%;
+  border: 3px solid white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  z-index: 1000;
+  animation: feedback-bounce 0.5s ease-out;
+}
+
+.feedback-marker:hover {
+  transform: scale(1.2);
+  background: #2563eb;
+}
+
+@keyframes feedback-bounce {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
