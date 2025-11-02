@@ -18,7 +18,7 @@ export default function Home() {
             <li>Next.js 12 with TypeScript</li>
             <li>Tailwind CSS for styling</li>
             <li>Vercel Pro for deployment</li>
-            <li>Supabase for database (coming soon)</li>
+            <li>Supabase for database</li>
           </ul>
           <div className="flex justify-center">
             <Link href="/admissions">
