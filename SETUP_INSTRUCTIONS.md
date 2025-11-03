@@ -1,0 +1,79 @@
+# Chartbuddies Setup Instructions
+
+## Database Setup
+
+1. **Run the database migrations in Supabase SQL Editor:**
+
+   First, run `supabase-migrations/001_create_admissions_table.sql` (if not already done)
+   
+   Then, run `supabase-migrations/002_complete_schema.sql` which contains:
+   - Complete database schema for hospitals, users, patients, MAR forms
+   - Row Level Security (RLS) policies
+   - Triggers for auto-updating timestamps
+   - Function to auto-create user profiles on signup
+
+2. **Environment Variables:**
+   Make sure you have these in your `.env.local`:
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
+
+## Features Implemented
+
+✅ **Authentication System**
+- Login page (`/auth/login`)
+- Signup page (`/auth/signup`) - Supports creating new hospital or joining with invite code
+- Protected routes with role-based access
+- Auto-logout functionality
+
+✅ **Patient Management**
+- Patient registration form (`/admissions`) with all required fields
+- Dashboard showing assigned patients (`/dashboard`)
+- Patient forms page showing available forms per patient (`/patients/[id]/forms`)
+
+✅ **MAR Form System**
+- New MAR form creation (`/patients/[id]/mar/new`)
+  - Patient information section
+  - Medications with 31-day administration grid
+  - PRN/Not Administered records section
+  - Vital signs section
+  - Save as draft or submit functionality
+
+✅ **Database Schema**
+- Multi-tenant hospital isolation
+- Role-based access control (Superadmin, Head Nurse, Nurse)
+- Complete MAR form data structure
+- Audit logging table (ready for future use)
+
+## User Flow
+
+1. **First Time User (Superadmin):**
+   - Sign up → Create new hospital → Automatically becomes Superadmin
+   - Can register patients and see all hospital data
+
+2. **Nurse Signing Up:**
+   - Sign up with invite code → Joins existing hospital as Nurse
+   - Can only see assigned patients
+
+3. **Nurse Workflow:**
+   - Login → Dashboard shows assigned patients
+   - Click patient → See available forms (MAR, etc.)
+   - Create/edit MAR forms for assigned patients
+
+## Next Steps (Future Enhancements)
+
+- [ ] MAR form view/edit page (to view/continue editing existing forms)
+- [ ] Head Nurse/Superadmin dashboard with hospital management
+- [ ] Nurse-patient assignment interface
+- [ ] Form builder for custom forms
+- [ ] Audit log viewing
+- [ ] Reports and analytics
+
+## Notes
+
+- The first person to sign up for a hospital automatically becomes the Superadmin
+- Nurses auto-assign patients they create to themselves
+- All RLS policies are in place for data isolation
+- MAR forms support draft and submitted statuses
+
