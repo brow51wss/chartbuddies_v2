@@ -110,37 +110,51 @@ export default function Signup() {
       }
 
       if (!profileExists) {
-        // Only try manual insert if user is authenticated
-        if (isAuthenticated) {
-          console.log('Trigger did not create profile, attempting manual creation...')
-          const { data: newProfile, error: createProfileError } = await supabase
-            .from('user_profiles')
-            .insert({
-              id: authData.user.id,
-              email: authData.user.email!,
-              full_name: formData.fullName,
-              role: 'nurse',
-              hospital_id: null
-            })
-            .select()
-            .single()
+        // Try using the database function which bypasses RLS
+        console.log('Trigger did not create profile, using database function...')
+        const { data: functionResult, error: functionError } = await supabase
+          .rpc('create_user_profile_safe', {
+            p_user_id: authData.user.id,
+            p_email: authData.user.email!,
+            p_full_name: formData.fullName
+          })
 
-          if (createProfileError) {
-            console.error('Profile creation error:', createProfileError)
-            // Check if it's a duplicate key error (profile was created by trigger after all)
-            if (createProfileError.code === '23505') {
-              console.log('Profile already exists (created by trigger), continuing...')
-              profileExists = true
+        if (functionError) {
+          console.error('Function error:', functionError)
+          // Fallback: try direct insert if user is authenticated
+          if (isAuthenticated) {
+            console.log('Function failed, attempting direct insert...')
+            const { data: newProfile, error: createProfileError } = await supabase
+              .from('user_profiles')
+              .insert({
+                id: authData.user.id,
+                email: authData.user.email!,
+                full_name: formData.fullName,
+                role: 'nurse',
+                hospital_id: null
+              })
+              .select()
+              .single()
+
+            if (createProfileError) {
+              console.error('Direct insert error:', createProfileError)
+              // Check if it's a duplicate key error (profile was created by trigger after all)
+              if (createProfileError.code === '23505') {
+                console.log('Profile already exists, continuing...')
+                profileExists = true
+              } else {
+                throw new Error(`Failed to create user profile: ${createProfileError.message}`)
+              }
             } else {
-              throw new Error(`Failed to create user profile: ${createProfileError.message}`)
+              console.log('Profile created successfully via direct insert:', newProfile)
+              profileExists = true
             }
           } else {
-            console.log('Profile created successfully:', newProfile)
-            profileExists = true
+            throw new Error('Failed to create user profile. Please try again or contact support.')
           }
-        } else {
-          // User needs to confirm email first
-          throw new Error('Please check your email and confirm your account before continuing.')
+        } else if (functionResult && functionResult.success) {
+          console.log('Profile created successfully via function:', functionResult)
+          profileExists = true
         }
       }
 
