@@ -62,11 +62,33 @@ export default function Signup() {
         throw new Error('Failed to create user account')
       }
 
-      // Wait a bit for the trigger to create the user profile
+      // Check if user is authenticated (has a session)
+      // If email confirmation is required, there might not be a session
+      let isAuthenticated = !!authData.session
+      
+      // If no session and email confirmation is disabled, sign in immediately
+      if (!isAuthenticated) {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password
+        })
+        
+        if (signInError) {
+          // If sign in fails, might need email confirmation
+          // The trigger should still create the profile, so we'll wait for it
+          console.log('No immediate session, waiting for trigger to create profile...')
+        } else {
+          isAuthenticated = !!signInData.session
+        }
+      }
+
+      // Wait for the trigger to create the user profile (it uses SECURITY DEFINER so it bypasses RLS)
       let profileExists = false
       let attempts = 0
-      while (!profileExists && attempts < 10) {
-        const { data: existingProfile } = await supabase
+      const maxAttempts = 15 // Increased attempts
+      
+      while (!profileExists && attempts < maxAttempts) {
+        const { data: existingProfile, error: profileError } = await supabase
           .from('user_profiles')
           .select('id')
           .eq('id', authData.user.id)
@@ -77,36 +99,48 @@ export default function Signup() {
           break
         }
         
-        // Wait 200ms before retry
-        await new Promise(resolve => setTimeout(resolve, 200))
+        // If we get an RLS error, the profile might not exist yet, keep waiting
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error('Error checking profile:', profileError)
+        }
+        
+        // Wait 300ms before retry (increased from 200ms)
+        await new Promise(resolve => setTimeout(resolve, 300))
         attempts++
       }
 
       if (!profileExists) {
-        // Create profile manually if trigger didn't work
-        console.log('Trigger did not create profile, creating manually...')
-        const { data: newProfile, error: createProfileError } = await supabase
-          .from('user_profiles')
-          .insert({
-            id: authData.user.id,
-            email: authData.user.email!,
-            full_name: formData.fullName,
-            role: 'nurse',
-            hospital_id: null
-          })
-          .select()
-          .single()
+        // Only try manual insert if user is authenticated
+        if (isAuthenticated) {
+          console.log('Trigger did not create profile, attempting manual creation...')
+          const { data: newProfile, error: createProfileError } = await supabase
+            .from('user_profiles')
+            .insert({
+              id: authData.user.id,
+              email: authData.user.email!,
+              full_name: formData.fullName,
+              role: 'nurse',
+              hospital_id: null
+            })
+            .select()
+            .single()
 
-        if (createProfileError) {
-          console.error('Profile creation error:', createProfileError)
-          // Check if it's a duplicate key error (profile was created by trigger after all)
-          if (createProfileError.code === '23505') {
-            console.log('Profile already exists (created by trigger), continuing...')
+          if (createProfileError) {
+            console.error('Profile creation error:', createProfileError)
+            // Check if it's a duplicate key error (profile was created by trigger after all)
+            if (createProfileError.code === '23505') {
+              console.log('Profile already exists (created by trigger), continuing...')
+              profileExists = true
+            } else {
+              throw new Error(`Failed to create user profile: ${createProfileError.message}`)
+            }
           } else {
-            throw new Error(`Failed to create user profile: ${createProfileError.message}`)
+            console.log('Profile created successfully:', newProfile)
+            profileExists = true
           }
         } else {
-          console.log('Profile created successfully:', newProfile)
+          // User needs to confirm email first
+          throw new Error('Please check your email and confirm your account before continuing.')
         }
       }
 
