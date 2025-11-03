@@ -6,7 +6,7 @@ CREATE OR REPLACE FUNCTION create_user_profile_safe(
   p_email TEXT,
   p_full_name TEXT DEFAULT NULL
 )
-RETURNS JSON
+RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -28,16 +28,11 @@ BEGIN
     full_name = COALESCE(EXCLUDED.full_name, user_profiles.full_name)
   RETURNING id INTO v_profile_id;
 
-  RETURN json_build_object(
-    'success', true,
-    'profile_id', v_profile_id
-  );
+  RETURN v_profile_id;
 EXCEPTION
   WHEN OTHERS THEN
-    RETURN json_build_object(
-      'success', false,
-      'error', SQLERRM
-    );
+    -- Return NULL on error so we can detect it
+    RETURN NULL;
 END;
 $$;
 

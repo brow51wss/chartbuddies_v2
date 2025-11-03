@@ -112,7 +112,7 @@ export default function Signup() {
       if (!profileExists) {
         // Try using the database function which bypasses RLS
         console.log('Trigger did not create profile, using database function...')
-        const { data: functionResult, error: functionError } = await supabase
+        const { data: profileId, error: functionError } = await supabase
           .rpc('create_user_profile_safe', {
             p_user_id: authData.user.id,
             p_email: authData.user.email!,
@@ -121,40 +121,21 @@ export default function Signup() {
 
         if (functionError) {
           console.error('Function error:', functionError)
-          // Fallback: try direct insert if user is authenticated
-          if (isAuthenticated) {
-            console.log('Function failed, attempting direct insert...')
-            const { data: newProfile, error: createProfileError } = await supabase
-              .from('user_profiles')
-              .insert({
-                id: authData.user.id,
-                email: authData.user.email!,
-                full_name: formData.fullName,
-                role: 'nurse',
-                hospital_id: null
-              })
-              .select()
-              .single()
-
-            if (createProfileError) {
-              console.error('Direct insert error:', createProfileError)
-              // Check if it's a duplicate key error (profile was created by trigger after all)
-              if (createProfileError.code === '23505') {
-                console.log('Profile already exists, continuing...')
-                profileExists = true
-              } else {
-                throw new Error(`Failed to create user profile: ${createProfileError.message}`)
-              }
-            } else {
-              console.log('Profile created successfully via direct insert:', newProfile)
-              profileExists = true
-            }
-          } else {
-            throw new Error('Failed to create user profile. Please try again or contact support.')
+          // If function doesn't exist (42883 error), provide helpful message
+          if (functionError.code === '42883' || functionError.message?.includes('does not exist')) {
+            throw new Error(
+              'Profile creation function not set up. Please contact support or run the database migration.'
+            )
           }
-        } else if (functionResult && functionResult.success) {
-          console.log('Profile created successfully via function:', functionResult)
+          throw new Error(`Failed to create user profile: ${functionError.message}`)
+        }
+
+        if (profileId) {
+          console.log('Profile created successfully via function, profile_id:', profileId)
           profileExists = true
+        } else {
+          // Function returned NULL, which means an error occurred
+          throw new Error('Failed to create user profile. The database function returned an error.')
         }
       }
 
