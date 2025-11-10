@@ -15,6 +15,7 @@ export interface MARForm {
   physician_name: string
   physician_phone: string | null
   facility_name: string | null
+  vital_signs_instructions: string | null // Custom instructions for vital signs (e.g., "BP (sprinkle salt on food if BP low <80/60)")
   created_at: string
   updated_at: string
 }
@@ -67,6 +68,9 @@ export interface MARVitalSigns {
   pulse: number | null
   respiration: number | null
   weight: number | null
+  systolic_bp: number | null // Systolic blood pressure
+  diastolic_bp: number | null // Diastolic blood pressure
+  bowel_movement: string | null // Bowel movement tracking (Yes/No/Loose/Formed/etc.)
   created_at: string
   updated_at: string
 }

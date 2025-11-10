@@ -2,15 +2,20 @@
 
 ## Database Setup
 
-1. **Run the database migrations in Supabase SQL Editor:**
+1. **Run the database migrations in Supabase SQL Editor (in order):**
 
-   First, run `supabase-migrations/001_create_admissions_table.sql` (if not already done)
+   - `supabase-migrations/001_create_admissions_table.sql` (if not already done)
    
-   Then, run `supabase-migrations/002_complete_schema.sql` which contains:
-   - Complete database schema for hospitals, users, patients, MAR forms
-   - Row Level Security (RLS) policies
-   - Triggers for auto-updating timestamps
-   - Function to auto-create user profiles on signup
+   - `supabase-migrations/002_complete_schema.sql` which contains:
+     - Complete database schema for hospitals, users, patients, MAR forms
+     - Row Level Security (RLS) policies
+     - Triggers for auto-updating timestamps
+     - Function to auto-create user profiles on signup
+   
+   - `supabase-migrations/011_add_mar_tracking_fields.sql` which adds:
+     - Blood pressure tracking fields (systolic, diastolic) to vital signs
+     - Bowel movement tracking field
+     - Custom instructions field for vital signs (e.g., "BP (sprinkle salt on food if BP low <80/60)")
 
 2. **Environment Variables:**
    Make sure you have these in your `.env.local`:
@@ -35,10 +40,18 @@
 ✅ **MAR Form System**
 - New MAR form creation (`/patients/[id]/mar/new`)
   - Patient information section
-  - Medications with 31-day administration grid
-  - PRN/Not Administered records section
-  - Vital signs section
+  - Medications with 31-day administration grid (PRN option hidden but recoverable)
+  - PRN/Not Administered records section (separate from main medication grid)
+  - Enhanced vital signs section with:
+    - Blood pressure tracking (Systolic, Diastolic)
+    - Pulse, Temperature, Respiration, Weight
+    - Bowel movement tracking
+    - Custom instructions field (e.g., "BP (sprinkle salt on food if BP low <80/60)")
   - Save as draft or submit functionality
+- View/Edit MAR form (`/patients/[id]/mar/[marId]`)
+  - Two-page layout (Medications & Vital Signs/PRN)
+  - Edit mode for updating administrations and vital signs
+  - All new tracking fields available
 
 ✅ **Database Schema**
 - Multi-tenant hospital isolation
@@ -63,12 +76,13 @@
 
 ## Next Steps (Future Enhancements)
 
-- [ ] MAR form view/edit page (to view/continue editing existing forms)
+- [x] MAR form view/edit page (to view/continue editing existing forms) ✅
 - [ ] Head Nurse/Superadmin dashboard with hospital management
 - [ ] Nurse-patient assignment interface
 - [ ] Form builder for custom forms
 - [ ] Audit log viewing
 - [ ] Reports and analytics
+- [ ] Separate vital signs sheet (for comprehensive VS tracking)
 
 ## Notes
 

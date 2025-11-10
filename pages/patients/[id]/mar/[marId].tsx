@@ -19,6 +19,8 @@ export default function ViewMARForm() {
   const [prnRecords, setPrnRecords] = useState<MARPRNRecord[]>([])
   const [vitalSigns, setVitalSigns] = useState<{ [day: number]: MARVitalSigns }>({})
   const [staffInitials, setStaffInitials] = useState<{ [initials: string]: string }>({})
+  const [dailyInitials, setDailyInitials] = useState<{ [day: number]: string }>({})
+  const [dailySignatures, setDailySignatures] = useState<{ [day: number]: string }>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [isEditing, setIsEditing] = useState(false)
@@ -268,6 +270,45 @@ export default function ViewMARForm() {
   const updateVitalSigns = async (day: number, field: string, value: number | string) => {
     if (!userProfile || !marForm || !isEditing || !marFormId) return
     
+    // Handle string fields (bowel_movement) differently from numeric fields
+    const isStringField = field === 'bowel_movement'
+    
+    // For string fields, allow empty strings
+    if (isStringField) {
+      try {
+        setSaving(true)
+        const existing = vitalSigns[day]
+        const updateData: any = {
+          mar_form_id: marFormId,
+          day_number: day,
+          [field]: value || null
+        }
+
+        if (existing) {
+          const { error } = await supabase
+            .from('mar_vital_signs')
+            .update(updateData)
+            .eq('id', existing.id)
+          if (error) throw error
+        } else {
+          const { error } = await supabase
+            .from('mar_vital_signs')
+            .insert(updateData)
+          if (error) throw error
+        }
+
+        await loadMARForm()
+      } catch (err: any) {
+        console.error('Error updating vital signs:', err)
+        setError(err.message || 'Failed to update vital signs')
+        setTimeout(() => setError(''), 5000)
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+    
+    // For numeric fields, handle as before
     const numValue = typeof value === 'string' ? parseFloat(value) : value
     if (!numValue || numValue === 0) {
       const existing = vitalSigns[day]
@@ -559,7 +600,7 @@ export default function ViewMARForm() {
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
               }`}
             >
-              Page 2: Vital Signs & PRN
+              Page 2: Vital Signs
             </button>
           </div>
 
@@ -982,12 +1023,40 @@ export default function ViewMARForm() {
             </div>
           )}
 
-          {/* PAGE 2: Vital Signs & PRN */}
+          {/* PAGE 2: Vital Signs */}
           {currentPage === 2 && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 space-y-8">
               {/* Vital Signs Section */}
               <section>
-                <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">VITAL SIGNS</h2>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">VITAL SIGNS</h2>
+                  {marForm.vital_signs_instructions && (
+                    <div className="text-sm text-gray-600 dark:text-gray-400 italic">
+                      {marForm.vital_signs_instructions}
+                    </div>
+                  )}
+                </div>
+                {isEditing && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Custom Instructions (e.g., "BP (sprinkle salt on food if BP low &lt;80/60)")
+                    </label>
+                    <input
+                      type="text"
+                      value={marForm.vital_signs_instructions || ''}
+                      onChange={async (e) => {
+                        if (!marFormId) return
+                        await supabase
+                          .from('mar_forms')
+                          .update({ vital_signs_instructions: e.target.value || null })
+                          .eq('id', marFormId)
+                        setMarForm({ ...marForm, vital_signs_instructions: e.target.value || null })
+                      }}
+                      placeholder="Enter custom instructions for vital signs tracking..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    />
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
                     <thead>
@@ -1007,18 +1076,28 @@ export default function ViewMARForm() {
                       </tr>
                     </thead>
                     <tbody>
-                      {['Temperature', 'Pulse', 'Respiration', 'Weight'].map(vital => {
-                        const fieldMap: { [key: string]: 'temperature' | 'pulse' | 'respiration' | 'weight' } = {
-                          'Temperature': 'temperature',
+                      {['BP Systolic', 'BP Diastolic', 'Pulse', 'Temperature', 'Respiration', 'Weight', 'Bowel Movement'].map(vital => {
+                        const fieldMap: { [key: string]: 'systolic_bp' | 'diastolic_bp' | 'pulse' | 'temperature' | 'respiration' | 'weight' | 'bowel_movement' } = {
+                          'BP Systolic': 'systolic_bp',
+                          'BP Diastolic': 'diastolic_bp',
                           'Pulse': 'pulse',
+                          'Temperature': 'temperature',
                           'Respiration': 'respiration',
-                          'Weight': 'weight'
+                          'Weight': 'weight',
+                          'Bowel Movement': 'bowel_movement'
                         }
                         const field = fieldMap[vital]
+                        const isStringField = field === 'bowel_movement'
                         return (
                           <tr key={vital}>
                             <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-medium text-sm text-gray-800 dark:text-white">
-                              {vital === 'Temperature' ? 'TEMPERATURE' : vital === 'Pulse' ? 'PULSE' : vital === 'Respiration' ? 'RESPIRATION' : 'WEIGHT'}
+                              {vital === 'BP Systolic' ? 'BP SYSTOLIC' : 
+                               vital === 'BP Diastolic' ? 'BP DIASTOLIC' :
+                               vital === 'Pulse' ? 'PULSE' : 
+                               vital === 'Temperature' ? 'TEMPERATURE' : 
+                               vital === 'Respiration' ? 'RESPIRATION' : 
+                               vital === 'Weight' ? 'WEIGHT' : 
+                               'BOWEL MOVEMENT'}
                             </td>
                             {days.map(day => {
                               const vs = vitalSigns[day]
@@ -1029,15 +1108,26 @@ export default function ViewMARForm() {
                                   className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center"
                                 >
                                   {isEditing ? (
-                                    <input
-                                      type="number"
-                                      step={field === 'temperature' || field === 'weight' ? '0.1' : '1'}
-                                      value={value || ''}
-                                      onChange={(e) => updateVitalSigns(day, field, e.target.value ? parseFloat(e.target.value) : '')}
-                                      placeholder="—"
-                                      className="w-full px-1 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                      style={{ minWidth: '40px' }}
-                                    />
+                                    isStringField ? (
+                                      <input
+                                        type="text"
+                                        value={value || ''}
+                                        onChange={(e) => updateVitalSigns(day, field, e.target.value)}
+                                        placeholder="—"
+                                        className="w-full px-1 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                        style={{ minWidth: '40px' }}
+                                      />
+                                    ) : (
+                                      <input
+                                        type="number"
+                                        step={field === 'temperature' || field === 'weight' ? '0.1' : '1'}
+                                        value={value || ''}
+                                        onChange={(e) => updateVitalSigns(day, field, e.target.value ? parseFloat(e.target.value) : '')}
+                                        placeholder="—"
+                                        className="w-full px-1 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                        style={{ minWidth: '40px' }}
+                                      />
+                                    )
                                   ) : (
                                     <span className="text-sm text-gray-800 dark:text-white">{value || '—'}</span>
                                   )}
@@ -1047,99 +1137,78 @@ export default function ViewMARForm() {
                           </tr>
                         )
                       })}
+                      {/* Staff Initials Row */}
+                      <tr>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-medium text-sm text-gray-800 dark:text-white">
+                          INITIALS
+                        </td>
+                        {days.map(day => {
+                          const value = dailyInitials[day] || ''
+                          return (
+                            <td
+                              key={day}
+                              className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center"
+                            >
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={value}
+                                  onChange={(e) => {
+                                    setDailyInitials({
+                                      ...dailyInitials,
+                                      [day]: e.target.value.toUpperCase()
+                                    })
+                                  }}
+                                  placeholder="—"
+                                  maxLength={4}
+                                  className="w-full px-1 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                  style={{ minWidth: '40px' }}
+                                />
+                              ) : (
+                                <span className="text-sm text-gray-800 dark:text-white">{value || '—'}</span>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                      {/* Staff Signature Row */}
+                      <tr>
+                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-medium text-sm text-gray-800 dark:text-white">
+                          STAFF SIGNATURE
+                        </td>
+                        {days.map(day => {
+                          const value = dailySignatures[day] || ''
+                          return (
+                            <td
+                              key={day}
+                              className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center"
+                            >
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={value}
+                                  onChange={(e) => {
+                                    setDailySignatures({
+                                      ...dailySignatures,
+                                      [day]: e.target.value
+                                    })
+                                  }}
+                                  placeholder="—"
+                                  className="w-full px-1 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                  style={{ minWidth: '40px' }}
+                                />
+                              ) : (
+                                <span className="text-sm text-gray-800 dark:text-white">{value || '—'}</span>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
                     </tbody>
                   </table>
                 </div>
               </section>
 
-              {/* PRN and Medications Not Administered Section */}
-              <section>
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">
-                    PRN AND MEDICATIONS NOT ADMINISTERED
-                  </h2>
-                  <button
-                    onClick={() => setShowAddPRNModal(true)}
-                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-                  >
-                    + Add PRN Record
-                  </button>
-                </div>
-                <div className="grid grid-cols-8 gap-4">
-                  {/* PRN Table */}
-                  <div className="col-span-6 overflow-x-auto">
-                    <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
-                      <thead>
-                        <tr className="bg-gray-100 dark:bg-gray-700">
-                          <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Date</th>
-                          <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Hour</th>
-                          <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Initials</th>
-                          <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Medication</th>
-                          <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Reason</th>
-                          <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Result</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {prnRecords.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="border border-gray-300 dark:border-gray-600 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                              No PRN records
-                            </td>
-                          </tr>
-                        ) : (
-                          prnRecords.map((prn, index) => (
-                            <tr key={prn.id || index}>
-                              <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
-                                {new Date(prn.date).toLocaleDateString()}
-                              </td>
-                              <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">{prn.hour}</td>
-                              <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">{prn.initials}</td>
-                              <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">{prn.medication}</td>
-                              <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">{prn.reason}</td>
-                              <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">{prn.result || 'N/A'}</td>
-                            </tr>
-                          ))
-                        )}
-                        {/* Empty rows for printing/form filling */}
-                        {Array.from({ length: Math.max(0, 19 - prnRecords.length) }).map((_, i) => (
-                          <tr key={`empty-${i}`}>
-                            <td colSpan={6} className="border border-gray-300 dark:border-gray-600 px-3 py-2 h-10"></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Staff Initials Legend */}
-                  <div className="col-span-2">
-                    <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
-                      <thead>
-                        <tr className="bg-gray-100 dark:bg-gray-700">
-                          <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Initials</th>
-                          <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Staff Signature</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.entries(staffInitials).slice(0, 19).map(([initials, signature], index) => (
-                          <tr key={initials}>
-                            <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white font-medium">
-                              {initials}
-                            </td>
-                            <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
-                              {signature}
-                            </td>
-                          </tr>
-                        ))}
-                        {Array.from({ length: Math.max(0, 19 - Object.keys(staffInitials).length) }).map((_, i) => (
-                          <tr key={`empty-legend-${i}`}>
-                            <td colSpan={2} className="border border-gray-300 dark:border-gray-600 px-3 py-2 h-10"></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </section>
 
               {/* Bottom Section */}
               <div className="flex justify-between items-center border-t-2 border-gray-300 dark:border-gray-600 pt-4">
@@ -1196,7 +1265,9 @@ export default function ViewMARForm() {
         </div>
       )}
 
-      {/* Add PRN Record Modal */}
+      {/* Add PRN Record Modal - Hidden but kept for future use */}
+      {/* Uncomment below to restore PRN functionality */}
+      {/*
       {showAddPRNModal && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -1235,6 +1306,7 @@ export default function ViewMARForm() {
           </div>
         </div>
       )}
+      */}
     </ProtectedRoute>
   )
 }

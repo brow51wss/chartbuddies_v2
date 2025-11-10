@@ -50,7 +50,11 @@ export default function NewMARForm() {
     pulse: string
     respiration: string
     weight: string
+    systolic_bp: string
+    diastolic_bp: string
+    bowel_movement: string
   } }>({})
+  const [vitalSignsInstructions, setVitalSignsInstructions] = useState('')
 
   useEffect(() => {
     if (patientId) {
@@ -186,7 +190,8 @@ export default function NewMARForm() {
           allergies: patientInfo.allergies,
           physician_name: patientInfo.physicianName,
           physician_phone: patientInfo.physicianPhone,
-          facility_name: patientInfo.facilityName
+          facility_name: patientInfo.facilityName,
+          vital_signs_instructions: vitalSignsInstructions || null
         })
         .select()
         .single()
@@ -254,7 +259,7 @@ export default function NewMARForm() {
       // Save vital signs
       for (const day in vitalSigns) {
         const vs = vitalSigns[day]
-        if (vs.temperature || vs.pulse || vs.respiration || vs.weight) {
+        if (vs.temperature || vs.pulse || vs.respiration || vs.weight || vs.systolic_bp || vs.diastolic_bp || vs.bowel_movement) {
           await supabase
             .from('mar_vital_signs')
             .insert({
@@ -263,7 +268,10 @@ export default function NewMARForm() {
               temperature: vs.temperature ? parseFloat(vs.temperature) : null,
               pulse: vs.pulse ? parseInt(vs.pulse) : null,
               respiration: vs.respiration ? parseInt(vs.respiration) : null,
-              weight: vs.weight ? parseFloat(vs.weight) : null
+              weight: vs.weight ? parseFloat(vs.weight) : null,
+              systolic_bp: vs.systolic_bp ? parseInt(vs.systolic_bp) : null,
+              diastolic_bp: vs.diastolic_bp ? parseInt(vs.diastolic_bp) : null,
+              bowel_movement: vs.bowel_movement || null
             })
         }
       }
@@ -612,7 +620,8 @@ export default function NewMARForm() {
                                   >
                                     <option value="Not Given">NG</option>
                                     <option value="Given">G</option>
-                                    <option value="PRN">PRN</option>
+                                    {/* PRN option hidden but kept for future use - uncomment to restore */}
+                                    {/* <option value="PRN">PRN</option> */}
                                   </select>
                                   {med.administrations[day]?.status === 'Given' && (
                                     <input
@@ -630,7 +639,8 @@ export default function NewMARForm() {
                           </div>
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                          G = Given, NG = Not Given, PRN = As Needed
+                          G = Given, NG = Not Given
+                          {/* PRN = As Needed (hidden) */}
                         </p>
                       </div>
                     </div>
@@ -768,18 +778,38 @@ export default function NewMARForm() {
 
             {/* Vital Signs Section */}
             <section>
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">
-                Vital Signs (Optional)
-              </h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
+                  Vital Signs & Tracking (Optional)
+                </h2>
+              </div>
+              
+              {/* Custom Instructions Field */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Custom Instructions (e.g., "BP (sprinkle salt on food if BP low &lt;80/60)")
+                </label>
+                <input
+                  type="text"
+                  value={vitalSignsInstructions}
+                  onChange={(e) => setVitalSignsInstructions(e.target.value)}
+                  placeholder="Enter custom instructions for vital signs tracking..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="min-w-full border border-gray-200 dark:border-gray-700">
                   <thead className="bg-gray-50 dark:bg-gray-700">
                     <tr>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Day</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Temperature (°F)</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">BP Systolic</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">BP Diastolic</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Pulse (bpm)</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Temperature (°F)</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Respiration</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Weight (lbs)</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Bowel Movement</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -789,9 +819,18 @@ export default function NewMARForm() {
                         <td className="px-4 py-2">
                           <input
                             type="number"
-                            step="0.1"
-                            value={vitalSigns[day]?.temperature || ''}
-                            onChange={(e) => updateVitalSigns(day, 'temperature', e.target.value)}
+                            value={vitalSigns[day]?.systolic_bp || ''}
+                            onChange={(e) => updateVitalSigns(day, 'systolic_bp', e.target.value)}
+                            placeholder="Systolic"
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input
+                            type="number"
+                            value={vitalSigns[day]?.diastolic_bp || ''}
+                            onChange={(e) => updateVitalSigns(day, 'diastolic_bp', e.target.value)}
+                            placeholder="Diastolic"
                             className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </td>
@@ -800,6 +839,15 @@ export default function NewMARForm() {
                             type="number"
                             value={vitalSigns[day]?.pulse || ''}
                             onChange={(e) => updateVitalSigns(day, 'pulse', e.target.value)}
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={vitalSigns[day]?.temperature || ''}
+                            onChange={(e) => updateVitalSigns(day, 'temperature', e.target.value)}
                             className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </td>
@@ -818,6 +866,15 @@ export default function NewMARForm() {
                             value={vitalSigns[day]?.weight || ''}
                             onChange={(e) => updateVitalSigns(day, 'weight', e.target.value)}
                             className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input
+                            type="text"
+                            value={vitalSigns[day]?.bowel_movement || ''}
+                            onChange={(e) => updateVitalSigns(day, 'bowel_movement', e.target.value)}
+                            placeholder="Yes/No/Loose/etc."
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </td>
                       </tr>
