@@ -27,7 +27,7 @@ export default function ViewMARForm() {
   const [saving, setSaving] = useState(false)
   const [userProfile, setUserProfile] = useState<any>(null)
   const [message, setMessage] = useState('')
-  const [currentPage, setCurrentPage] = useState<1 | 2>(1) // Two-page layout
+  // Removed page navigation - everything shows in one table
   const [showAddMedModal, setShowAddMedModal] = useState(false)
   const [showAddPRNModal, setShowAddPRNModal] = useState(false)
   const [editingCell, setEditingCell] = useState<{ medId: string; day: number } | null>(null)
@@ -261,6 +261,75 @@ export default function ViewMARForm() {
     } catch (err: any) {
       console.error('Error adding medication:', err)
       setError(err.message || 'Failed to add medication')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const addVitals = async (vitalsData: {
+    notes: string
+    initials: string
+    startDate: string
+    stopDate: string | null
+    hour: string
+  }) => {
+    if (!userProfile || !marForm || !isEditing || !marFormId) return
+    
+    try {
+      setSaving(true)
+      setError('')
+      
+      // Create a medication entry for vitals so it appears in the same table
+      // Use a special naming convention to identify it as a vital sign entry
+      const { data: newVital, error: vitalError } = await supabase
+        .from('mar_medications')
+        .insert({
+          mar_form_id: marFormId,
+          medication_name: 'VITALS',
+          dosage: vitalsData.notes, // Store the vital sign instructions in dosage field
+          start_date: vitalsData.startDate,
+          stop_date: vitalsData.stopDate,
+          hour: vitalsData.hour,
+          notes: 'Vital Signs Entry' // Mark as vital sign entry
+        })
+        .select()
+        .single()
+
+      if (vitalError) throw vitalError
+
+      // Populate initials for the START DATE of the vitals entry (same as medications)
+      const startDateParts = vitalsData.startDate.split('-')
+      if (startDateParts.length === 3 && vitalsData.initials) {
+        const startYear = parseInt(startDateParts[0], 10)
+        const startMonth = parseInt(startDateParts[1], 10) - 1
+        const startDay = parseInt(startDateParts[2], 10)
+        
+        const formMonth = new Date(marForm.month_year + '-01')
+        const formYear = formMonth.getFullYear()
+        const formMonthIndex = formMonth.getMonth()
+        
+        // Check if start date is in the same month as the form
+        if (startMonth === formMonthIndex && startYear === formYear) {
+          // Create administration record for the start day
+          await supabase
+            .from('mar_administrations')
+            .insert({
+              mar_medication_id: newVital.id,
+              day_number: startDay,
+              status: 'Given',
+              initials: vitalsData.initials.trim().toUpperCase(),
+              administered_at: new Date().toISOString()
+            })
+        }
+      }
+
+      await loadMARForm()
+      setMessage('Vital signs entry added successfully!')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      console.error('Error adding vitals:', err)
+      setError(err.message || 'Failed to add vitals')
       setTimeout(() => setError(''), 5000)
     } finally {
       setSaving(false)
@@ -580,29 +649,6 @@ export default function ViewMARForm() {
             </div>
           </div>
 
-          {/* Page Navigation */}
-          <div className="mb-4 flex justify-center space-x-4">
-            <button
-              onClick={() => setCurrentPage(1)}
-              className={`px-6 py-2 rounded-md ${
-                currentPage === 1
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              Page 1: Medications
-            </button>
-            <button
-              onClick={() => setCurrentPage(2)}
-              className={`px-6 py-2 rounded-md ${
-                currentPage === 2
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              Page 2: Vital Signs
-            </button>
-          </div>
 
           {error && (
             <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
@@ -624,9 +670,8 @@ export default function ViewMARForm() {
             </div>
           )}
 
-          {/* PAGE 1: Medication Administration Grid */}
-          {currentPage === 1 && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+          {/* Medication and Vitals Administration Grid */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
               {/* Form Header */}
               <div className="mb-6 border-b-2 border-gray-300 dark:border-gray-600 pb-4">
                 <div className="flex justify-between items-start">
@@ -709,17 +754,18 @@ export default function ViewMARForm() {
                     ) : (
                       medications.map((med) => {
                         const medAdmin = administrations[med.id] || {}
+                        const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
                         return (
-                          <tr key={med.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                          <tr key={med.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isVitalsEntry ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
                             {/* Medication Name & Dosage */}
                             <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top">
-                              <div className="font-medium text-gray-800 dark:text-white text-sm">
-                                {med.medication_name}
+                              <div className={`font-medium text-sm ${isVitalsEntry ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-white'}`}>
+                                {isVitalsEntry ? '📊 VITALS' : med.medication_name}
                               </div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                {med.dosage}
+                              <div className={`text-xs mt-1 ${isVitalsEntry ? 'text-blue-600 dark:text-blue-400 italic' : 'text-gray-600 dark:text-gray-400'}`}>
+                                {isVitalsEntry ? med.dosage : med.dosage}
                               </div>
-                              {med.notes && (
+                              {med.notes && !isVitalsEntry && (
                                 <div className="text-xs text-gray-500 dark:text-gray-500 mt-1 italic">
                                   {med.notes}
                                 </div>
@@ -734,7 +780,7 @@ export default function ViewMARForm() {
                             </td>
                             {/* Hour */}
                             <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs">
-                              {med.hour || 'N/A'}
+                              {isVitalsEntry ? '—' : (med.hour || 'N/A')}
                             </td>
                             {/* Days 1-31 */}
                             {days.map(day => {
@@ -746,47 +792,57 @@ export default function ViewMARForm() {
                               const isPRN = status === 'PRN'
 
                               // Check if medication is active on this day
-                              // Columns 1-31 represent the day of the month (1st, 2nd, 3rd... 31st)
-                              // If medication starts on Nov 1, it's active from column 1 onwards
-                              // If medication starts on Nov 15, it's active from column 15 onwards
-                              
-                              const medStartDate = new Date(med.start_date)
-                              const medStopDate = med.stop_date ? new Date(med.stop_date) : null
-                              
-                              // Get the form's month/year
-                              const formMonth = new Date(marForm.month_year + '-01')
-                              const formYear = formMonth.getFullYear()
-                              const formMonthIndex = formMonth.getMonth()
-                              
-                              // Get the day of month when medication starts (1-31)
-                              const startDayOfMonth = medStartDate.getDate()
-                              
-                              // Check if start date is in the same month as the form
-                              const isStartInFormMonth = medStartDate.getMonth() === formMonthIndex && medStartDate.getFullYear() === formYear
-                              
-                              // Medication is active if:
-                              // 1. It starts in this form's month, AND
-                              // 2. Current day (column number) >= start day of month, AND
-                              // 3. (No stop date OR stop date is after current day)
+                              // For vitals entries, always make them active
+                              // For medications, check start/stop dates
                               
                               let isMedActive = false
-                              if (isStartInFormMonth) {
-                                // Create date for current column day in form's month
-                                try {
-                                  const currentDayDate = new Date(formYear, formMonthIndex, day)
-                                  // Check if this is a valid date (handles months with < 31 days)
-                                  if (currentDayDate.getDate() === day && currentDayDate.getMonth() === formMonthIndex) {
-                                    // Active if day >= start day
-                                    if (day >= startDayOfMonth) {
-                                      // Check stop date if it exists
-                                      if (!medStopDate || currentDayDate <= medStopDate) {
-                                        isMedActive = true
+                              
+                              if (isVitalsEntry) {
+                                // Vitals entries are always active for all days
+                                isMedActive = true
+                              } else {
+                                // Regular medication logic
+                                // Columns 1-31 represent the day of the month (1st, 2nd, 3rd... 31st)
+                                // If medication starts on Nov 1, it's active from column 1 onwards
+                                // If medication starts on Nov 15, it's active from column 15 onwards
+                                
+                                const medStartDate = new Date(med.start_date)
+                                const medStopDate = med.stop_date ? new Date(med.stop_date) : null
+                                
+                                // Get the form's month/year
+                                const formMonth = new Date(marForm.month_year + '-01')
+                                const formYear = formMonth.getFullYear()
+                                const formMonthIndex = formMonth.getMonth()
+                                
+                                // Get the day of month when medication starts (1-31)
+                                const startDayOfMonth = medStartDate.getDate()
+                                
+                                // Check if start date is in the same month as the form
+                                const isStartInFormMonth = medStartDate.getMonth() === formMonthIndex && medStartDate.getFullYear() === formYear
+                                
+                                // Medication is active if:
+                                // 1. It starts in this form's month, AND
+                                // 2. Current day (column number) >= start day of month, AND
+                                // 3. (No stop date OR stop date is after current day)
+                                
+                                if (isStartInFormMonth) {
+                                  // Create date for current column day in form's month
+                                  try {
+                                    const currentDayDate = new Date(formYear, formMonthIndex, day)
+                                    // Check if this is a valid date (handles months with < 31 days)
+                                    if (currentDayDate.getDate() === day && currentDayDate.getMonth() === formMonthIndex) {
+                                      // Active if day >= start day
+                                      if (day >= startDayOfMonth) {
+                                        // Check stop date if it exists
+                                        if (!medStopDate || currentDayDate <= medStopDate) {
+                                          isMedActive = true
+                                        }
                                       }
                                     }
+                                  } catch (e) {
+                                    // Invalid date (e.g., Feb 30)
+                                    isMedActive = false
                                   }
-                                } catch (e) {
-                                  // Invalid date (e.g., Feb 30)
-                                  isMedActive = false
                                 }
                               }
 
@@ -796,13 +852,13 @@ export default function ViewMARForm() {
                                   className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs ${
                                     isEditing && isMedActive ? 'cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20' : ''
                                   } ${!isMedActive ? 'bg-gray-100 dark:bg-gray-800' : ''}`}
-                                  onDoubleClick={isEditing && isMedActive ? () => {
-                                    // Double-click to mark as not given (circled)
+                                  onDoubleClick={isEditing && isMedActive && !isVitalsEntry ? () => {
+                                    // Double-click to mark as not given (circled) - only for medications, not vitals
                                     if (isGiven) {
                                       updateAdministration(med.id, day, 'Not Given', initials)
                                     }
                                   } : undefined}
-                                  title={isEditing && isMedActive ? 'Click to add initials, Double-click to mark as not given' : !isMedActive ? 'Medication not active on this day' : ''}
+                                  title={isEditing && isMedActive ? (isVitalsEntry ? 'Click to add initials for vital signs' : 'Click to add initials, Double-click to mark as not given') : !isMedActive ? (isVitalsEntry ? 'Vital signs entry' : 'Medication not active on this day') : ''}
                                 >
                                   {isMedActive ? (
                                     <>
@@ -1023,210 +1079,10 @@ export default function ViewMARForm() {
             </div>
           )}
 
-          {/* PAGE 2: Vital Signs */}
-          {currentPage === 2 && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 space-y-8">
-              {/* Vital Signs Section */}
-              <section>
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">VITAL SIGNS</h2>
-                  {marForm.vital_signs_instructions && (
-                    <div className="text-sm text-gray-600 dark:text-gray-400 italic">
-                      {marForm.vital_signs_instructions}
-                    </div>
-                  )}
-                </div>
-                {isEditing && (
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Custom Instructions (e.g., "BP (sprinkle salt on food if BP low &lt;80/60)")
-                    </label>
-                    <input
-                      type="text"
-                      value={marForm.vital_signs_instructions || ''}
-                      onChange={async (e) => {
-                        if (!marFormId) return
-                        await supabase
-                          .from('mar_forms')
-                          .update({ vital_signs_instructions: e.target.value || null })
-                          .eq('id', marFormId)
-                        setMarForm({ ...marForm, vital_signs_instructions: e.target.value || null })
-                      }}
-                      placeholder="Enter custom instructions for vital signs tracking..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                    />
-                  </div>
-                )}
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
-                    <thead>
-                      <tr className="bg-gray-100 dark:bg-gray-700">
-                        <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300" style={{ minWidth: '150px' }}>
-                          Vital Sign
-                        </th>
-                        {days.map(day => (
-                          <th
-                            key={day}
-                            className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300"
-                            style={{ minWidth: '50px', width: '50px' }}
-                          >
-                            {day}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {['BP Systolic', 'BP Diastolic', 'Pulse', 'Temperature', 'Respiration', 'Weight', 'Bowel Movement'].map(vital => {
-                        const fieldMap: { [key: string]: 'systolic_bp' | 'diastolic_bp' | 'pulse' | 'temperature' | 'respiration' | 'weight' | 'bowel_movement' } = {
-                          'BP Systolic': 'systolic_bp',
-                          'BP Diastolic': 'diastolic_bp',
-                          'Pulse': 'pulse',
-                          'Temperature': 'temperature',
-                          'Respiration': 'respiration',
-                          'Weight': 'weight',
-                          'Bowel Movement': 'bowel_movement'
-                        }
-                        const field = fieldMap[vital]
-                        const isStringField = field === 'bowel_movement'
-                        return (
-                          <tr key={vital}>
-                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-medium text-sm text-gray-800 dark:text-white">
-                              {vital === 'BP Systolic' ? 'BP SYSTOLIC' : 
-                               vital === 'BP Diastolic' ? 'BP DIASTOLIC' :
-                               vital === 'Pulse' ? 'PULSE' : 
-                               vital === 'Temperature' ? 'TEMPERATURE' : 
-                               vital === 'Respiration' ? 'RESPIRATION' : 
-                               vital === 'Weight' ? 'WEIGHT' : 
-                               'BOWEL MOVEMENT'}
-                            </td>
-                            {days.map(day => {
-                              const vs = vitalSigns[day]
-                              const value = vs?.[field] || ''
-                              return (
-                                <td
-                                  key={day}
-                                  className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center"
-                                >
-                                  {isEditing ? (
-                                    isStringField ? (
-                                      <input
-                                        type="text"
-                                        value={value || ''}
-                                        onChange={(e) => updateVitalSigns(day, field, e.target.value)}
-                                        placeholder="—"
-                                        className="w-full px-1 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                        style={{ minWidth: '40px' }}
-                                      />
-                                    ) : (
-                                      <input
-                                        type="number"
-                                        step={field === 'temperature' || field === 'weight' ? '0.1' : '1'}
-                                        value={value || ''}
-                                        onChange={(e) => updateVitalSigns(day, field, e.target.value ? parseFloat(e.target.value) : '')}
-                                        placeholder="—"
-                                        className="w-full px-1 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                        style={{ minWidth: '40px' }}
-                                      />
-                                    )
-                                  ) : (
-                                    <span className="text-sm text-gray-800 dark:text-white">{value || '—'}</span>
-                                  )}
-                                </td>
-                              )
-                            })}
-                          </tr>
-                        )
-                      })}
-                      {/* Staff Initials Row */}
-                      <tr>
-                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-medium text-sm text-gray-800 dark:text-white">
-                          INITIALS
-                        </td>
-                        {days.map(day => {
-                          const value = dailyInitials[day] || ''
-                          return (
-                            <td
-                              key={day}
-                              className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center"
-                            >
-                              {isEditing ? (
-                                <input
-                                  type="text"
-                                  value={value}
-                                  onChange={(e) => {
-                                    setDailyInitials({
-                                      ...dailyInitials,
-                                      [day]: e.target.value.toUpperCase()
-                                    })
-                                  }}
-                                  placeholder="—"
-                                  maxLength={4}
-                                  className="w-full px-1 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                  style={{ minWidth: '40px' }}
-                                />
-                              ) : (
-                                <span className="text-sm text-gray-800 dark:text-white">{value || '—'}</span>
-                              )}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                      {/* Staff Signature Row */}
-                      <tr>
-                        <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-medium text-sm text-gray-800 dark:text-white">
-                          STAFF SIGNATURE
-                        </td>
-                        {days.map(day => {
-                          const value = dailySignatures[day] || ''
-                          return (
-                            <td
-                              key={day}
-                              className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center"
-                            >
-                              {isEditing ? (
-                                <input
-                                  type="text"
-                                  value={value}
-                                  onChange={(e) => {
-                                    setDailySignatures({
-                                      ...dailySignatures,
-                                      [day]: e.target.value
-                                    })
-                                  }}
-                                  placeholder="—"
-                                  className="w-full px-1 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                  style={{ minWidth: '40px' }}
-                                />
-                              ) : (
-                                <span className="text-sm text-gray-800 dark:text-white">{value || '—'}</span>
-                              )}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-
-
-              {/* Bottom Section */}
-              <div className="flex justify-between items-center border-t-2 border-gray-300 dark:border-gray-600 pt-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name:</label>
-                  <div className="text-sm text-gray-800 dark:text-white">{marForm.patient_name}</div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">MO/YR:</label>
-                  <div className="text-sm text-gray-800 dark:text-white">{marForm.month_year}</div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Add Medication Modal */}
+      {/* Add Medication/Vitals Modal */}
       {showAddMedModal && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -1236,9 +1092,9 @@ export default function ViewMARForm() {
             }
           }}
         >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Add New Medication</h2>
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Add Medication or Vitals</h2>
               <button
                 onClick={() => setShowAddMedModal(false)}
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -1247,13 +1103,17 @@ export default function ViewMARForm() {
                 ×
               </button>
             </div>
-            <AddMedicationForm
-              onSubmit={async (medData) => {
+            <AddMedicationOrVitalsForm
+              onSubmit={async (data) => {
                 try {
-                  await addMedication(medData)
+                  if (data.type === 'medication') {
+                    await addMedication(data.medicationData!)
+                  } else {
+                    await addVitals(data.vitalsData!)
+                  }
                   setShowAddMedModal(false)
                 } catch (err) {
-                  console.error('Error adding medication:', err)
+                  console.error('Error adding entry:', err)
                 }
               }}
               onCancel={() => setShowAddMedModal(false)}
@@ -1311,8 +1171,8 @@ export default function ViewMARForm() {
   )
 }
 
-// Add Medication Form Component
-function AddMedicationForm({ 
+// Add Medication or Vitals Form Component
+function AddMedicationOrVitalsForm({ 
   onSubmit, 
   onCancel,
   defaultStartDate,
@@ -1320,20 +1180,35 @@ function AddMedicationForm({
   defaultInitials
 }: { 
   onSubmit: (data: {
-    medicationName: string
-    dosage: string
-    startDate: string
-    stopDate: string | null
-    hour: string
-    notes: string | null
-    initials: string
+    type: 'medication' | 'vitals'
+    medicationData?: {
+      medicationName: string
+      dosage: string
+      startDate: string
+      stopDate: string | null
+      hour: string
+      notes: string | null
+      initials: string
+    }
+    vitalsData?: {
+      notes: string
+      initials: string
+      startDate: string
+      stopDate: string | null
+      hour: string
+    }
   }) => Promise<void>
   onCancel: () => void
   defaultStartDate: string
   defaultHour: string
   defaultInitials: string
 }) {
-  const [formData, setFormData] = useState({
+  const [entryType, setEntryType] = useState<'medication' | 'vitals'>('medication')
+  const [initialsType, setInitialsType] = useState<'initials' | 'legend'>('initials')
+  const [selectedLegend, setSelectedLegend] = useState<string>('')
+  const [vitalsInitialsType, setVitalsInitialsType] = useState<'initials' | 'legend'>('initials')
+  const [selectedVitalsLegend, setSelectedVitalsLegend] = useState<string>('')
+  const [medicationData, setMedicationData] = useState({
     medicationName: '',
     dosage: '',
     startDate: defaultStartDate,
@@ -1342,38 +1217,112 @@ function AddMedicationForm({
     notes: '',
     initials: defaultInitials
   })
+  const [vitalsData, setVitalsData] = useState({
+    notes: '',
+    initials: defaultInitials,
+    startDate: defaultStartDate,
+    stopDate: '',
+    hour: defaultHour
+  })
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Default legends for MAR forms
+  const defaultLegends = [
+    { code: 'MC', description: 'Medication Discontinued' },
+    { code: 'G', description: 'Given' },
+    { code: 'NG', description: 'Not Given' },
+    { code: 'PRN', description: 'As Needed' },
+    { code: 'H', description: 'Held' },
+    { code: 'R', description: 'Refused' }
+  ]
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.medicationName || !formData.dosage || !formData.startDate || !formData.hour || !formData.initials) {
-      alert('Please fill in all required fields')
-      return
+    
+    if (entryType === 'medication') {
+      if (!medicationData.medicationName || !medicationData.dosage || !medicationData.startDate || !medicationData.hour) {
+        alert('Please fill in all required fields')
+        return
+      }
+      // Validate initials/legend selection
+      if (initialsType === 'initials' && !medicationData.initials.trim()) {
+        alert('Please enter initials or select a legend')
+        return
+      }
+      if (initialsType === 'legend' && !selectedLegend) {
+        alert('Please select a legend code')
+        return
+      }
+    } else {
+      if (!vitalsData.notes.trim() || !vitalsData.startDate || !vitalsData.hour) {
+        alert('Please fill in all required fields')
+        return
+      }
+      // Validate vitals initials/legend selection
+      if (vitalsInitialsType === 'initials' && !vitalsData.initials.trim()) {
+        alert('Please enter initials or select a legend')
+        return
+      }
+      if (vitalsInitialsType === 'legend' && !selectedVitalsLegend) {
+        alert('Please select a legend code')
+        return
+      }
     }
 
     setIsSubmitting(true)
     try {
+      // Determine the final initials value based on selection
+      const finalInitials = initialsType === 'initials' 
+        ? medicationData.initials.trim().toUpperCase()
+        : selectedLegend
+
+      // Determine the final vitals initials value based on selection
+      const finalVitalsInitials = vitalsInitialsType === 'initials'
+        ? vitalsData.initials.trim().toUpperCase()
+        : selectedVitalsLegend
+
       await onSubmit({
-        medicationName: formData.medicationName,
-        dosage: formData.dosage,
-        startDate: formData.startDate,
-        stopDate: formData.stopDate || null,
-        hour: formData.hour,
-        notes: formData.notes || null,
-        initials: formData.initials.trim().toUpperCase()
+        type: entryType,
+        medicationData: entryType === 'medication' ? {
+          medicationName: medicationData.medicationName,
+          dosage: medicationData.dosage,
+          startDate: medicationData.startDate,
+          stopDate: medicationData.stopDate || null,
+          hour: medicationData.hour,
+          notes: medicationData.notes || null,
+          initials: finalInitials
+        } : undefined,
+        vitalsData: entryType === 'vitals' ? {
+          notes: vitalsData.notes,
+          initials: finalVitalsInitials,
+          startDate: vitalsData.startDate,
+          stopDate: vitalsData.stopDate || null,
+          hour: vitalsData.hour
+        } : undefined
       })
       // Reset form
-      setFormData({
+      setMedicationData({
         medicationName: '',
         dosage: '',
         startDate: defaultStartDate,
         stopDate: '',
         hour: defaultHour,
         notes: '',
-        initials: ''
+        initials: defaultInitials
       })
+      setVitalsData({
+        notes: '',
+        initials: defaultInitials,
+        startDate: defaultStartDate,
+        stopDate: '',
+        hour: defaultHour
+      })
+      setInitialsType('initials')
+      setSelectedLegend('')
+      setVitalsInitialsType('initials')
+      setSelectedVitalsLegend('')
     } catch (err) {
-      console.error('Error submitting medication:', err)
+      console.error('Error submitting entry:', err)
     } finally {
       setIsSubmitting(false)
     }
@@ -1381,103 +1330,359 @@ function AddMedicationForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Type Selection */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Medication Name *
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Type *
         </label>
-        <input
-          type="text"
-          value={formData.medicationName}
-          onChange={(e) => setFormData({ ...formData, medicationName: e.target.value })}
-          required
-          placeholder="e.g., Lisinopril 10 mg"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Dosage *
-        </label>
-        <input
-          type="text"
-          value={formData.dosage}
-          onChange={(e) => setFormData({ ...formData, dosage: e.target.value })}
-          required
-          placeholder="e.g., 10 mg PO daily"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Start Date *
+        <div className="flex gap-4">
+          <label className="flex items-center">
+            <input
+              type="radio"
+              name="entryType"
+              value="medication"
+              checked={entryType === 'medication'}
+              onChange={(e) => setEntryType(e.target.value as 'medication' | 'vitals')}
+              className="mr-2"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">Medication</span>
           </label>
-          <input
-            type="date"
-            value={formData.startDate}
-            onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Stop Date (optional)
+          <label className="flex items-center">
+            <input
+              type="radio"
+              name="entryType"
+              value="vitals"
+              checked={entryType === 'vitals'}
+              onChange={(e) => setEntryType(e.target.value as 'medication' | 'vitals')}
+              className="mr-2"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">Vitals</span>
           </label>
-          <input
-            type="date"
-            value={formData.stopDate}
-            onChange={(e) => setFormData({ ...formData, stopDate: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          />
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Administration Time *
-        </label>
-        <input
-          type="text"
-          value={formData.hour}
-          onChange={(e) => setFormData({ ...formData, hour: e.target.value })}
-          required
-          placeholder="e.g., 09:00 or 9:00 AM"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-        />
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Format: HH:MM or HH:MM AM/PM</p>
-      </div>
+      {/* Medication Fields */}
+      {entryType === 'medication' && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Medication Name *
+            </label>
+            <input
+              type="text"
+              value={medicationData.medicationName}
+              onChange={(e) => setMedicationData({ ...medicationData, medicationName: e.target.value })}
+              required
+              placeholder="e.g., Lisinopril 10 mg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+          </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Notes (optional)
-        </label>
-        <textarea
-          value={formData.notes}
-          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-          placeholder="Additional notes about this medication"
-          rows={2}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-        />
-      </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Dosage *
+            </label>
+            <input
+              type="text"
+              value={medicationData.dosage}
+              onChange={(e) => setMedicationData({ ...medicationData, dosage: e.target.value })}
+              required
+              placeholder="e.g., 10 mg PO daily"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+          </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Initials *
-        </label>
-        <input
-          type="text"
-          value={formData.initials}
-          onChange={(e) => setFormData({ ...formData, initials: e.target.value.toUpperCase() })}
-          required
-          placeholder="e.g., JD or JS"
-          maxLength={4}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-        />
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">This will be used as default when you manually enter initials in individual day cells</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Start Date *
+              </label>
+              <input
+                type="date"
+                value={medicationData.startDate}
+                onChange={(e) => setMedicationData({ ...medicationData, startDate: e.target.value })}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Stop Date (optional)
+              </label>
+              <input
+                type="date"
+                value={medicationData.stopDate}
+                onChange={(e) => setMedicationData({ ...medicationData, stopDate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Administration Time *
+            </label>
+            <input
+              type="text"
+              value={medicationData.hour}
+              onChange={(e) => setMedicationData({ ...medicationData, hour: e.target.value })}
+              required
+              placeholder="e.g., 09:00 or 9:00 AM"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Format: HH:MM or HH:MM AM/PM</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Notes (optional)
+            </label>
+            <textarea
+              value={medicationData.notes}
+              onChange={(e) => setMedicationData({ ...medicationData, notes: e.target.value })}
+              placeholder="Additional notes about this medication"
+              rows={2}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Initials or Legend *
+            </label>
+            
+            {/* Radio buttons to choose between Initials or Legend */}
+            <div className="flex gap-4 mb-3">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="initialsType"
+                  value="initials"
+                  checked={initialsType === 'initials'}
+                  onChange={(e) => {
+                    setInitialsType('initials')
+                    setSelectedLegend('')
+                  }}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Initials</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="initialsType"
+                  value="legend"
+                  checked={initialsType === 'legend'}
+                  onChange={(e) => {
+                    setInitialsType('legend')
+                    setMedicationData({ ...medicationData, initials: '' })
+                  }}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Legend</span>
+              </label>
+            </div>
+
+            {/* Show initials input if "Initials" is selected */}
+            {initialsType === 'initials' && (
+              <div>
+                <input
+                  type="text"
+                  value={medicationData.initials}
+                  onChange={(e) => setMedicationData({ ...medicationData, initials: e.target.value.toUpperCase() })}
+                  required
+                  placeholder="e.g., JD or JS"
+                  maxLength={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">This will be used as default when you manually enter initials in individual day cells</p>
+              </div>
+            )}
+
+            {/* Show legend radio buttons if "Legend" is selected */}
+            {initialsType === 'legend' && (
+              <div>
+                <div className="grid grid-cols-2 gap-3">
+                  {defaultLegends.map((legend) => (
+                    <label key={legend.code} className="flex items-center p-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="selectedLegend"
+                        value={legend.code}
+                        checked={selectedLegend === legend.code}
+                        onChange={(e) => setSelectedLegend(e.target.value)}
+                        className="mr-2"
+                      />
+                      <div className="flex-1">
+                        <span className="font-semibold text-gray-800 dark:text-gray-200">{legend.code}</span>
+                        <span className="text-xs text-gray-600 dark:text-gray-400 ml-2">- {legend.description}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Select a legend code to use as the default marker</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Vitals Fields */}
+      {entryType === 'vitals' && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Notes *
+            </label>
+            <textarea
+              value={vitalsData.notes}
+              onChange={(e) => setVitalsData({ ...vitalsData, notes: e.target.value })}
+              required
+              placeholder="e.g., BP (sprinkle salt on food if BP low <80/60), Temperature, Weight, etc."
+              rows={4}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter vital signs instructions or notes (e.g., BP, Temperature, Weight tracking instructions)</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Start Date *
+              </label>
+              <input
+                type="date"
+                value={vitalsData.startDate}
+                onChange={(e) => setVitalsData({ ...vitalsData, startDate: e.target.value })}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Stop Date (optional)
+              </label>
+              <input
+                type="date"
+                value={vitalsData.stopDate}
+                onChange={(e) => setVitalsData({ ...vitalsData, stopDate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Administration Time *
+            </label>
+            <input
+              type="text"
+              value={vitalsData.hour}
+              onChange={(e) => setVitalsData({ ...vitalsData, hour: e.target.value })}
+              required
+              placeholder="e.g., 09:00 or 9:00 AM"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Format: HH:MM or HH:MM AM/PM</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Initials or Legend *
+            </label>
+            
+            {/* Radio buttons to choose between Initials or Legend */}
+            <div className="flex gap-4 mb-3">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="vitalsInitialsType"
+                  value="initials"
+                  checked={vitalsInitialsType === 'initials'}
+                  onChange={(e) => {
+                    setVitalsInitialsType('initials')
+                    setSelectedVitalsLegend('')
+                  }}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Initials</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="vitalsInitialsType"
+                  value="legend"
+                  checked={vitalsInitialsType === 'legend'}
+                  onChange={(e) => {
+                    setVitalsInitialsType('legend')
+                    setVitalsData({ ...vitalsData, initials: '' })
+                  }}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Legend</span>
+              </label>
+            </div>
+
+            {/* Show initials input if "Initials" is selected */}
+            {vitalsInitialsType === 'initials' && (
+              <div>
+                <input
+                  type="text"
+                  value={vitalsData.initials}
+                  onChange={(e) => setVitalsData({ ...vitalsData, initials: e.target.value.toUpperCase() })}
+                  required
+                  placeholder="e.g., JD or JS"
+                  maxLength={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">This will be used as default when you manually enter initials in individual day cells</p>
+              </div>
+            )}
+
+            {/* Show legend radio buttons if "Legend" is selected */}
+            {vitalsInitialsType === 'legend' && (
+              <div>
+                <div className="grid grid-cols-2 gap-3">
+                  {defaultLegends.map((legend) => (
+                    <label key={legend.code} className="flex items-center p-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="selectedVitalsLegend"
+                        value={legend.code}
+                        checked={selectedVitalsLegend === legend.code}
+                        onChange={(e) => setSelectedVitalsLegend(e.target.value)}
+                        className="mr-2"
+                      />
+                      <div className="flex-1">
+                        <span className="font-semibold text-gray-800 dark:text-gray-200">{legend.code}</span>
+                        <span className="text-xs text-gray-600 dark:text-gray-400 ml-2">- {legend.description}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Select a legend code to use as the default marker</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Legends Section */}
+      <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">MAR Legends</h3>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          {defaultLegends.map((legend) => (
+            <div key={legend.code} className="flex items-start">
+              <span className="font-semibold text-gray-800 dark:text-gray-200 mr-2 min-w-[2rem]">{legend.code}:</span>
+              <span className="text-gray-600 dark:text-gray-400">{legend.description}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">
+          These codes can be used when marking medication administration in the daily grid.
+        </p>
       </div>
 
       <div className="flex justify-end space-x-3 pt-4">
@@ -1493,7 +1698,7 @@ function AddMedicationForm({
           disabled={isSubmitting}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isSubmitting ? 'Adding...' : 'Add Medication'}
+          {isSubmitting ? 'Adding...' : entryType === 'medication' ? 'Add Medication' : 'Add Vitals'}
         </button>
       </div>
     </form>
