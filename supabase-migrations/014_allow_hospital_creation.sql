@@ -6,12 +6,15 @@ DROP POLICY IF EXISTS "Users can create hospitals" ON hospitals;
 
 -- Allow authenticated users to insert hospitals if they don't have a hospital_id
 -- This is needed for the auto-fix feature when users sign up
+-- IMPORTANT: This policy uses WITH CHECK to ensure only authorized users can insert
 CREATE POLICY "Users can create hospitals" ON hospitals
   FOR INSERT
   WITH CHECK (
-    auth.uid() IS NOT NULL AND
+    -- Must be authenticated
+    auth.uid() IS NOT NULL 
+    AND
     (
-      -- Allow if user doesn't have a hospital_id yet (for new signups)
+      -- Allow if user doesn't have a hospital_id yet (for new signups/auto-fix)
       EXISTS (
         SELECT 1 FROM user_profiles
         WHERE user_profiles.id = auth.uid()
