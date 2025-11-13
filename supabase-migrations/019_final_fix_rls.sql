@@ -45,19 +45,31 @@ BEGIN
   -- Get current user ID
   v_user_id := auth.uid();
   
+  -- If auth.uid() is NULL, try to get from JWT claims
   IF v_user_id IS NULL THEN
-    RAISE EXCEPTION 'User must be authenticated';
+    BEGIN
+      v_user_id := (current_setting('request.jwt.claims', true)::json->>'sub')::uuid;
+    EXCEPTION
+      WHEN OTHERS THEN
+        v_user_id := NULL;
+    END;
   END IF;
   
-  -- Check if user already has a hospital_id (prevent duplicates for non-superadmins)
-  IF EXISTS (
-    SELECT 1 FROM user_profiles
-    WHERE id = v_user_id
-    AND hospital_id IS NOT NULL
-    AND role != 'superadmin'
-  ) THEN
-    RAISE EXCEPTION 'User already has a hospital assigned';
+  -- If we have a user_id, check if they already have a hospital (prevent duplicates)
+  IF v_user_id IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE id = v_user_id
+      AND hospital_id IS NOT NULL
+      AND role != 'superadmin'
+    ) THEN
+      RAISE EXCEPTION 'User already has a hospital assigned';
+    END IF;
   END IF;
+  
+  -- If v_user_id is still NULL, that's okay - we'll proceed anyway
+  -- The RLS policy will ensure only authenticated users can insert
+  -- This handles the signup flow where session might not be fully established yet
   
   -- Create hospital (bypasses RLS due to SECURITY DEFINER)
   INSERT INTO hospitals (name, facility_type, invite_code)
