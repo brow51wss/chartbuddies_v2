@@ -18,7 +18,13 @@ CREATE POLICY "Allow authenticated hospital creation" ON hospitals
   WITH CHECK (auth.uid() IS NOT NULL);
 
 -- ============================================
--- STEP 3: CREATE/UPDATE FUNCTION WITH SECURITY DEFINER
+-- STEP 3: DROP OLD FUNCTION IF EXISTS (DIFFERENT RETURN TYPE)
+-- ============================================
+-- Drop the old function that returns UUID
+DROP FUNCTION IF EXISTS create_hospital_safe(VARCHAR, VARCHAR, VARCHAR);
+
+-- ============================================
+-- STEP 4: CREATE/UPDATE FUNCTION WITH SECURITY DEFINER
 -- ============================================
 -- This function bypasses RLS completely
 CREATE OR REPLACE FUNCTION create_hospital_safe(
@@ -73,7 +79,7 @@ GRANT EXECUTE ON FUNCTION create_hospital_safe TO authenticated;
 GRANT EXECUTE ON FUNCTION create_hospital_safe TO anon;
 
 -- ============================================
--- STEP 4: VERIFY
+-- STEP 5: VERIFY
 -- ============================================
 SELECT 'Final fix applied successfully' as status;
 SELECT policyname, cmd, with_check 
