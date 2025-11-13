@@ -189,34 +189,39 @@ export default function Signup() {
           }
         }
 
-        // Try using the function first (bypasses RLS), fallback to direct insert
+        // Create hospital - try multiple approaches to ensure it works
         let hospitalData: any = null
         let hospitalError: any = null
         
-        // First, try using the safe function
-        const { data: functionResult, error: functionErr } = await supabase
-          .rpc('create_hospital_safe', {
-            p_name: formData.hospitalName,
-            p_facility_type: formData.facilityType,
-            p_invite_code: inviteCode
-          })
-        
-        if (!functionErr && functionResult) {
-          // Function succeeded, get the hospital data
-          const { data: hospital, error: fetchErr } = await supabase
-            .from('hospitals')
-            .select('*')
-            .eq('id', functionResult)
-            .single()
+        // Approach 1: Try using the safe function (bypasses RLS)
+        try {
+          const { data: functionResult, error: functionErr } = await supabase
+            .rpc('create_hospital_safe', {
+              p_name: formData.hospitalName,
+              p_facility_type: formData.facilityType,
+              p_invite_code: inviteCode
+            })
           
-          if (!fetchErr && hospital) {
-            hospitalData = hospital
+          if (!functionErr && functionResult) {
+            // Function succeeded, get the hospital data
+            const { data: hospital, error: fetchErr } = await supabase
+              .from('hospitals')
+              .select('*')
+              .eq('id', functionResult)
+              .single()
+            
+            if (!fetchErr && hospital) {
+              hospitalData = hospital
+            } else {
+              hospitalError = fetchErr
+            }
           } else {
-            hospitalError = fetchErr
+            throw functionErr || new Error('Function returned no result')
           }
-        } else {
-          // Function doesn't exist or failed, try direct insert
-          console.log('Function not available, trying direct insert...')
+        } catch (funcError: any) {
+          console.log('Function approach failed, trying direct insert...', funcError)
+          
+          // Approach 2: Direct insert (should work with permissive policy)
           const { data: directInsert, error: directError } = await supabase
             .from('hospitals')
             .insert({
@@ -229,6 +234,7 @@ export default function Signup() {
           
           if (directError) {
             hospitalError = directError
+            console.error('Direct insert also failed:', directError)
           } else {
             hospitalData = directInsert
           }
@@ -236,7 +242,7 @@ export default function Signup() {
 
         if (hospitalError) {
           console.error('Hospital creation error:', hospitalError)
-          throw new Error(hospitalError.message || 'Failed to create hospital')
+          throw new Error(hospitalError.message || 'Failed to create hospital. Please try again or contact support.')
         }
 
         if (!hospitalData) {
