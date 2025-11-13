@@ -252,6 +252,10 @@ export default function Signup() {
         // Function returns array, get first item
         const finalHospital = Array.isArray(hospitalData) ? hospitalData[0] : hospitalData
 
+        if (!finalHospital || !finalHospital.id) {
+          throw new Error('Hospital creation failed. Please try again.')
+        }
+
         // Update user profile to be superadmin of new hospital
         const { error: profileError } = await supabase
           .from('user_profiles')
