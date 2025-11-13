@@ -44,28 +44,56 @@ export default function Login() {
     if (data.user) {
       let profile = await getCurrentUserProfile()
       
-      // If profile doesn't exist, try to create it
+      // If profile doesn't exist, try to create it using the function (bypasses RLS)
       if (!profile) {
-        console.log('Profile not found, attempting to create...')
-        const { error: createError } = await supabase
-          .from('user_profiles')
-          .insert({
-            id: data.user.id,
-            email: data.user.email!,
-            full_name: data.user.user_metadata?.full_name || data.user.email || 'User',
-            role: 'nurse',
-            hospital_id: null
+        console.log('Profile not found, attempting to create via function...')
+        
+        // Try using the database function first (bypasses RLS)
+        const { data: profileId, error: functionError } = await supabase
+          .rpc('create_user_profile_safe', {
+            p_user_id: data.user.id,
+            p_email: data.user.email!,
+            p_full_name: data.user.user_metadata?.full_name || data.user.email || 'User'
           })
         
-        if (createError) {
-          console.error('Failed to create profile:', createError)
-          setError('User profile not found. Please contact administrator.')
-          setLoading(false)
-          return
+        if (functionError) {
+          console.error('Function error:', functionError)
+          // If function doesn't exist, try direct insert
+          if (functionError.code === '42883' || functionError.message?.includes('does not exist')) {
+            console.log('Function not available, trying direct insert...')
+            const { error: createError } = await supabase
+              .from('user_profiles')
+              .insert({
+                id: data.user.id,
+                email: data.user.email!,
+                full_name: data.user.user_metadata?.full_name || data.user.email || 'User',
+                role: 'nurse',
+                hospital_id: null
+              })
+            
+            if (createError) {
+              console.error('Failed to create profile:', createError)
+              setError('User profile not found. Please contact administrator.')
+              setLoading(false)
+              return
+            }
+          } else {
+            console.error('Failed to create profile via function:', functionError)
+            setError('User profile not found. Please contact administrator.')
+            setLoading(false)
+            return
+          }
         }
         
-        // Retry getting profile
+        // Wait a moment for the profile to be created, then retry
+        await new Promise(resolve => setTimeout(resolve, 500))
         profile = await getCurrentUserProfile()
+        
+        // If still no profile, try one more time
+        if (!profile) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+          profile = await getCurrentUserProfile()
+        }
       }
       
       if (profile) {
