@@ -62,10 +62,76 @@ export default function Admissions() {
       return
     }
     
+    // Auto-fix: If hospital_id is missing, try to fix it
     if (!refreshedProfile.hospital_id) {
-      console.error('Profile data:', refreshedProfile)
-      setError(`User profile or hospital not found. Hospital ID is missing. Please contact support. Profile role: ${refreshedProfile.role}`)
-      return
+      console.log('Hospital ID missing, attempting to auto-fix...')
+      
+      try {
+        // Try to find an existing hospital
+        const { data: existingHospitals, error: hospitalError } = await supabase
+          .from('hospitals')
+          .select('id, name')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+        
+        let hospitalId: string | null = null
+        
+        if (existingHospitals && existingHospitals.length > 0) {
+          // Use the most recent hospital
+          hospitalId = existingHospitals[0].id
+          console.log('Found existing hospital:', existingHospitals[0].name)
+        } else {
+          // Create a default hospital
+          const defaultHospitalName = refreshedProfile.full_name 
+            ? `${refreshedProfile.full_name}'s Hospital` 
+            : 'Default Hospital'
+          
+          const { data: newHospital, error: createError } = await supabase
+            .from('hospitals')
+            .insert({
+              name: defaultHospitalName,
+              facility_type: 'hospital',
+              invite_code: 'DEFAULT' + Math.random().toString(36).substring(2, 7).toUpperCase()
+            })
+            .select()
+            .single()
+          
+          if (createError || !newHospital) {
+            throw new Error('Failed to create default hospital')
+          }
+          
+          hospitalId = newHospital.id
+          console.log('Created default hospital:', defaultHospitalName)
+        }
+        
+        // Update user profile with hospital_id
+        const { error: updateError } = await supabase
+          .from('user_profiles')
+          .update({ 
+            hospital_id: hospitalId,
+            // Keep their role if they're a nurse, otherwise make them superadmin
+            role: refreshedProfile.role === 'nurse' ? 'nurse' : 'superadmin'
+          })
+          .eq('id', refreshedProfile.id)
+        
+        if (updateError) {
+          throw updateError
+        }
+        
+        // Refresh profile again to get updated hospital_id
+        const updatedProfile = await getCurrentUserProfile()
+        if (!updatedProfile || !updatedProfile.hospital_id) {
+          throw new Error('Failed to update profile with hospital ID')
+        }
+        
+        refreshedProfile.hospital_id = updatedProfile.hospital_id
+        console.log('Successfully fixed hospital_id:', refreshedProfile.hospital_id)
+      } catch (fixError: any) {
+        console.error('Auto-fix failed:', fixError)
+        setError(`Hospital ID is missing and could not be automatically fixed. Please contact support. Error: ${fixError.message}`)
+        return
+      }
     }
     
     // Use refreshed profile
