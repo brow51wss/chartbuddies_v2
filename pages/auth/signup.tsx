@@ -289,37 +289,49 @@ export default function Signup() {
         }
 
         // Update user profile to be superadmin of new hospital
-        // Try direct update first
+        // Use function first (bypasses RLS), fallback to direct update
         let profileError: any = null
-        const { error: directUpdateError } = await supabase
-          .from('user_profiles')
-          .update({
-            hospital_id: finalHospital.id,
-            role: 'superadmin',
-            full_name: formData.fullName
+        
+        console.log('Updating profile to superadmin...', { userId: authData.user.id, hospitalId: finalHospital.id })
+        
+        // Try using function first (bypasses RLS)
+        const { error: functionError } = await supabase
+          .rpc('update_user_profile_on_signup', {
+            p_user_id: authData.user.id,
+            p_hospital_id: finalHospital.id,
+            p_role: 'superadmin',
+            p_full_name: formData.fullName
           })
-          .eq('id', authData.user.id)
-
-        if (directUpdateError) {
-          console.log('Direct update failed, trying function...', directUpdateError)
-          // Try using function as fallback
-          const { error: functionError } = await supabase
-            .rpc('update_user_profile_on_signup', {
-              p_user_id: authData.user.id,
-              p_hospital_id: finalHospital.id,
-              p_role: 'superadmin',
-              p_full_name: formData.fullName
+        
+        if (functionError) {
+          console.log('Function update failed, trying direct update...', functionError)
+          // Fallback to direct update
+          const { error: directUpdateError } = await supabase
+            .from('user_profiles')
+            .update({
+              hospital_id: finalHospital.id,
+              role: 'superadmin',
+              full_name: formData.fullName
             })
-          
-          if (functionError) {
-            profileError = functionError
-            console.error('Function update also failed:', functionError)
+            .eq('id', authData.user.id)
+
+          if (directUpdateError) {
+            profileError = directUpdateError
+            console.error('Direct update also failed:', directUpdateError)
+          } else {
+            console.log('Direct update succeeded')
           }
+        } else {
+          console.log('Function update succeeded')
         }
 
         if (profileError) {
           console.error('Profile update error:', profileError)
-          throw new Error('Failed to set up admin access. Please contact support.')
+          // Don't throw error - hospital was created successfully
+          // User can update their profile later
+          setMessage('Hospital created successfully! However, we could not set your admin role. Please contact support or try logging in.')
+          setLoading(false)
+          return
         }
       }
 
