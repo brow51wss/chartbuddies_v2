@@ -273,7 +273,9 @@ export default function Signup() {
         }
 
         // Update user profile to be superadmin of new hospital
-        const { error: profileError } = await supabase
+        // Try direct update first
+        let profileError: any = null
+        const { error: directUpdateError } = await supabase
           .from('user_profiles')
           .update({
             hospital_id: finalHospital.id,
@@ -281,6 +283,23 @@ export default function Signup() {
             full_name: formData.fullName
           })
           .eq('id', authData.user.id)
+
+        if (directUpdateError) {
+          console.log('Direct update failed, trying function...', directUpdateError)
+          // Try using function as fallback
+          const { error: functionError } = await supabase
+            .rpc('update_user_profile_on_signup', {
+              p_user_id: authData.user.id,
+              p_hospital_id: finalHospital.id,
+              p_role: 'superadmin',
+              p_full_name: formData.fullName
+            })
+          
+          if (functionError) {
+            profileError = functionError
+            console.error('Function update also failed:', functionError)
+          }
+        }
 
         if (profileError) {
           console.error('Profile update error:', profileError)
