@@ -189,71 +189,74 @@ export default function Signup() {
           }
         }
 
-        // Create hospital - try multiple approaches to ensure it works
-        let hospitalData: any = null
-        let hospitalError: any = null
-        
-        // Approach 1: Try using the safe function (bypasses RLS)
-        try {
-          const { data: functionResult, error: functionErr } = await supabase
-            .rpc('create_hospital_safe', {
-              p_name: formData.hospitalName,
-              p_facility_type: formData.facilityType,
-              p_invite_code: inviteCode
-            })
-          
-          if (!functionErr && functionResult) {
-            // Function succeeded, get the hospital data
-            const { data: hospital, error: fetchErr } = await supabase
-              .from('hospitals')
-              .select('*')
-              .eq('id', functionResult)
-              .single()
-            
-            if (!fetchErr && hospital) {
-              hospitalData = hospital
-            } else {
-              hospitalError = fetchErr
-            }
-          } else {
-            throw functionErr || new Error('Function returned no result')
-          }
-        } catch (funcError: any) {
-          console.log('Function approach failed, trying direct insert...', funcError)
-          
-          // Approach 2: Direct insert (should work with permissive policy)
-          const { data: directInsert, error: directError } = await supabase
-            .from('hospitals')
-            .insert({
-              name: formData.hospitalName,
-              facility_type: formData.facilityType,
-              invite_code: inviteCode
-            })
-            .select()
-            .single()
-          
-          if (directError) {
-            hospitalError = directError
-            console.error('Direct insert also failed:', directError)
-          } else {
-            hospitalData = directInsert
-          }
-        }
+        // Create hospital using the safe function (bypasses RLS)
+        console.log('Creating hospital via function...')
+        const { data: hospitalData, error: hospitalError } = await supabase
+          .rpc('create_hospital_safe', {
+            p_name: formData.hospitalName,
+            p_facility_type: formData.facilityType,
+            p_invite_code: inviteCode
+          })
 
         if (hospitalError) {
           console.error('Hospital creation error:', hospitalError)
+          // If function doesn't exist, try direct insert as fallback
+          if (hospitalError.message?.includes('does not exist') || hospitalError.code === '42883') {
+            console.log('Function not found, trying direct insert...')
+            const { data: directInsert, error: directError } = await supabase
+              .from('hospitals')
+              .insert({
+                name: formData.hospitalName,
+                facility_type: formData.facilityType,
+                invite_code: inviteCode
+              })
+              .select()
+              .single()
+            
+            if (directError) {
+              throw new Error(`Failed to create hospital: ${directError.message}. Please contact support.`)
+            }
+            
+            if (!directInsert) {
+              throw new Error('Hospital creation failed. Please try again.')
+            }
+            
+            // Use direct insert result
+            const finalHospitalData = directInsert
+            // Update user profile
+            const { error: profileError } = await supabase
+              .from('user_profiles')
+              .update({
+                hospital_id: finalHospitalData.id,
+                role: 'superadmin',
+                full_name: formData.fullName
+              })
+              .eq('id', authData.user.id)
+
+            if (profileError) {
+              console.error('Profile update error:', profileError)
+              throw new Error('Failed to set up admin access. Please contact support.')
+            }
+            
+            // Skip to redirect
+            router.push('/dashboard')
+            return
+          }
           throw new Error(hospitalError.message || 'Failed to create hospital. Please try again or contact support.')
         }
 
-        if (!hospitalData) {
+        if (!hospitalData || hospitalData.length === 0) {
           throw new Error('Hospital creation failed. Please try again.')
         }
+
+        // Function returns array, get first item
+        const finalHospital = Array.isArray(hospitalData) ? hospitalData[0] : hospitalData
 
         // Update user profile to be superadmin of new hospital
         const { error: profileError } = await supabase
           .from('user_profiles')
           .update({
-            hospital_id: hospitalData.id,
+            hospital_id: finalHospital.id,
             role: 'superadmin',
             full_name: formData.fullName
           })
