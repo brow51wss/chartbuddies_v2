@@ -189,15 +189,50 @@ export default function Signup() {
           }
         }
 
-        const { data: hospitalData, error: hospitalError } = await supabase
-          .from('hospitals')
-          .insert({
-            name: formData.hospitalName,
-            facility_type: formData.facilityType,
-            invite_code: inviteCode
+        // Try using the function first (bypasses RLS), fallback to direct insert
+        let hospitalData: any = null
+        let hospitalError: any = null
+        
+        // First, try using the safe function
+        const { data: functionResult, error: functionErr } = await supabase
+          .rpc('create_hospital_safe', {
+            p_name: formData.hospitalName,
+            p_facility_type: formData.facilityType,
+            p_invite_code: inviteCode
           })
-          .select()
-          .single()
+        
+        if (!functionErr && functionResult) {
+          // Function succeeded, get the hospital data
+          const { data: hospital, error: fetchErr } = await supabase
+            .from('hospitals')
+            .select('*')
+            .eq('id', functionResult)
+            .single()
+          
+          if (!fetchErr && hospital) {
+            hospitalData = hospital
+          } else {
+            hospitalError = fetchErr
+          }
+        } else {
+          // Function doesn't exist or failed, try direct insert
+          console.log('Function not available, trying direct insert...')
+          const { data: directInsert, error: directError } = await supabase
+            .from('hospitals')
+            .insert({
+              name: formData.hospitalName,
+              facility_type: formData.facilityType,
+              invite_code: inviteCode
+            })
+            .select()
+            .single()
+          
+          if (directError) {
+            hospitalError = directError
+          } else {
+            hospitalData = directInsert
+          }
+        }
 
         if (hospitalError) {
           console.error('Hospital creation error:', hospitalError)
