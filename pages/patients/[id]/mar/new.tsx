@@ -289,7 +289,7 @@ export default function NewMARForm() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
@@ -302,7 +302,7 @@ export default function NewMARForm() {
   if (!patient) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center">
           <p className="text-red-600">Patient not found</p>
         </div>
       </ProtectedRoute>
@@ -315,9 +315,9 @@ export default function NewMARForm() {
   return (
     <ProtectedRoute>
       <Head>
-        <title>New MAR Form - Chartbuddies</title>
+        <title>New MAR Form - Lasso</title>
       </Head>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+      <div className="min-h-screen py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
           <div className="mb-6">

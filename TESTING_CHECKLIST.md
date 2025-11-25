@@ -1,4 +1,4 @@
-# Testing Checklist for Chartbuddies
+# Testing Checklist for Lasso
 
 ## Prerequisites
 ✅ Database schema migration completed

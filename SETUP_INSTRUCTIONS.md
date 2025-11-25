@@ -1,4 +1,4 @@
-# Chartbuddies Setup Instructions
+# Lasso Setup Instructions
 
 ## Database Setup
 

@@ -161,7 +161,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
@@ -174,16 +174,16 @@ export default function Dashboard() {
   return (
     <ProtectedRoute>
       <Head>
-        <title>Dashboard - Chartbuddies</title>
+        <title>Dashboard - Lasso</title>
       </Head>
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+      <div className="min-h-screen">
         {/* Header */}
         <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex justify-between items-center">
               <div>
                 <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                  Chartbuddies EHR
+                  Lasso EHR
                 </h1>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                   {userProfile?.full_name} • {userProfile?.role?.replace('_', ' ').toUpperCase()}

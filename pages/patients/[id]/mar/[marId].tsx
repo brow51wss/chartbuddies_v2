@@ -566,7 +566,7 @@ export default function ViewMARForm() {
   if (!router.isReady || loading) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-4 text-gray-600 dark:text-gray-400">Loading MAR form...</p>
@@ -580,7 +580,7 @@ export default function ViewMARForm() {
   if (error && !marForm) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <p className="text-red-600 mb-4">{error}</p>
             <button 
@@ -605,7 +605,7 @@ export default function ViewMARForm() {
   if (!marForm && !loading) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <p className="text-red-600 mb-4">MAR form not found</p>
             <button 
@@ -629,7 +629,7 @@ export default function ViewMARForm() {
   if (!marForm) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
@@ -642,9 +642,9 @@ export default function ViewMARForm() {
   return (
     <ProtectedRoute>
       <Head>
-        <title>MAR Form - {marForm.month_year} - Chartbuddies</title>
+        <title>MAR Form - {marForm.month_year} - Lasso</title>
       </Head>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+      <div className="min-h-screen py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header Navigation */}
           <div className="mb-6">

@@ -10,7 +10,7 @@ You're currently using the same Supabase database for both local development and
 
 1. Go to [Supabase Dashboard](https://supabase.com/dashboard)
 2. Click "New Project"
-3. Name it something like "Chartbuddies Dev" or "Chartbuddies Local"
+3. Name it something like "Lasso Dev" or "Lasso Local"
 4. Choose a region close to you
 5. Set a database password (save this!)
 6. Wait for the project to be created

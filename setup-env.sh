@@ -1,7 +1,7 @@
 #!/bin/bash
 # Setup script for environment variables
 
-echo "🔧 Chartbuddies Environment Setup"
+echo "🔧 Lasso Environment Setup"
 echo ""
 echo "This script will help you set up separate databases for development and production."
 echo ""
