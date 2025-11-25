@@ -1203,176 +1203,184 @@ export default function ViewMARForm() {
 
           {/* Patient Information Section - Box 2 */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Left Column: Patient Information */}
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Diagnosis:</label>
-                    <button
-                      onClick={() => setShowEditPatientInfoModal(true)}
-                      className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-                    >
-                      {marForm.diagnosis || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
-                    </button>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Allergies:</label>
-                    <button
-                      onClick={() => setShowEditPatientInfoModal(true)}
-                      className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-                    >
-                      {marForm.allergies || 'None'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
-                    </button>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">NAME:</label>
-                    <div className="text-sm font-medium text-gray-800 dark:text-white">{marForm.patient_name}</div>
-                  </div>
+            {/* Row 1: Two Columns */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* Column 1: Diagnosis, Allergies, Name */}
+              <div className="space-y-3 p-4 rounded-lg bg-lasso-navy/5 dark:bg-lasso-navy/10">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Diagnosis:</label>
+                  <button
+                    onClick={() => setShowEditPatientInfoModal(true)}
+                    className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+                  >
+                    {marForm.diagnosis || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
+                  </button>
                 </div>
-
-                {/* Middle Column: Diet & Physician */}
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      DIET (Special Instructions, e.g. Texture, Bite Size, Position, etc.):
-                    </label>
-                    <button
-                      onClick={() => setShowEditPatientInfoModal(true)}
-                      className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors min-h-[60px]"
-                    >
-                      {marForm.diet || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
-                    </button>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Physician Name:</label>
-                    <button
-                      onClick={() => setShowEditPatientInfoModal(true)}
-                      className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-                    >
-                      {marForm.physician_name || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
-                    </button>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number:</label>
-                    <button
-                      onClick={() => setShowEditPatientInfoModal(true)}
-                      className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-                    >
-                      {marForm.physician_phone || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
-                    </button>
-                  </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Allergies:</label>
+                  <button
+                    onClick={() => setShowEditPatientInfoModal(true)}
+                    className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+                  >
+                    {marForm.allergies || 'None'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
+                  </button>
                 </div>
-
-                {/* Right Column: Comments & Instructions */}
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Comments:</label>
-                    {editingComments ? (
-                      <div className="space-y-2">
-                        <textarea
-                          value={commentsValue}
-                          onChange={(e) => setCommentsValue(e.target.value)}
-                          placeholder="Enter comments or notes..."
-                          className="w-full text-sm text-gray-800 dark:text-white min-h-[80px] p-2 border-2 border-lasso-blue rounded dark:bg-gray-700 focus:ring-lasso-teal focus:border-lasso-teal resize-y"
-                          autoFocus
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={saveComments}
-                            disabled={saving}
-                            className="px-3 py-1.5 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded text-xs font-medium hover:from-lasso-teal hover:to-lasso-blue disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                          >
-                            {saving ? 'Saving...' : 'Save'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEditingComments(false)
-                              setCommentsValue(marForm?.comments || '')
-                            }}
-                            disabled={saving}
-                            className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        onClick={() => {
-                          setEditingComments(true)
-                          setCommentsValue(marForm?.comments || '')
-                        }}
-                        className="text-sm text-gray-800 dark:text-white min-h-[60px] p-2 border border-gray-200 dark:border-gray-600 rounded cursor-pointer hover:border-lasso-blue dark:hover:border-lasso-blue transition-colors"
-                      >
-                        {marForm?.comments ? (
-                          <div className="whitespace-pre-wrap">{marForm.comments}</div>
-                        ) : (
-                          <span className="text-gray-400 italic">Click to add comments...</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-xs text-gray-700 dark:text-gray-300 space-y-1">
-                    <div><strong>Instructions:</strong></div>
-                    <div>A. Put initials in appropriate box when medication is given.</div>
-                    <div>B. Circle initials when not given.</div>
-                    <div>C. State reason for refusal / omission on back of form.</div>
-                    <div>D. PRN Medications: Reason given and results must be noted on back of form.</div>
-                    <div className="mt-2">
-                      <strong>Legend:</strong>
-                      <div className="ml-2 mt-1 space-y-0.5">
-                        {(() => {
-                          // Generate user initials from full_name if staff_initials not set
-                          const getUserInitials = () => {
-                            if (userProfile?.staff_initials) {
-                              return userProfile.staff_initials.toUpperCase()
-                            }
-                            if (userProfile?.full_name) {
-                              const names = userProfile.full_name.trim().split(/\s+/)
-                              if (names.length >= 2) {
-                                return (names[0][0] + names[names.length - 1][0]).toUpperCase()
-                              } else if (names.length === 1) {
-                                return names[0][0].toUpperCase()
-                              }
-                            }
-                            return null
-                          }
-                          const userInitials = getUserInitials()
-                          
-                          return (
-                            <>
-                              {userInitials && (
-                                <div className="font-semibold">{userInitials} = {userProfile?.full_name || 'Your Initials'}</div>
-                              )}
-                              <div>MC = Medication Discontinued</div>
-                              <div>G = Given</div>
-                              <div>NG = Not Given</div>
-                              <div>PRN = As Needed</div>
-                              <div>H = Held</div>
-                              <div>R = Refused</div>
-                            </>
-                          )
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    <div>
-                      <label className="block text-gray-700 dark:text-gray-300 mb-1">Record #:</label>
-                      <div className="text-gray-800 dark:text-white">{marForm.record_number}</div>
-                    </div>
-                    <div>
-                      <label className="block text-gray-700 dark:text-gray-300 mb-1">Date of Birth:</label>
-                      <div className="text-gray-800 dark:text-white">{new Date(marForm.date_of_birth).toLocaleDateString()}</div>
-                    </div>
-                    <div>
-                      <label className="block text-gray-700 dark:text-gray-300 mb-1">Sex:</label>
-                      <div className="text-gray-800 dark:text-white">{marForm.sex}</div>
-                    </div>
-                    </div>
-                  </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Name:</label>
+                  <div className="text-sm font-medium text-gray-800 dark:text-white">{marForm.patient_name}</div>
                 </div>
               </div>
+
+              {/* Column 2: Diet, Physician Name, Phone Number */}
+              <div className="space-y-3 p-4 rounded-lg bg-lasso-teal/5 dark:bg-lasso-teal/10">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">
+                    DIET (Special Instructions, e.g. Texture, Bite Size, Position, etc.):
+                  </label>
+                  <button
+                    onClick={() => setShowEditPatientInfoModal(true)}
+                    className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors min-h-[60px]"
+                  >
+                    {marForm.diet || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
+                  </button>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Physician Name:</label>
+                  <button
+                    onClick={() => setShowEditPatientInfoModal(true)}
+                    className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+                  >
+                    {marForm.physician_name || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
+                  </button>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Phone Number:</label>
+                  <button
+                    onClick={() => setShowEditPatientInfoModal(true)}
+                    className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+                  >
+                    {marForm.physician_phone || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Four Columns */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {/* Column 1: Comments */}
+              <div className="p-4 rounded-lg bg-lasso-blue/5 dark:bg-lasso-blue/10">
+                <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Comments:</label>
+                {editingComments ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={commentsValue}
+                      onChange={(e) => setCommentsValue(e.target.value)}
+                      placeholder="Enter comments or notes..."
+                      className="w-full text-sm text-gray-800 dark:text-white min-h-[80px] p-2 border-2 border-lasso-blue rounded dark:bg-gray-700 focus:ring-lasso-teal focus:border-lasso-teal resize-y"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveComments}
+                        disabled={saving}
+                        className="px-3 py-1.5 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded text-xs font-medium hover:from-lasso-teal hover:to-lasso-blue disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                      >
+                        {saving ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingComments(false)
+                          setCommentsValue(marForm?.comments || '')
+                        }}
+                        disabled={saving}
+                        className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => {
+                      setEditingComments(true)
+                      setCommentsValue(marForm?.comments || '')
+                    }}
+                    className="text-sm text-gray-800 dark:text-white min-h-[60px] p-2 border border-gray-200 dark:border-gray-600 rounded cursor-pointer hover:border-lasso-blue dark:hover:border-lasso-blue transition-colors"
+                  >
+                    {marForm?.comments ? (
+                      <div className="whitespace-pre-wrap">{marForm.comments}</div>
+                    ) : (
+                      <span className="text-gray-400 italic">Click to add comments...</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Column 2: Instructions */}
+              <div className="text-xs text-gray-700 dark:text-gray-300 space-y-1 p-4 rounded-lg bg-lasso-navy/5 dark:bg-lasso-navy/10">
+                <div><strong className="font-bold uppercase">Instructions:</strong></div>
+                <div>A. Put initials in appropriate box when medication is given.</div>
+                <div>B. Circle initials when not given.</div>
+                <div>C. State reason for refusal / omission on back of form.</div>
+                <div>D. PRN Medications: Reason given and results must be noted on back of form.</div>
+              </div>
+
+              {/* Column 3: Legend */}
+              <div className="text-xs text-gray-700 dark:text-gray-300 p-4 rounded-lg bg-lasso-teal/5 dark:bg-lasso-teal/10">
+                <div><strong className="font-bold uppercase">Legend:</strong></div>
+                <div className="mt-1 space-y-0.5">
+                  {(() => {
+                    // Generate user initials from full_name if staff_initials not set
+                    const getUserInitials = () => {
+                      if (userProfile?.staff_initials) {
+                        return userProfile.staff_initials.toUpperCase()
+                      }
+                      if (userProfile?.full_name) {
+                        const names = userProfile.full_name.trim().split(/\s+/)
+                        if (names.length >= 2) {
+                          return (names[0][0] + names[names.length - 1][0]).toUpperCase()
+                        } else if (names.length === 1) {
+                          return names[0][0].toUpperCase()
+                        }
+                      }
+                      return null
+                    }
+                    const userInitials = getUserInitials()
+                    
+                    return (
+                      <>
+                        {userInitials && (
+                          <div className="font-semibold">{userInitials} = {userProfile?.full_name || 'Your Initials'}</div>
+                        )}
+                        <div>MC = Medication Discontinued</div>
+                        <div>G = Given</div>
+                        <div>NG = Not Given</div>
+                        <div>PRN = As Needed</div>
+                        <div>H = Held</div>
+                        <div>R = Refused</div>
+                      </>
+                    )
+                  })()}
+                </div>
+              </div>
+
+              {/* Column 4: Record #, Date of Birth, Sex */}
+              <div className="space-y-3 text-xs p-4 rounded-lg bg-lasso-blue/5 dark:bg-lasso-blue/10">
+                <div>
+                  <label className="block font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Record #:</label>
+                  <div className="text-gray-800 dark:text-white">{marForm.record_number}</div>
+                </div>
+                <div>
+                  <label className="block font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Date of Birth:</label>
+                  <div className="text-gray-800 dark:text-white">{new Date(marForm.date_of_birth).toLocaleDateString()}</div>
+                </div>
+                <div>
+                  <label className="block font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Sex:</label>
+                  <div className="text-gray-800 dark:text-white">{marForm.sex}</div>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* PRN Records Section */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mt-8">
