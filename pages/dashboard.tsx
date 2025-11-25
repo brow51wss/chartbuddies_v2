@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
   const [selectedModule, setSelectedModule] = useState<string | null>(null)
 
   // Define EHR modules
@@ -165,6 +166,45 @@ export default function Dashboard() {
     setSelectedModule(null)
   }
 
+  const handleDeletePatient = async (patientId: string, patientName: string) => {
+    if (!userProfile) return
+    
+    // Only allow head nurses and superadmins to delete
+    if (userProfile.role !== 'head_nurse' && userProfile.role !== 'superadmin') {
+      setError('You do not have permission to delete patients')
+      setTimeout(() => setError(''), 5000)
+      return
+    }
+
+    // Confirm deletion
+    const confirmed = window.confirm(
+      `Are you sure you want to delete patient "${patientName}"?\n\nThis will permanently delete the patient and all associated records (MAR forms, medications, etc.). This action cannot be undone.`
+    )
+
+    if (!confirmed) return
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('patients')
+        .delete()
+        .eq('id', patientId)
+
+      if (deleteError) throw deleteError
+
+      // Reload patients list
+      if (userProfile) {
+        await loadPatients(userProfile)
+      }
+      
+      setMessage(`Patient "${patientName}" has been deleted successfully`)
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      console.error('Error deleting patient:', err)
+      setError(err.message || 'Failed to delete patient')
+      setTimeout(() => setError(''), 5000)
+    }
+  }
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -206,6 +246,12 @@ export default function Dashboard() {
                   <span>+</span>
                   <span>Add Patient</span>
                 </Link>
+                <Link
+                  href="/profile"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
+                >
+                  Profile
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
@@ -222,6 +268,12 @@ export default function Dashboard() {
           {error && (
             <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-md shadow-sm">
               <p className="text-red-800 dark:text-red-200">{error}</p>
+            </div>
+          )}
+
+          {message && (
+            <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 rounded-md shadow-sm">
+              <p className="text-green-800 dark:text-green-200">{message}</p>
             </div>
           )}
 
@@ -346,69 +398,90 @@ export default function Dashboard() {
                   </Link>
                 </div>
               ) : (
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                      <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
-                        <tr>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                            Patient Name
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                            Record Number
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                            Date of Birth
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                            Diagnosis
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                        {patients.map((patient) => (
-                          <tr
-                            key={patient.id}
-                            className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-150"
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                                {patient.patient_name}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-600 dark:text-gray-400">
-                                {patient.record_number}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-600 dark:text-gray-400">
-                                {new Date(patient.date_of_birth).toLocaleDateString()}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="text-sm text-gray-600 dark:text-gray-400">
-                                {patient.diagnosis || (
-                                  <span className="text-gray-400 dark:text-gray-500 italic">N/A</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <Link
-                                href={`/patients/${patient.id}/mar/new`}
-                                className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-                              >
-                                <span>Open MAR</span>
-                                <span>→</span>
-                              </Link>
-                            </td>
+                <div className="w-[90vw] mx-auto">
+                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <colgroup>
+                          <col className="w-48" /> {/* Patient Name - ~192px */}
+                          <col className="w-40" /> {/* Record Number - ~160px */}
+                          <col className="w-36" /> {/* Date of Birth - ~144px */}
+                        </colgroup>
+                        <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
+                          <tr>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-0 z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600">
+                              Patient Name
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-[192px] z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600">
+                              Record Number
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-[352px] z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600">
+                              Date of Birth
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                              Diagnosis
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                              Actions
+                            </th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                          {patients.map((patient) => (
+                            <tr
+                              key={patient.id}
+                              className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-150"
+                            >
+                              <td className="px-6 py-4 whitespace-nowrap sticky left-0 z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
+                                <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                                  {patient.patient_name}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap sticky left-[192px] z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">
+                                  {patient.record_number}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap sticky left-[352px] z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">
+                                  {new Date(patient.date_of_birth).toLocaleDateString()}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">
+                                  {patient.diagnosis || (
+                                    <span className="text-gray-400 dark:text-gray-500 italic">N/A</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center gap-3">
+                                  <Link
+                                    href={`/patients/${patient.id}/mar`}
+                                    className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                                  >
+                                    <span>Open</span>
+                                    
+                                  </Link>
+                                  {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && (
+                                    <button
+                                      onClick={() => handleDeletePatient(patient.id, patient.patient_name)}
+                                      className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                                      title="Delete patient"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                      
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               )}

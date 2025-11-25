@@ -4,6 +4,9 @@ export interface UserProfile {
   id: string
   email: string
   full_name: string
+  first_name?: string | null
+  middle_name?: string | null
+  last_name?: string | null
   role: Role
   hospital_id: string | null
   staff_initials: string | null
