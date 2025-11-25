@@ -181,11 +181,13 @@ export default function Dashboard() {
         <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                  Lasso EHR
-                </h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <div className="flex items-center gap-4">
+                <img 
+                  src="/images/icon-wordmark.webp" 
+                  alt="Lasso EHR" 
+                  className="h-10 w-auto"
+                />
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   {userProfile?.full_name} • {userProfile?.role?.replace('_', ' ').toUpperCase()}
                 </p>
               </div>
@@ -241,8 +243,18 @@ export default function Dashboard() {
                   >
                     {/* Gradient Background */}
                     <div
-                      className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${module.gradient}`}
+                      className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${
+                        module.status === 'coming_soon' 
+                          ? 'from-gray-400 to-gray-500' 
+                          : module.gradient
+                      } transition-all duration-300`}
                     />
+                    {/* Hover color overlay for coming soon modules */}
+                    {module.status === 'coming_soon' && (
+                      <div
+                        className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${module.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}
+                      />
+                    )}
 
                     <div className="p-6">
                       {/* Icon and Status */}
@@ -379,10 +391,10 @@ export default function Dashboard() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <Link
-                                href={`/patients/${patient.id}/forms`}
+                                href={`/patients/${patient.id}/mar/new`}
                                 className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
                               >
-                                <span>View Forms</span>
+                                <span>Open MAR</span>
                                 <span>→</span>
                               </Link>
                             </td>
