@@ -35,6 +35,8 @@ export default function ViewMARForm() {
   const [editingCellValue, setEditingCellValue] = useState<string>('') // Store the value being edited
   // Always allow editing of day cells
   const [isEditing] = useState(true)
+  const [editingComments, setEditingComments] = useState(false)
+  const [commentsValue, setCommentsValue] = useState<string>('')
 
   useEffect(() => {
     // Wait for router to be ready
@@ -121,6 +123,55 @@ export default function ViewMARForm() {
         }))
       }
 
+      // If MC (Medication Discontinued) was selected, mark all future days as discontinued
+      if (initials === 'MC' && status === 'Given') {
+        // Mark all future days (day + 1 to 31) as discontinued
+        const futureDays = []
+        for (let futureDay = day + 1; futureDay <= 31; futureDay++) {
+          futureDays.push({
+            mar_medication_id: medId,
+            day_number: futureDay,
+            status: 'Given',
+            initials: 'MC',
+            administered_at: null
+          })
+        }
+
+        if (futureDays.length > 0) {
+          // Upsert all future days - this will create new records or update existing ones
+          // The unique constraint on (mar_medication_id, day_number) will handle conflicts
+          const { error: futureError } = await supabase
+            .from('mar_administrations')
+            .upsert(futureDays, { 
+              onConflict: 'mar_medication_id,day_number',
+              ignoreDuplicates: false 
+            })
+
+          if (futureError) {
+            console.error('Error marking future days as discontinued:', futureError)
+            // Don't throw - the main record was saved successfully
+          } else {
+            // Refresh all administrations for this medication to get updated data
+            const { data: allAdminData, error: allAdminError } = await supabase
+              .from('mar_administrations')
+              .select('*')
+              .eq('mar_medication_id', medId)
+              .order('day_number', { ascending: true })
+
+            if (!allAdminError && allAdminData) {
+              const adminMap: { [day: number]: MARAdministration } = {}
+              allAdminData.forEach(admin => {
+                adminMap[admin.day_number] = admin
+              })
+              setAdministrations(prev => ({
+                ...prev,
+                [medId]: adminMap
+              }))
+            }
+          }
+        }
+      }
+
       setMessage('Administration record updated successfully!')
       setTimeout(() => setMessage(''), 3000)
     } catch (err: any) {
@@ -174,6 +225,36 @@ export default function ViewMARForm() {
       setTimeout(() => setMessage(''), 3000)
     } catch (err: any) {
       setError(err.message || 'Failed to add PRN record')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveComments = async () => {
+    if (!marFormId) return
+    
+    try {
+      setSaving(true)
+      setError('')
+      
+      const { error } = await supabase
+        .from('mar_forms')
+        .update({ 
+          comments: commentsValue || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', marFormId)
+
+      if (error) throw error
+
+      // Update local state
+      setMarForm(prev => prev ? { ...prev, comments: commentsValue || null } : null)
+      setEditingComments(false)
+      setMessage('Comments saved successfully!')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to save comments')
       setTimeout(() => setError(''), 5000)
     } finally {
       setSaving(false)
@@ -496,6 +577,8 @@ export default function ViewMARForm() {
       }
       
       setMarForm(formData)
+      // Initialize comments value
+      setCommentsValue(formData.comments || '')
 
       // Load medications
       const { data: medsData, error: medsError } = await supabase
@@ -748,7 +831,7 @@ export default function ViewMARForm() {
                       onClick={() => setShowEditPatientInfoModal(true)}
                       className="text-left text-lg font-medium text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                     >
-                      Facility Name: {marForm.facility_name || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(click to edit)</span>
+                      Facility Name: {marForm.facility_name || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
                     </button>
                   </div>
                 </div>
@@ -897,6 +980,22 @@ export default function ViewMARForm() {
                               const isNotGiven = status === 'Not Given'
                               const isGiven = status === 'Given'
                               const isPRN = status === 'PRN'
+                              const isMC = initials === 'MC'
+
+                              // Check if this day is after an MC (Medication Discontinued) day
+                              let isDiscontinued = false
+                              let mcDay = null
+                              if (!isVitalsEntry) {
+                                // Find the earliest day with MC for this medication
+                                for (let checkDay = 1; checkDay < day; checkDay++) {
+                                  const checkAdmin = medAdmin[checkDay]
+                                  if (checkAdmin?.initials === 'MC') {
+                                    mcDay = checkDay
+                                    isDiscontinued = true
+                                    break
+                                  }
+                                }
+                              }
 
                               let isMedActive = false
                               
@@ -930,19 +1029,40 @@ export default function ViewMARForm() {
                               return (
                                 <td
                                   key={day}
-                                  className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs ${
-                                    isEditing && isMedActive ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
-                                  } ${!isMedActive ? 'bg-gray-100 dark:bg-gray-800' : ''}`}
-                                  onDoubleClick={isEditing && isMedActive && !isVitalsEntry ? () => {
+                                  className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs relative ${
+                                    isDiscontinued ? 'bg-red-50 dark:bg-red-900/20' : ''
+                                  } ${
+                                    isEditing && isMedActive && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
+                                  } ${!isMedActive ? 'bg-gray-100 dark:bg-gray-800' : ''} ${isDiscontinued ? 'cursor-not-allowed' : ''}`}
+                                  onDoubleClick={isEditing && isMedActive && !isVitalsEntry && !isDiscontinued ? () => {
                                     if (isGiven) {
                                       updateAdministration(med.id, day, 'Not Given', initials)
                                     }
                                   } : undefined}
-                                  title={isEditing && isMedActive ? (isVitalsEntry ? 'Click to add vital signs' : 'Click to add initials, Double-click to mark as not given') : !isMedActive ? (isVitalsEntry ? 'Vital signs entry' : 'Medication not active on this day') : ''}
+                                  title={
+                                    isDiscontinued 
+                                      ? `Medication discontinued on day ${mcDay}. Cannot edit future days. Add a new medication to continue.`
+                                      : isEditing && isMedActive 
+                                        ? (isVitalsEntry ? 'Click to add vital signs' : 'Click to add initials, Double-click to mark as not given')
+                                        : !isMedActive 
+                                          ? (isVitalsEntry ? 'Vital signs entry' : 'Medication not active on this day')
+                                          : ''
+                                  }
                                 >
+                                  {/* Red strikethrough line for discontinued days */}
+                                  {isDiscontinued && (
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                      <div className="w-full h-0.5 bg-red-600 dark:bg-red-400"></div>
+                                    </div>
+                                  )}
                                   {isMedActive ? (
                                     <>
-                                      {isEditing && (editingCell?.medId === med.id && editingCell?.day === day) ? (
+                                      {isDiscontinued ? (
+                                        // Discontinued day - only show red line, no MC text (MC only appears on the day it was selected)
+                                        <div className="min-h-[24px] flex items-center justify-center">
+                                          {/* Empty - red line is shown via the absolute positioned div above */}
+                                        </div>
+                                      ) : isEditing && (editingCell?.medId === med.id && editingCell?.day === day) ? (
                                         isVitalsEntry ? (
                                           <input
                                             type="text"
@@ -1028,20 +1148,25 @@ export default function ViewMARForm() {
                                         )
                                       ) : (
                                         <div
-                                          onClick={isEditing ? () => {
+                                          onClick={isEditing && !isDiscontinued ? () => {
                                             setEditingCell({ medId: med.id, day })
                                             setEditingCellValue(initials || '')
                                           } : undefined}
                                           className={`min-h-[24px] flex items-center justify-center ${
-                                            isEditing ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
+                                            isEditing && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
                                           }`}
                                         >
-                                          {isGiven && (
+                                          {isMC && !isDiscontinued && (
+                                            <div className="text-red-600 dark:text-red-400 font-bold text-xs">
+                                              MC
+                                            </div>
+                                          )}
+                                          {isGiven && !isMC && (
                                             <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
                                               {initials || '—'}
                                             </div>
                                           )}
-                                          {isNotGiven && initials && (
+                                          {isNotGiven && initials && !isMC && (
                                             <div className="text-red-600 dark:text-red-400 font-bold">
                                               ○{initials}
                                             </div>
@@ -1052,10 +1177,10 @@ export default function ViewMARForm() {
                                               {initials && <div className="text-xs">{initials}</div>}
                                             </div>
                                           )}
-                                          {isNotGiven && !initials && isEditing && (
+                                          {isNotGiven && !initials && !isMC && isEditing && (
                                             <div className="text-gray-400 cursor-text">—</div>
                                           )}
-                                          {isNotGiven && !initials && !isEditing && (
+                                          {isNotGiven && !initials && !isMC && !isEditing && (
                                             <div className="text-gray-400">—</div>
                                           )}
                                         </div>
@@ -1087,7 +1212,7 @@ export default function ViewMARForm() {
                       onClick={() => setShowEditPatientInfoModal(true)}
                       className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                     >
-                      {marForm.diagnosis || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(click to edit)</span>
+                      {marForm.diagnosis || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
                     </button>
                   </div>
                   <div>
@@ -1096,7 +1221,7 @@ export default function ViewMARForm() {
                       onClick={() => setShowEditPatientInfoModal(true)}
                       className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                     >
-                      {marForm.allergies || 'None'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(click to edit)</span>
+                      {marForm.allergies || 'None'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
                     </button>
                   </div>
                   <div>
@@ -1115,7 +1240,7 @@ export default function ViewMARForm() {
                       onClick={() => setShowEditPatientInfoModal(true)}
                       className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors min-h-[60px]"
                     >
-                      {marForm.diet || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(click to edit)</span>
+                      {marForm.diet || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
                     </button>
                   </div>
                   <div>
@@ -1124,7 +1249,7 @@ export default function ViewMARForm() {
                       onClick={() => setShowEditPatientInfoModal(true)}
                       className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                     >
-                      {marForm.physician_name || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(click to edit)</span>
+                      {marForm.physician_name || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
                     </button>
                   </div>
                   <div>
@@ -1133,7 +1258,7 @@ export default function ViewMARForm() {
                       onClick={() => setShowEditPatientInfoModal(true)}
                       className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                     >
-                      {marForm.physician_phone || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(click to edit)</span>
+                      {marForm.physician_phone || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
                     </button>
                   </div>
                 </div>
@@ -1142,10 +1267,50 @@ export default function ViewMARForm() {
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Comments:</label>
-                    <div className="text-sm text-gray-800 dark:text-white min-h-[60px] p-2 border border-gray-200 dark:border-gray-600 rounded">
-                      {/* Comments can be added via notes or PRN records */}
-                      <span className="text-gray-400 italic">See PRN records section for notes</span>
-                    </div>
+                    {editingComments ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={commentsValue}
+                          onChange={(e) => setCommentsValue(e.target.value)}
+                          placeholder="Enter comments or notes..."
+                          className="w-full text-sm text-gray-800 dark:text-white min-h-[80px] p-2 border-2 border-lasso-blue rounded dark:bg-gray-700 focus:ring-lasso-teal focus:border-lasso-teal resize-y"
+                          autoFocus
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={saveComments}
+                            disabled={saving}
+                            className="px-3 py-1.5 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded text-xs font-medium hover:from-lasso-teal hover:to-lasso-blue disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                          >
+                            {saving ? 'Saving...' : 'Save'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingComments(false)
+                              setCommentsValue(marForm?.comments || '')
+                            }}
+                            disabled={saving}
+                            className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => {
+                          setEditingComments(true)
+                          setCommentsValue(marForm?.comments || '')
+                        }}
+                        className="text-sm text-gray-800 dark:text-white min-h-[60px] p-2 border border-gray-200 dark:border-gray-600 rounded cursor-pointer hover:border-lasso-blue dark:hover:border-lasso-blue transition-colors"
+                      >
+                        {marForm?.comments ? (
+                          <div className="whitespace-pre-wrap">{marForm.comments}</div>
+                        ) : (
+                          <span className="text-gray-400 italic">Click to add comments...</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="text-xs text-gray-700 dark:text-gray-300 space-y-1">
                     <div><strong>Instructions:</strong></div>

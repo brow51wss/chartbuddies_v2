@@ -15,6 +15,7 @@ export interface MARForm {
   physician_name: string
   physician_phone: string | null
   facility_name: string | null
+  comments: string | null // General comments and notes for the MAR form
   vital_signs_instructions: string | null // Custom instructions for vital signs (e.g., "BP (sprinkle salt on food if BP low <80/60)")
   created_at: string
   updated_at: string
