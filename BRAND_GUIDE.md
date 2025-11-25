@@ -22,20 +22,47 @@
 ## Color Palette
 
 ### Primary Colors
-- **Primary Blue:** `blue-600` to `blue-700` (gradient)
-- **Primary Indigo:** `indigo-600` (accent)
-- **Gradient Combinations:**
-  - Primary: `from-blue-600 to-indigo-600` (for main branding)
-  - Buttons: `from-blue-600 to-blue-700` with hover `from-blue-700 to-blue-800`
+- **Primary Navy:** `#142F61` - Used for main text "Lasso", headings, and primary calls-to-action
+- **Dark Teal Accent:** `#00799E` - The darker shade in the 'L' icon. Good for secondary actions or strong accents
+- **Light Blue Accent:** `#00B6E2` - The lighter, brighter shade in the 'L' icon. Great for hover states, links, and highlights
+- **Neutral Gray:** `#5B5B5B` - A dark gray that works well for body text and small type like "ELECTRONIC HEALTH RECORDS"
+
+### Color Usage Guidelines
+- **Primary Navy (#142F61):** 
+  - Main headings and titles
+  - Primary button text
+  - Important text elements
+  - Logo text color
+- **Dark Teal (#00799E):**
+  - Secondary buttons
+  - Strong accents
+  - Module card accent bars (when appropriate)
+  - Secondary CTAs
+- **Light Blue (#00B6E2):**
+  - Hover states
+  - Links
+  - Highlights
+  - Interactive elements
+  - Active states
+- **Neutral Gray (#5B5B5B):**
+  - Body text
+  - Secondary text
+  - Small type
+  - Muted information
+
+### Gradient Combinations
+- **Primary Buttons:** `#142F61` to `#00799E` (Navy to Dark Teal)
+- **Hover States:** `#00799E` to `#00B6E2` (Dark Teal to Light Blue)
+- **Accents:** `#00B6E2` to `#00799E` (Light Blue to Dark Teal)
 
 ### Module-Specific Colors
 Each EHR module has its own color identity:
-- **MAR (Medication):** Blue (`from-blue-500 to-blue-600`)
+- **MAR (Medication):** Primary Navy to Dark Teal (`from-lasso-navy to-lasso-teal`)
 - **Vital Signs:** Green (`from-green-500 to-green-600`)
 - **Progress Notes:** Purple (`from-purple-500 to-purple-600`)
-- **Admissions:** Indigo (`from-indigo-500 to-indigo-600`)
+- **Admissions:** Dark Teal to Light Blue (`from-lasso-teal to-lasso-blue`)
 - **Laboratory:** Orange (`from-orange-500 to-orange-600`)
-- **Imaging:** Teal (`from-teal-500 to-teal-600`)
+- **Imaging:** Light Blue to Dark Teal (`from-lasso-blue to-lasso-teal`)
 
 ### Status Colors
 - **Available/Active:** Green (`text-green-600`, `bg-green-100`)
@@ -60,7 +87,7 @@ Each EHR module has its own color identity:
 - **H1 (Main Title):** 
   - Size: `text-3xl`
   - Weight: `font-bold`
-  - Style: Gradient text using `bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent`
+  - Style: Primary Navy color `text-lasso-navy` or gradient `bg-gradient-to-r from-lasso-navy to-lasso-teal bg-clip-text text-transparent`
   - Example: "Lasso EHR"
 
 - **H2 (Section Titles):**
@@ -291,10 +318,10 @@ interface EHRModule {
 
 ### Primary Button
 ```tsx
-className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 text-sm font-medium shadow-md hover:shadow-lg transition-all duration-200"
+className="px-4 py-2 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue text-sm font-medium shadow-md hover:shadow-lg transition-all duration-200"
 ```
 - **Use case:** Main actions (Add Patient, Submit, etc.)
-- **States:** Normal, hover (darker gradient, larger shadow)
+- **States:** Normal (Navy to Teal), hover (Teal to Light Blue, larger shadow)
 
 ### Secondary Button
 ```tsx
@@ -305,10 +332,10 @@ className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text
 
 ### Link Button
 ```tsx
-className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+className="inline-flex items-center gap-1 text-sm font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue dark:hover:text-lasso-blue/80 transition-colors"
 ```
 - **Use case:** Navigation links, "View Forms", etc.
-- **States:** Normal, hover (color change)
+- **States:** Normal (Light Blue), hover (Teal or lighter blue)
 
 ### Button Sizes
 - **Small:** `px-4 py-2 text-sm`
@@ -376,7 +403,7 @@ className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hove
 **Module Card:**
 ```tsx
 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-200 dark:border-gray-700">
-  <div className="h-2 bg-gradient-to-r from-blue-500 to-blue-600" />
+  <div className="h-2 bg-gradient-to-r from-lasso-navy to-lasso-teal" />
   <div className="p-6">
     {/* Content */}
   </div>
@@ -392,7 +419,7 @@ className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hove
 
 **Primary Button:**
 ```tsx
-<button className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 font-medium shadow-md hover:shadow-lg transition-all duration-200">
+<button className="px-4 py-2 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue font-medium shadow-md hover:shadow-lg transition-all duration-200">
   Action
 </button>
 ```

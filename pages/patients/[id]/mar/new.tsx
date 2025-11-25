@@ -291,7 +291,7 @@ export default function NewMARForm() {
       <ProtectedRoute>
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto"></div>
             <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
           </div>
         </div>
@@ -323,7 +323,7 @@ export default function NewMARForm() {
           <div className="mb-6">
             <button
               onClick={() => router.push('/dashboard?module=mar')}
-              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 text-sm mb-4"
+              className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm mb-4"
             >
               ← Back to MAR Patients
             </button>
@@ -413,7 +413,7 @@ export default function NewMARForm() {
                       })
                     }}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   />
                 </div>
                 <div>
@@ -425,7 +425,7 @@ export default function NewMARForm() {
                     value={patientInfo.diagnosis}
                     onChange={(e) => setPatientInfo({ ...patientInfo, diagnosis: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   />
                 </div>
                 <div>
@@ -436,7 +436,7 @@ export default function NewMARForm() {
                     type="text"
                     value={patientInfo.diet}
                     onChange={(e) => setPatientInfo({ ...patientInfo, diet: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   />
                 </div>
                 <div>
@@ -449,7 +449,7 @@ export default function NewMARForm() {
                     onChange={(e) => setPatientInfo({ ...patientInfo, allergies: e.target.value })}
                     required
                     placeholder="None (if no allergies)"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   />
                 </div>
                 <div>
@@ -461,7 +461,7 @@ export default function NewMARForm() {
                     value={patientInfo.physicianName}
                     onChange={(e) => setPatientInfo({ ...patientInfo, physicianName: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   />
                 </div>
                 <div>
@@ -473,7 +473,7 @@ export default function NewMARForm() {
                     value={patientInfo.physicianPhone}
                     onChange={(e) => setPatientInfo({ ...patientInfo, physicianPhone: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   />
                 </div>
                 <div>
@@ -485,7 +485,7 @@ export default function NewMARForm() {
                     value={patientInfo.facilityName}
                     onChange={(e) => setPatientInfo({ ...patientInfo, facilityName: e.target.value })}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   />
                 </div>
               </div>
@@ -500,7 +500,7 @@ export default function NewMARForm() {
                 <button
                   type="button"
                   onClick={addMedication}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+                  className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium"
                 >
                   + Add Medication
                 </button>
@@ -538,7 +538,7 @@ export default function NewMARForm() {
                             onChange={(e) => updateMedication(medIndex, 'medicationName', e.target.value)}
                             required
                             placeholder="e.g., Lisinopril 10 mg"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div>
@@ -551,7 +551,7 @@ export default function NewMARForm() {
                             onChange={(e) => updateMedication(medIndex, 'dosage', e.target.value)}
                             required
                             placeholder="e.g., 10 mg PO daily"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div>
@@ -563,7 +563,7 @@ export default function NewMARForm() {
                             value={med.startDate}
                             onChange={(e) => updateMedication(medIndex, 'startDate', e.target.value)}
                             required
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div>
@@ -574,7 +574,7 @@ export default function NewMARForm() {
                             type="date"
                             value={med.stopDate}
                             onChange={(e) => updateMedication(medIndex, 'stopDate', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div>
@@ -586,7 +586,7 @@ export default function NewMARForm() {
                             value={med.hour}
                             onChange={(e) => updateMedication(medIndex, 'hour', e.target.value)}
                             required
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div>
@@ -597,7 +597,7 @@ export default function NewMARForm() {
                             type="text"
                             value={med.notes}
                             onChange={(e) => updateMedication(medIndex, 'notes', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                       </div>
@@ -616,7 +616,7 @@ export default function NewMARForm() {
                                   <select
                                     value={med.administrations[day]?.status || 'Not Given'}
                                     onChange={(e) => updateAdministration(medIndex, day, 'status', e.target.value)}
-                                    className="w-full text-xs px-1 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                    className="w-full text-xs px-1 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                   >
                                     <option value="Not Given">NG</option>
                                     <option value="Given">G</option>
@@ -630,7 +630,7 @@ export default function NewMARForm() {
                                       value={med.administrations[day]?.initials || ''}
                                       onChange={(e) => updateAdministration(medIndex, day, 'initials', e.target.value)}
                                       maxLength={3}
-                                      className="w-full text-xs px-1 py-0.5 mt-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                      className="w-full text-xs px-1 py-0.5 mt-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                     />
                                   )}
                                 </div>
@@ -658,7 +658,7 @@ export default function NewMARForm() {
                 <button
                   type="button"
                   onClick={addPRNRecord}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+                  className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium"
                 >
                   + Add PRN Record
                 </button>
@@ -694,7 +694,7 @@ export default function NewMARForm() {
                             value={prn.date}
                             onChange={(e) => updatePRNRecord(index, 'date', e.target.value)}
                             required
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div>
@@ -706,7 +706,7 @@ export default function NewMARForm() {
                             value={prn.hour}
                             onChange={(e) => updatePRNRecord(index, 'hour', e.target.value)}
                             required
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div>
@@ -719,7 +719,7 @@ export default function NewMARForm() {
                             onChange={(e) => updatePRNRecord(index, 'initials', e.target.value)}
                             required
                             maxLength={10}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div>
@@ -731,7 +731,7 @@ export default function NewMARForm() {
                             value={prn.medication}
                             onChange={(e) => updatePRNRecord(index, 'medication', e.target.value)}
                             required
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div>
@@ -743,7 +743,7 @@ export default function NewMARForm() {
                             onChange={(e) => updatePRNRecord(index, 'reason', e.target.value)}
                             required
                             rows={2}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div>
@@ -754,7 +754,7 @@ export default function NewMARForm() {
                             value={prn.result}
                             onChange={(e) => updatePRNRecord(index, 'result', e.target.value)}
                             rows={2}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div className="md:col-span-2">
@@ -766,7 +766,7 @@ export default function NewMARForm() {
                             value={prn.staffSignature}
                             onChange={(e) => updatePRNRecord(index, 'staffSignature', e.target.value)}
                             required
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                       </div>
@@ -794,7 +794,7 @@ export default function NewMARForm() {
                   value={vitalSignsInstructions}
                   onChange={(e) => setVitalSignsInstructions(e.target.value)}
                   placeholder="Enter custom instructions for vital signs tracking..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
               </div>
 
@@ -822,7 +822,7 @@ export default function NewMARForm() {
                             value={vitalSigns[day]?.systolic_bp || ''}
                             onChange={(e) => updateVitalSigns(day, 'systolic_bp', e.target.value)}
                             placeholder="Systolic"
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </td>
                         <td className="px-4 py-2">
@@ -831,7 +831,7 @@ export default function NewMARForm() {
                             value={vitalSigns[day]?.diastolic_bp || ''}
                             onChange={(e) => updateVitalSigns(day, 'diastolic_bp', e.target.value)}
                             placeholder="Diastolic"
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </td>
                         <td className="px-4 py-2">
@@ -839,7 +839,7 @@ export default function NewMARForm() {
                             type="number"
                             value={vitalSigns[day]?.pulse || ''}
                             onChange={(e) => updateVitalSigns(day, 'pulse', e.target.value)}
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </td>
                         <td className="px-4 py-2">
@@ -848,7 +848,7 @@ export default function NewMARForm() {
                             step="0.1"
                             value={vitalSigns[day]?.temperature || ''}
                             onChange={(e) => updateVitalSigns(day, 'temperature', e.target.value)}
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </td>
                         <td className="px-4 py-2">
@@ -856,7 +856,7 @@ export default function NewMARForm() {
                             type="number"
                             value={vitalSigns[day]?.respiration || ''}
                             onChange={(e) => updateVitalSigns(day, 'respiration', e.target.value)}
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </td>
                         <td className="px-4 py-2">
@@ -865,7 +865,7 @@ export default function NewMARForm() {
                             step="0.1"
                             value={vitalSigns[day]?.weight || ''}
                             onChange={(e) => updateVitalSigns(day, 'weight', e.target.value)}
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </td>
                         <td className="px-4 py-2">
@@ -874,7 +874,7 @@ export default function NewMARForm() {
                             value={vitalSigns[day]?.bowel_movement || ''}
                             onChange={(e) => updateVitalSigns(day, 'bowel_movement', e.target.value)}
                             placeholder="Yes/No/Loose/etc."
-                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </td>
                       </tr>
@@ -909,7 +909,7 @@ export default function NewMARForm() {
                 type="button"
                 onClick={() => handleSave('submitted')}
                 disabled={saving}
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                className="px-6 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal disabled:opacity-50"
               >
                 {saving ? 'Submitting...' : 'Submit'}
               </button>

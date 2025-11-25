@@ -602,7 +602,7 @@ export default function ViewMARForm() {
       <ProtectedRoute>
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto"></div>
             <p className="mt-4 text-gray-600 dark:text-gray-400">Loading MAR form...</p>
           </div>
         </div>
@@ -619,7 +619,7 @@ export default function ViewMARForm() {
             <p className="text-red-600 mb-4">{error}</p>
             <button 
               onClick={() => router.push('/dashboard?module=mar')} 
-              className="px-4 py-2 bg-blue-600 text-white rounded-md"
+              className="px-4 py-2 bg-lasso-navy text-white rounded-md"
             >
               Back to MAR Patients
             </button>
@@ -638,7 +638,7 @@ export default function ViewMARForm() {
             <p className="text-red-600 mb-4">MAR form not found</p>
             <button 
               onClick={() => router.push('/dashboard?module=mar')} 
-              className="px-4 py-2 bg-blue-600 text-white rounded-md"
+              className="px-4 py-2 bg-lasso-navy text-white rounded-md"
             >
               Back to MAR Patients
             </button>
@@ -653,7 +653,7 @@ export default function ViewMARForm() {
       <ProtectedRoute>
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto"></div>
             <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
           </div>
         </div>
@@ -672,7 +672,7 @@ export default function ViewMARForm() {
           <div className="mb-6">
             <button
               onClick={() => router.push('/dashboard?module=mar')}
-              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 text-sm mb-4"
+              className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm mb-4"
             >
               ← Back to MAR Patients
             </button>
@@ -683,7 +683,7 @@ export default function ViewMARForm() {
               <div className="flex space-x-3">
                 <button
                   onClick={() => setShowAddMedModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+                  className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium"
                 >
                   + Medication
                 </button>
@@ -748,7 +748,7 @@ export default function ViewMARForm() {
                       onClick={() => setShowEditPatientInfoModal(true)}
                       className="text-left text-lg font-medium text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                     >
-                      Facility Name: {marForm.facility_name || 'N/A'} <span className="text-blue-600 dark:text-blue-400 text-xs">(click to edit)</span>
+                      Facility Name: {marForm.facility_name || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(click to edit)</span>
                     </button>
                   </div>
                 </div>
@@ -829,16 +829,16 @@ export default function ViewMARForm() {
                         const isFirstRow = isFirstInGroup[med.id] || false
                         
                         return (
-                          <tr key={med.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isVitalsEntry ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
+                          <tr key={med.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isVitalsEntry ? 'bg-lasso-blue/10 dark:bg-lasso-blue/20' : ''}`}>
                             {shouldMerge && !isFirstRow ? null : (
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
                                 className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500"
                               >
-                                <div className={`font-medium text-sm ${isVitalsEntry ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-white'}`}>
+                                <div className={`font-medium text-sm ${isVitalsEntry ? 'text-lasso-teal dark:text-lasso-blue' : 'text-gray-800 dark:text-white'}`}>
                                   {isVitalsEntry ? '📊 VITALS' : med.medication_name}
                                 </div>
-                                <div className={`text-xs mt-1 ${isVitalsEntry ? 'text-blue-600 dark:text-blue-400 italic' : 'text-gray-600 dark:text-gray-400'}`}>
+                                <div className={`text-xs mt-1 ${isVitalsEntry ? 'text-lasso-blue dark:text-lasso-blue italic' : 'text-gray-600 dark:text-gray-400'}`}>
                                   {med.dosage}
                                 </div>
                                 {med.notes && !isVitalsEntry && (
@@ -931,7 +931,7 @@ export default function ViewMARForm() {
                                 <td
                                   key={day}
                                   className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs ${
-                                    isEditing && isMedActive ? 'cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20' : ''
+                                    isEditing && isMedActive ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
                                   } ${!isMedActive ? 'bg-gray-100 dark:bg-gray-800' : ''}`}
                                   onDoubleClick={isEditing && isMedActive && !isVitalsEntry ? () => {
                                     if (isGiven) {
@@ -971,7 +971,7 @@ export default function ViewMARForm() {
                                               }
                                             }}
                                             placeholder="Enter value"
-                                            className="w-full text-center text-xs font-bold border-2 border-blue-500 rounded px-1 py-1 dark:bg-gray-700 dark:text-white"
+                                            className="w-full text-center text-xs font-bold border-2 border-lasso-blue rounded px-1 py-1 dark:bg-gray-700 dark:text-white"
                                             onClick={(e) => e.stopPropagation()}
                                           />
                                         ) : (
@@ -1009,7 +1009,7 @@ export default function ViewMARForm() {
                                                     setEditingCell(null)
                                                   }
                                                 }}
-                                                className="w-full text-center text-xs font-bold border-2 border-blue-500 rounded px-1 py-1 dark:bg-gray-700 dark:text-white cursor-pointer"
+                                                className="w-full text-center text-xs font-bold border-2 border-lasso-blue rounded px-1 py-1 dark:bg-gray-700 dark:text-white cursor-pointer"
                                                 onClick={(e) => e.stopPropagation()}
                                               >
                                                 <option value="">Select...</option>
@@ -1033,7 +1033,7 @@ export default function ViewMARForm() {
                                             setEditingCellValue(initials || '')
                                           } : undefined}
                                           className={`min-h-[24px] flex items-center justify-center ${
-                                            isEditing ? 'cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20' : ''
+                                            isEditing ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
                                           }`}
                                         >
                                           {isGiven && (
@@ -1047,7 +1047,7 @@ export default function ViewMARForm() {
                                             </div>
                                           )}
                                           {isPRN && (
-                                            <div className="text-blue-600 dark:text-blue-400 font-bold text-xs">
+                                            <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
                                               PRN
                                               {initials && <div className="text-xs">{initials}</div>}
                                             </div>
@@ -1087,7 +1087,7 @@ export default function ViewMARForm() {
                       onClick={() => setShowEditPatientInfoModal(true)}
                       className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                     >
-                      {marForm.diagnosis || 'N/A'} <span className="text-blue-600 dark:text-blue-400 text-xs">(click to edit)</span>
+                      {marForm.diagnosis || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(click to edit)</span>
                     </button>
                   </div>
                   <div>
@@ -1096,7 +1096,7 @@ export default function ViewMARForm() {
                       onClick={() => setShowEditPatientInfoModal(true)}
                       className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                     >
-                      {marForm.allergies || 'None'} <span className="text-blue-600 dark:text-blue-400 text-xs">(click to edit)</span>
+                      {marForm.allergies || 'None'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(click to edit)</span>
                     </button>
                   </div>
                   <div>
@@ -1115,7 +1115,7 @@ export default function ViewMARForm() {
                       onClick={() => setShowEditPatientInfoModal(true)}
                       className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors min-h-[60px]"
                     >
-                      {marForm.diet || 'N/A'} <span className="text-blue-600 dark:text-blue-400 text-xs">(click to edit)</span>
+                      {marForm.diet || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(click to edit)</span>
                     </button>
                   </div>
                   <div>
@@ -1124,7 +1124,7 @@ export default function ViewMARForm() {
                       onClick={() => setShowEditPatientInfoModal(true)}
                       className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                     >
-                      {marForm.physician_name || 'N/A'} <span className="text-blue-600 dark:text-blue-400 text-xs">(click to edit)</span>
+                      {marForm.physician_name || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(click to edit)</span>
                     </button>
                   </div>
                   <div>
@@ -1133,7 +1133,7 @@ export default function ViewMARForm() {
                       onClick={() => setShowEditPatientInfoModal(true)}
                       className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                     >
-                      {marForm.physician_phone || 'N/A'} <span className="text-blue-600 dark:text-blue-400 text-xs">(click to edit)</span>
+                      {marForm.physician_phone || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(click to edit)</span>
                     </button>
                   </div>
                 </div>
@@ -1454,7 +1454,7 @@ export default function ViewMARForm() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  className="px-4 py-2 bg-lasso-navy text-white rounded-lg hover:bg-lasso-teal"
                 >
                   Save Changes
                 </button>
@@ -1801,7 +1801,7 @@ function AddMedicationOrVitalsForm({
               onChange={(e) => setMedicationData({ ...medicationData, medicationName: e.target.value })}
               required
               placeholder="e.g., Lisinopril 10 mg"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
           </div>
 
@@ -1815,7 +1815,7 @@ function AddMedicationOrVitalsForm({
               onChange={(e) => setMedicationData({ ...medicationData, dosage: e.target.value })}
               required
               placeholder="e.g., 10 mg PO daily"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
           </div>
 
@@ -1829,7 +1829,7 @@ function AddMedicationOrVitalsForm({
                 value={medicationData.startDate}
                 onChange={(e) => setMedicationData({ ...medicationData, startDate: e.target.value })}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
 
@@ -1841,7 +1841,7 @@ function AddMedicationOrVitalsForm({
                 type="date"
                 value={medicationData.stopDate}
                 onChange={(e) => setMedicationData({ ...medicationData, stopDate: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
           </div>
@@ -1861,7 +1861,7 @@ function AddMedicationOrVitalsForm({
                 setMedicationData({ ...medicationData, frequency: freq, times: newTimes })
               }}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             >
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
                 <option key={num} value={num}>{num} time{num > 1 ? 's' : ''} per day</option>
@@ -1882,7 +1882,7 @@ function AddMedicationOrVitalsForm({
                   onChange={(e) => setMedicationData({ ...medicationData, hour: e.target.value })}
                   required
                   placeholder="e.g., 09:00 or 9:00 AM"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Format: HH:MM or HH:MM AM/PM</p>
               </>
@@ -1911,7 +1911,7 @@ function AddMedicationOrVitalsForm({
                       }}
                       required
                       placeholder={`e.g., ${i === 0 ? '09:00' : i === 1 ? '13:00' : i === 2 ? '18:00' : '21:00'}`}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                     />
                   </div>
                 ))}
@@ -1929,7 +1929,7 @@ function AddMedicationOrVitalsForm({
               onChange={(e) => setMedicationData({ ...medicationData, notes: e.target.value })}
               placeholder="Additional notes about this medication"
               rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
           </div>
 
@@ -1980,7 +1980,7 @@ function AddMedicationOrVitalsForm({
                   required
                   placeholder="e.g., JD or JS"
                   maxLength={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">This will be used as default when you manually enter initials in individual day cells</p>
               </div>
@@ -2027,7 +2027,7 @@ function AddMedicationOrVitalsForm({
               required
               placeholder="e.g., BP (sprinkle salt on food if BP low <80/60), Temperature, Weight, etc."
               rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter vital signs instructions or notes (e.g., BP, Temperature, Weight tracking instructions)</p>
           </div>
@@ -2042,7 +2042,7 @@ function AddMedicationOrVitalsForm({
                 value={vitalsData.startDate}
                 onChange={(e) => setVitalsData({ ...vitalsData, startDate: e.target.value })}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
 
@@ -2054,7 +2054,7 @@ function AddMedicationOrVitalsForm({
                 type="date"
                 value={vitalsData.stopDate}
                 onChange={(e) => setVitalsData({ ...vitalsData, stopDate: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
           </div>
@@ -2069,7 +2069,7 @@ function AddMedicationOrVitalsForm({
               onChange={(e) => setVitalsData({ ...vitalsData, hour: e.target.value })}
               required
               placeholder="e.g., 09:00 or 9:00 AM"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Format: HH:MM or HH:MM AM/PM</p>
           </div>
@@ -2083,7 +2083,7 @@ function AddMedicationOrVitalsForm({
                   value={vitalsData.initials}
               onChange={(e) => setVitalsData({ ...vitalsData, initials: e.target.value })}
               placeholder="e.g., 98.6°F, 120/80, 72 bpm, etc."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Optional: Enter a default value. Nurses can enter any text when clicking on day cells.</p>
           </div>
@@ -2117,7 +2117,7 @@ function AddMedicationOrVitalsForm({
         <button
           type="submit"
           disabled={isSubmitting}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? 'Adding...' : entryType === 'medication' ? 'Add Medication' : 'Add Vitals'}
         </button>
@@ -2245,7 +2245,7 @@ function AddPRNRecordForm({
             value={formData.date}
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           />
         </div>
 
@@ -2259,7 +2259,7 @@ function AddPRNRecordForm({
             onChange={(e) => setFormData({ ...formData, hour: e.target.value })}
             required
             placeholder="e.g., 14:00 or 2:00 PM"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           />
         </div>
       </div>
@@ -2274,7 +2274,7 @@ function AddPRNRecordForm({
           onChange={(e) => setFormData({ ...formData, medication: e.target.value })}
           required
           placeholder="e.g., Tylenol 500 mg"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
       </div>
 
@@ -2288,7 +2288,7 @@ function AddPRNRecordForm({
           onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
           required
           placeholder="e.g., Headache, Pain, Refused"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
       </div>
 
@@ -2301,7 +2301,7 @@ function AddPRNRecordForm({
           value={formData.result}
           onChange={(e) => setFormData({ ...formData, result: e.target.value })}
           placeholder="e.g., Pain relieved within 30 mins"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
       </div>
 
@@ -2317,7 +2317,7 @@ function AddPRNRecordForm({
             required
             placeholder="e.g., JD"
             maxLength={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           />
         </div>
 
@@ -2331,7 +2331,7 @@ function AddPRNRecordForm({
             onChange={(e) => setFormData({ ...formData, staffSignature: e.target.value })}
             required
             placeholder="e.g., J. Smith, RN"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           />
         </div>
       </div>
@@ -2347,7 +2347,7 @@ function AddPRNRecordForm({
         <button
           type="submit"
           disabled={isSubmitting}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? 'Adding...' : 'Add PRN Record'}
         </button>

@@ -56,7 +56,7 @@ export default function PatientForms() {
       <ProtectedRoute>
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto"></div>
             <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
           </div>
         </div>
@@ -74,7 +74,7 @@ export default function PatientForms() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex justify-between items-center">
               <div>
-                <Link href="/dashboard" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 text-sm mb-2 inline-block">
+                <Link href="/dashboard" className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm mb-2 inline-block">
                   ← Back to Dashboard
                 </Link>
                 <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
@@ -114,7 +114,7 @@ export default function PatientForms() {
                   </p>
                   <Link
                     href={`/patients/${id}/mar/new`}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+                    className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium"
                   >
                     + New MAR Form
                   </Link>
@@ -141,7 +141,7 @@ export default function PatientForms() {
                         </div>
                         <Link
                           href={`/patients/${id}/mar/${form.id}`}
-                          className="px-4 py-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 text-sm font-medium"
+                          className="px-4 py-2 text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm font-medium"
                         >
                           {form.status === 'draft' ? 'Continue Editing' : 'View'}
                         </Link>

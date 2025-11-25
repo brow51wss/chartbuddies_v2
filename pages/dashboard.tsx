@@ -36,7 +36,7 @@ export default function Dashboard() {
       icon: '💊',
       status: 'available',
       color: 'blue',
-      gradient: 'from-blue-500 to-blue-600',
+      gradient: 'from-lasso-navy to-lasso-teal',
       route: '/dashboard/mar'
     },
     {
@@ -64,7 +64,7 @@ export default function Dashboard() {
       icon: '🏥',
       status: 'coming_soon',
       color: 'indigo',
-      gradient: 'from-indigo-500 to-indigo-600'
+      gradient: 'from-lasso-teal to-lasso-blue'
     },
     {
       id: 'lab',
@@ -210,7 +210,7 @@ export default function Dashboard() {
       <ProtectedRoute>
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto"></div>
             <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
           </div>
         </div>
@@ -241,7 +241,7 @@ export default function Dashboard() {
               <div className="flex items-center space-x-3">
                 <Link
                   href="/admissions"
-                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 text-sm font-medium shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
+                  className="px-4 py-2 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue text-sm font-medium shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
                 >
                   <span>+</span>
                   <span>Add Patient</span>
@@ -296,7 +296,7 @@ export default function Dashboard() {
                     onClick={() => handleModuleClick(module)}
                     className={`group relative bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200 dark:border-gray-700 ${
                       module.status === 'available'
-                        ? 'cursor-pointer hover:scale-105 hover:border-blue-300 dark:hover:border-blue-600'
+                        ? 'cursor-pointer hover:scale-105 hover:border-lasso-blue dark:hover:border-lasso-blue'
                         : 'cursor-not-allowed opacity-75'
                     }`}
                   >
@@ -343,7 +343,7 @@ export default function Dashboard() {
 
                       {/* Action Button */}
                       {module.status === 'available' && (
-                        <div className="flex items-center text-blue-600 dark:text-blue-400 font-medium text-sm group-hover:gap-2 transition-all duration-200">
+                        <div className="flex items-center text-lasso-blue dark:text-lasso-blue font-medium text-sm group-hover:gap-2 transition-all duration-200">
                           <span>Open Module</span>
                           <span className="ml-1 group-hover:translate-x-1 transition-transform duration-200">
                             →
@@ -354,7 +354,7 @@ export default function Dashboard() {
 
                     {/* Hover Effect Overlay */}
                     {module.status === 'available' && (
-                      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                      <div className="absolute inset-0 bg-gradient-to-br from-lasso-navy/5 to-lasso-teal/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                     )}
                   </div>
                 ))}
@@ -392,13 +392,13 @@ export default function Dashboard() {
                   </p>
                   <Link
                     href="/admissions"
-                    className="inline-block px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 font-medium shadow-md hover:shadow-lg transition-all duration-200"
+                    className="inline-block px-6 py-3 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue font-medium shadow-md hover:shadow-lg transition-all duration-200"
                   >
                     Add Patient
                   </Link>
                 </div>
               ) : (
-                <div className="w-[90vw] mx-auto">
+                <div className="max-w-7xl mx-auto">
                   <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -458,7 +458,7 @@ export default function Dashboard() {
                                 <div className="flex items-center gap-3">
                                   <Link
                                     href={`/patients/${patient.id}/mar`}
-                                    className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                                    className="inline-flex items-center gap-1 text-sm font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue dark:hover:text-lasso-blue/80 transition-colors"
                                   >
                                     <span>Open</span>
                                     
