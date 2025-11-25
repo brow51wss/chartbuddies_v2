@@ -141,7 +141,40 @@ export default function Dashboard() {
       const { data, error: queryError } = await query
 
       if (queryError) throw queryError
-      setPatients(data || [])
+      
+      // Get the most recent MAR form diagnosis for each patient
+      if (data && data.length > 0) {
+        const patientIds = data.map(p => p.id)
+        
+        // Get most recent MAR form for each patient
+        const { data: marForms, error: marError } = await supabase
+          .from('mar_forms')
+          .select('patient_id, diagnosis')
+          .in('patient_id', patientIds)
+          .order('created_at', { ascending: false })
+        
+        if (!marError && marForms) {
+          // Create a map of patient_id to most recent diagnosis
+          const diagnosisMap = new Map<string, string | null>()
+          marForms.forEach(form => {
+            if (!diagnosisMap.has(form.patient_id) && form.diagnosis) {
+              diagnosisMap.set(form.patient_id, form.diagnosis)
+            }
+          })
+          
+          // Update patients with diagnosis from most recent MAR form
+          const patientsWithMarDiagnosis = data.map(patient => ({
+            ...patient,
+            diagnosis: diagnosisMap.get(patient.id) || patient.diagnosis
+          }))
+          
+          setPatients(patientsWithMarDiagnosis)
+        } else {
+          setPatients(data || [])
+        }
+      } else {
+        setPatients(data || [])
+      }
     } catch (err: any) {
       setError(err.message)
     }

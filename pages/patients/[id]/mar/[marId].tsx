@@ -1624,12 +1624,15 @@ export default function ViewMARForm() {
                   physician_phone: formData.get('physician_phone') as string || null,
                   facility_name: formData.get('facility_name') as string || null
                 }
-                const { error } = await supabase
+                
+                // Update mar_forms table
+                const { error: marError } = await supabase
                   .from('mar_forms')
                   .update(updates)
                   .eq('id', marFormId)
                 
-                if (error) throw error
+                if (marError) throw marError
+                
                 if (marForm) {
                   setMarForm({ ...marForm, ...updates } as MARForm)
                 }
