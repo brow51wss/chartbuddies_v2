@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
+import Link from 'next/link'
 import ProtectedRoute from '../components/ProtectedRoute'
 import { supabase } from '../lib/supabase'
-import { getCurrentUserProfile } from '../lib/auth'
+import { getCurrentUserProfile, signOut } from '../lib/auth'
 
 export default function Admissions() {
   const router = useRouter()
@@ -213,13 +214,71 @@ export default function Admissions() {
     }
   }
 
+  const handleLogout = async () => {
+    await signOut()
+    router.push('/auth/login')
+  }
+
+  // Header component
+  const Header = () => (
+    <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <img 
+              src="/images/icon-wordmark.webp" 
+              alt="Lasso EHR" 
+              className="h-10 w-auto"
+            />
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {userProfile?.full_name || 'Loading...'} • {userProfile?.role?.replace('_', ' ').toUpperCase() || ''}
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <Link
+              href="/admissions"
+              className="px-4 py-2 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue text-sm font-medium shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
+            >
+              <span>+</span>
+              <span>Add Patient</span>
+            </Link>
+            <Link
+              href="/dashboard"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
+            >
+              Dashboard
+            </Link>
+            <Link
+              href="/profile"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
+            >
+              Profile
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+  )
+
   if (!userProfile) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto"></div>
-            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+        <Head>
+          <title>Loading - Patient Registration - Lasso</title>
+        </Head>
+        <div className="min-h-screen">
+          <Header />
+          <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto"></div>
+              <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+            </div>
           </div>
         </div>
       </ProtectedRoute>
@@ -231,9 +290,11 @@ export default function Admissions() {
       <Head>
         <title>Patient Registration - Lasso</title>
       </Head>
-      <div className="min-h-screen p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-6">
+      <div className="min-h-screen">
+        <Header />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="max-w-4xl mx-auto">
+            <div className="mb-6">
             <button
               onClick={() => router.push('/dashboard')}
               className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm mb-4"
@@ -408,6 +469,7 @@ export default function Admissions() {
                 </button>
               </div>
             </form>
+            </div>
           </div>
         </div>
       </div>
