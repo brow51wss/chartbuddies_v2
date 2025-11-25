@@ -322,10 +322,10 @@ export default function NewMARForm() {
           {/* Header */}
           <div className="mb-6">
             <button
-              onClick={() => router.back()}
+              onClick={() => router.push('/dashboard?module=mar')}
               className="text-blue-600 hover:text-blue-700 dark:text-blue-400 text-sm mb-4"
             >
-              ← Back
+              ← Back to MAR Patients
             </button>
             <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
               New Medication Administration Record (MAR)
@@ -891,7 +891,7 @@ export default function NewMARForm() {
             <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200 dark:border-gray-700">
               <button
                 type="button"
-                onClick={() => router.back()}
+                onClick={() => router.push('/dashboard?module=mar')}
                 disabled={saving}
                 className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50"
               >

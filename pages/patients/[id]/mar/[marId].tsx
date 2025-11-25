@@ -584,16 +584,10 @@ export default function ViewMARForm() {
           <div className="text-center">
             <p className="text-red-600 mb-4">{error}</p>
             <button 
-              onClick={() => {
-                if (patientFormId) {
-                  router.push(`/patients/${patientFormId}/forms`)
-                } else {
-                  router.push('/dashboard')
-                }
-              }} 
+              onClick={() => router.push('/dashboard?module=mar')} 
               className="px-4 py-2 bg-blue-600 text-white rounded-md"
             >
-              {patientFormId ? 'Back to Patient Forms' : 'Go to Dashboard'}
+              Back to MAR Patients
             </button>
           </div>
         </div>
@@ -609,16 +603,10 @@ export default function ViewMARForm() {
           <div className="text-center">
             <p className="text-red-600 mb-4">MAR form not found</p>
             <button 
-              onClick={() => {
-                if (patientFormId) {
-                  router.push(`/patients/${patientFormId}/forms`)
-                } else {
-                  router.push('/dashboard')
-                }
-              }} 
+              onClick={() => router.push('/dashboard?module=mar')} 
               className="px-4 py-2 bg-blue-600 text-white rounded-md"
             >
-              {patientFormId ? 'Back to Patient Forms' : 'Go to Dashboard'}
+              Back to MAR Patients
             </button>
           </div>
         </div>
@@ -649,10 +637,10 @@ export default function ViewMARForm() {
           {/* Header Navigation */}
           <div className="mb-6">
             <button
-              onClick={() => router.push(`/patients/${patientFormId}/forms`)}
+              onClick={() => router.push('/dashboard?module=mar')}
               className="text-blue-600 hover:text-blue-700 dark:text-blue-400 text-sm mb-4"
             >
-              ← Back to Patient Forms
+              ← Back to MAR Patients
             </button>
             <div className="flex justify-between items-center">
               <h1 className="text-3xl font-bold text-gray-800 dark:text-white">

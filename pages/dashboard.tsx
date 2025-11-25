@@ -96,6 +96,13 @@ export default function Dashboard() {
 
       // Load patients based on role
       await loadPatients(profile)
+      
+      // Check for module query parameter
+      const { module } = router.query
+      if (module === 'mar') {
+        setSelectedModule('mar')
+      }
+      
       setLoading(false)
     }
     loadData()
