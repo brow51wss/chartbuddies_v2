@@ -490,7 +490,7 @@ export default function Dashboard() {
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center gap-3">
                                   <Link
-                                    href={`/patients/${patient.id}/mar`}
+                                    href={`/patients/${patient.id}/forms`}
                                     className="inline-flex items-center gap-1 text-sm font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue dark:hover:text-lasso-blue/80 transition-colors"
                                   >
                                     <span>Open</span>
