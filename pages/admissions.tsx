@@ -203,9 +203,9 @@ export default function Admissions() {
       })
       setAge('')
 
-      // Redirect to dashboard after 2 seconds
+      // Redirect to dashboard with MAR module after 2 seconds
       setTimeout(() => {
-        router.push('/dashboard')
+        router.push('/dashboard?module=mar')
       }, 2000)
     } catch (err: any) {
       setError(err.message || 'Failed to register patient')
