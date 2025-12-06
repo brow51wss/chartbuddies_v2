@@ -1486,7 +1486,7 @@ export default function ViewMARForm() {
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Time</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Initials</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Medication</th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Reason</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Reason/Indication</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Result</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Staff Signature</th>
                       </tr>
@@ -2532,7 +2532,7 @@ function AddPRNRecordForm({
 
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Reason *
+          Reason/Indication *
         </label>
         <input
           type="text"
