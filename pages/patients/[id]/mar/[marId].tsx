@@ -191,12 +191,12 @@ export default function ViewMARForm() {
 
   const addPRNRecord = async (record: {
     date: string
-    hour: string
-    initials: string
+    hour: string | null
+    initials: string | null
     medication: string
     reason: string
-    result: string
-    staffSignature: string
+    result: string | null
+    staffSignature: string | null
   }) => {
     if (!userProfile || !marForm || !marFormId) return
     
@@ -220,11 +220,13 @@ export default function ViewMARForm() {
 
       if (error) throw error
 
-      // Update staff initials legend
-      setStaffInitials(prev => ({
-        ...prev,
-        [record.initials]: record.staffSignature
-      }))
+      // Update staff initials legend only if initials and signature are provided
+      if (record.initials && record.staffSignature) {
+        setStaffInitials(prev => ({
+          ...prev,
+          [record.initials!]: record.staffSignature!
+        }))
+      }
 
       await loadMARForm()
       setMessage('PRN record added successfully!')
@@ -1807,23 +1809,6 @@ export default function ViewMARForm() {
               }}
               onCancel={() => setShowAddPRNModal(false)}
               defaultDate={new Date().toISOString().split('T')[0]}
-              defaultHour={new Date().toTimeString().slice(0, 5)}
-              defaultInitials={(() => {
-                // Generate initials from full_name if staff_initials not set
-                if (userProfile?.staff_initials) {
-                  return userProfile.staff_initials
-                }
-                if (userProfile?.full_name) {
-                  const names = userProfile.full_name.trim().split(/\s+/)
-                  if (names.length >= 2) {
-                    return (names[0][0] + names[names.length - 1][0]).toUpperCase()
-                  } else if (names.length === 1) {
-                    return names[0][0].toUpperCase()
-                  }
-                }
-                return ''
-              })()}
-              defaultSignature={userProfile?.full_name || ''}
             />
           </div>
         </div>
@@ -2419,40 +2404,30 @@ function EditableHourField({
 function AddPRNRecordForm({ 
   onSubmit, 
   onCancel,
-  defaultDate,
-  defaultHour,
-  defaultInitials,
-  defaultSignature
+  defaultDate
 }: { 
   onSubmit: (data: {
     date: string
-    hour: string
-    initials: string
+    hour: string | null
+    initials: string | null
     medication: string
     reason: string
-    result: string
-    staffSignature: string
+    result: string | null
+    staffSignature: string | null
   }) => Promise<void>
   onCancel: () => void
   defaultDate: string
-  defaultHour: string
-  defaultInitials: string
-  defaultSignature: string
 }) {
   const [formData, setFormData] = useState({
     date: defaultDate,
-    hour: defaultHour,
     medication: '',
-    reason: '',
-    result: '',
-    initials: defaultInitials,
-    staffSignature: defaultSignature
+    reason: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.date || !formData.hour || !formData.medication || !formData.reason || !formData.initials || !formData.staffSignature) {
+    if (!formData.date || !formData.medication || !formData.reason) {
       alert('Please fill in all required fields')
       return
     }
@@ -2461,22 +2436,18 @@ function AddPRNRecordForm({
     try {
       await onSubmit({
         date: formData.date,
-        hour: formData.hour,
+        hour: null,
         medication: formData.medication,
         reason: formData.reason,
-        result: formData.result || '',
-        initials: formData.initials.trim().toUpperCase(),
-        staffSignature: formData.staffSignature
+        result: null,
+        initials: null,
+        staffSignature: null
       })
       // Reset form
       setFormData({
         date: defaultDate,
-        hour: defaultHour,
         medication: '',
-        reason: '',
-        result: '',
-        initials: defaultInitials,
-        staffSignature: defaultSignature
+        reason: ''
       })
     } catch (err) {
       console.error('Error submitting PRN record:', err)
@@ -2487,33 +2458,17 @@ function AddPRNRecordForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Date *
-          </label>
-          <input
-            type="date"
-            value={formData.date}
-            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Time *
-          </label>
-          <input
-            type="text"
-            value={formData.hour}
-            onChange={(e) => setFormData({ ...formData, hour: e.target.value })}
-            required
-            placeholder="e.g., 14:00 or 2:00 PM"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          />
-        </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Date *
+        </label>
+        <input
+          type="date"
+          value={formData.date}
+          onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+          required
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+        />
       </div>
 
       <div>
@@ -2542,50 +2497,6 @@ function AddPRNRecordForm({
           placeholder="e.g., Headache, Pain, Refused"
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Result (optional)
-        </label>
-        <input
-          type="text"
-          value={formData.result}
-          onChange={(e) => setFormData({ ...formData, result: e.target.value })}
-          placeholder="e.g., Pain relieved within 30 mins"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Initials *
-          </label>
-          <input
-            type="text"
-            value={formData.initials}
-            onChange={(e) => setFormData({ ...formData, initials: e.target.value.toUpperCase() })}
-            required
-            placeholder="e.g., JD"
-            maxLength={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Staff Signature *
-          </label>
-          <input
-            type="text"
-            value={formData.staffSignature}
-            onChange={(e) => setFormData({ ...formData, staffSignature: e.target.value })}
-            required
-            placeholder="e.g., J. Smith, RN"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          />
-        </div>
       </div>
 
       <div className="flex justify-end space-x-3 pt-4">
