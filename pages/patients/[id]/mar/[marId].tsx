@@ -1444,12 +1444,8 @@ export default function ViewMARForm() {
                 </div>
               </div>
 
-              {/* Column 4: Record #, Date of Birth, Sex */}
+              {/* Column 4: Date of Birth, Sex */}
               <div className="space-y-3 text-xs p-4 rounded-lg bg-lasso-blue/5 dark:bg-lasso-blue/10">
-                <div>
-                  <label className="block font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Record #:</label>
-                  <div className="text-gray-800 dark:text-white">{marForm.record_number}</div>
-                </div>
                 <div>
                   <label className="block font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Date of Birth:</label>
                   <div className="text-gray-800 dark:text-white">{new Date(marForm.date_of_birth).toLocaleDateString()}</div>

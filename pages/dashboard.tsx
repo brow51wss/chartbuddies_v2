@@ -437,7 +437,6 @@ export default function Dashboard() {
                       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                         <colgroup>
                           <col className="w-48" /> {/* Patient Name - ~192px */}
-                          <col className="w-40" /> {/* Record Number - ~160px */}
                           <col className="w-36" /> {/* Date of Birth - ~144px */}
                         </colgroup>
                         <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
@@ -446,9 +445,6 @@ export default function Dashboard() {
                               Patient Name
                             </th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-[192px] z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600">
-                              Record Number
-                            </th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-[352px] z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600">
                               Date of Birth
                             </th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
@@ -471,11 +467,6 @@ export default function Dashboard() {
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap sticky left-[192px] z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
-                                <div className="text-sm text-gray-600 dark:text-gray-400">
-                                  {patient.record_number}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap sticky left-[352px] z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
                                 <div className="text-sm text-gray-600 dark:text-gray-400">
                                   {new Date(patient.date_of_birth).toLocaleDateString()}
                                 </div>
