@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -48,6 +48,7 @@ export default function ViewMARForm() {
   const [editingMedicationParameter, setEditingMedicationParameter] = useState<{ medicationId: string; parameter: string | null } | null>(null)
   const [showAdministrationNoteModal, setShowAdministrationNoteModal] = useState(false)
   const [editingAdministrationNote, setEditingAdministrationNote] = useState<{ medId: string; day: number; note: string | null } | null>(null)
+  const allowNavigationRef = useRef(false)
 
   useEffect(() => {
     // Wait for router to be ready
@@ -77,6 +78,12 @@ export default function ViewMARForm() {
 
     // Handle browser back/forward button
     const handlePopState = (e: PopStateEvent) => {
+      // If navigation is allowed (user confirmed), don't block
+      if (allowNavigationRef.current) {
+        allowNavigationRef.current = false // Reset after allowing navigation
+        return
+      }
+      
       e.preventDefault()
       setShowLeaveConfirmModal(true)
       // Push current state back to prevent navigation
@@ -98,21 +105,23 @@ export default function ViewMARForm() {
 
   // Handle Next.js router navigation
   useEffect(() => {
-    let shouldBlockNavigation = true
-
     const handleRouteChangeStart = (url: string) => {
       // Don't show modal if navigating to the same page
       if (url === router.asPath) return
       
-      if (shouldBlockNavigation) {
-        // Show confirmation modal
-        setPendingNavigation(url)
-        setShowLeaveConfirmModal(true)
-        
-        // Prevent navigation
-        router.events.emit('routeChangeError', new Error('Navigation cancelled'), url)
-        throw 'Navigation cancelled'
+      // If navigation is allowed (user confirmed), don't block
+      if (allowNavigationRef.current) {
+        allowNavigationRef.current = false // Reset after allowing navigation
+        return
       }
+      
+      // Show confirmation modal
+      setPendingNavigation(url)
+      setShowLeaveConfirmModal(true)
+      
+      // Prevent navigation
+      router.events.emit('routeChangeError', new Error('Navigation cancelled'), url)
+      throw 'Navigation cancelled'
     }
 
     router.events.on('routeChangeStart', handleRouteChangeStart)
@@ -127,6 +136,9 @@ export default function ViewMARForm() {
     const navUrl = pendingNavigation
     setPendingNavigation(null)
     
+    // Allow navigation to proceed
+    allowNavigationRef.current = true
+    
     // Small delay to ensure modal closes before navigation
     await new Promise(resolve => setTimeout(resolve, 100))
     
@@ -135,11 +147,12 @@ export default function ViewMARForm() {
       if (navUrl.startsWith('http')) {
         window.location.href = navUrl
       } else {
-        // Temporarily disable navigation blocking
+        // Navigation will be allowed because allowNavigationRef.current is true
         router.push(navUrl)
       }
     } else {
       // Browser back button - go back
+      // Remove the popstate listener temporarily to allow navigation
       window.history.back()
     }
   }
