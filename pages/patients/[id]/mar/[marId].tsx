@@ -42,6 +42,8 @@ export default function ViewMARForm() {
   const [editingPRNValue, setEditingPRNValue] = useState<string>('')
   const [showLeaveConfirmModal, setShowLeaveConfirmModal] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
+  const [showPRNNoteModal, setShowPRNNoteModal] = useState(false)
+  const [editingPRNNote, setEditingPRNNote] = useState<{ recordId: string; note: string | null } | null>(null)
 
   useEffect(() => {
     // Wait for router to be ready
@@ -325,7 +327,7 @@ export default function ViewMARForm() {
     }
   }
 
-  const updatePRNRecord = async (recordId: string, field: 'hour' | 'result' | 'initials' | 'staff_signature', value: string | null) => {
+  const updatePRNRecord = async (recordId: string, field: 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'note', value: string | null) => {
     if (!marFormId) return
     
     try {
@@ -395,8 +397,8 @@ export default function ViewMARForm() {
       }
     }
     
-    const dbField = field === 'hour' ? 'hour' : field === 'result' ? 'result' : field === 'initials' ? 'initials' : 'staff_signature'
-    await updatePRNRecord(recordId, dbField as 'hour' | 'result' | 'initials' | 'staff_signature', editingPRNValue.trim() || null)
+    const dbField = field === 'hour' ? 'hour' : field === 'result' ? 'result' : field === 'initials' ? 'initials' : field === 'reason' ? 'reason' : 'staff_signature'
+    await updatePRNRecord(recordId, dbField as 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason', editingPRNValue.trim() || null)
     setEditingPRNField(null)
     setEditingPRNValue('')
   }
@@ -1754,8 +1756,55 @@ export default function ViewMARForm() {
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
                             {prn.medication || '—'}
                           </td>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
-                            {prn.reason || '—'}
+                          <td 
+                            className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                            onClick={() => handlePRNFieldEdit(prn.id, 'reason', prn.reason)}
+                          >
+                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'reason' ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editingPRNValue}
+                                  onChange={(e) => setEditingPRNValue(e.target.value)}
+                                  onBlur={() => handlePRNFieldSave(prn.id, 'reason')}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handlePRNFieldSave(prn.id, 'reason')
+                                    } else if (e.key === 'Escape') {
+                                      handlePRNFieldCancel()
+                                    }
+                                  }}
+                                  autoFocus
+                                  placeholder="e.g., Headache, Pain, Refused"
+                                  className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span>{prn.reason || '—'}</span>
+                                  {prn.reason && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setEditingPRNNote({ recordId: prn.id, note: prn.note })
+                                        setShowPRNNoteModal(true)
+                                      }}
+                                      className="text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-1 whitespace-nowrap"
+                                      title={prn.note ? 'Edit note' : 'Add note'}
+                                    >
+                                      {prn.note ? '📝' : '+'} note
+                                    </button>
+                                  )}
+                                </div>
+                                {prn.note && (
+                                  <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600">
+                                    {prn.note}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td 
                             className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
@@ -2110,6 +2159,71 @@ export default function ViewMARForm() {
               onCancel={() => setShowAddPRNModal(false)}
               defaultDate={new Date().toISOString().split('T')[0]}
             />
+          </div>
+        </div>
+      )}
+
+      {/* PRN Note Modal */}
+      {showPRNNoteModal && editingPRNNote && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowPRNNoteModal(false)
+              setEditingPRNNote(null)
+            }
+          }}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Add Note</h2>
+              <button
+                onClick={() => {
+                  setShowPRNNoteModal(false)
+                  setEditingPRNNote(null)
+                }}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Note for Reason/Indication
+              </label>
+              <textarea
+                value={editingPRNNote.note || ''}
+                onChange={(e) => setEditingPRNNote({ ...editingPRNNote, note: e.target.value })}
+                placeholder="Enter additional notes about this reason/indication..."
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowPRNNoteModal(false)
+                  setEditingPRNNote(null)
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (editingPRNNote) {
+                    await updatePRNRecord(editingPRNNote.recordId, 'note', editingPRNNote.note?.trim() || null)
+                    setShowPRNNoteModal(false)
+                    setEditingPRNNote(null)
+                  }
+                }}
+                className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+              >
+                Save Note
+              </button>
+            </div>
           </div>
         </div>
       )}
