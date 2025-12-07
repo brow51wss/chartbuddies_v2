@@ -30,6 +30,7 @@ export interface MARMedication {
   stop_date: string | null
   hour: string // Time format
   notes: string | null
+  parameter: string | null
   created_at: string
   updated_at: string
 }

@@ -44,6 +44,8 @@ export default function ViewMARForm() {
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [showPRNNoteModal, setShowPRNNoteModal] = useState(false)
   const [editingPRNNote, setEditingPRNNote] = useState<{ recordId: string; note: string | null } | null>(null)
+  const [showMedicationParameterModal, setShowMedicationParameterModal] = useState(false)
+  const [editingMedicationParameter, setEditingMedicationParameter] = useState<{ medicationId: string; parameter: string | null } | null>(null)
 
   useEffect(() => {
     // Wait for router to be ready
@@ -355,6 +357,30 @@ export default function ViewMARForm() {
       setTimeout(() => setMessage(''), 3000)
     } catch (err: any) {
       setError(err.message || 'Failed to update PRN record')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const updateMedicationParameter = async (medicationId: string, parameter: string | null) => {
+    if (!marFormId) return
+    
+    try {
+      setSaving(true)
+      
+      const { error } = await supabase
+        .from('mar_medications')
+        .update({ parameter: parameter?.trim() || null })
+        .eq('id', medicationId)
+
+      if (error) throw error
+
+      await loadMARForm()
+      setMessage('Medication parameter updated successfully!')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to update medication parameter')
       setTimeout(() => setError(''), 5000)
     } finally {
       setSaving(false)
@@ -1169,17 +1195,39 @@ export default function ViewMARForm() {
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
                                 className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500"
                               >
-                                <div className={`font-medium text-sm ${isVitalsEntry ? 'text-lasso-teal dark:text-lasso-blue' : 'text-gray-800 dark:text-white'}`}>
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className={`font-medium text-sm ${isVitalsEntry ? 'text-lasso-teal dark:text-lasso-blue' : 'text-gray-800 dark:text-white'}`}>
                                 {isVitalsEntry ? '📊 VITALS' : med.medication_name}
                               </div>
-                                <div className={`text-xs mt-1 ${isVitalsEntry ? 'text-lasso-blue dark:text-lasso-blue italic' : 'text-gray-600 dark:text-gray-400'}`}>
-                                  {med.dosage}
+                                    {!isVitalsEntry && med.medication_name && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setEditingMedicationParameter({ medicationId: med.id, parameter: med.parameter })
+                                          setShowMedicationParameterModal(true)
+                                        }}
+                                        className="text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-1 whitespace-nowrap"
+                                        title={med.parameter ? 'Edit parameter' : 'Add parameter'}
+                                      >
+                                        {med.parameter ? '📝' : '+'} parameter
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className={`text-xs mt-1 ${isVitalsEntry ? 'text-lasso-blue dark:text-lasso-blue italic' : 'text-gray-600 dark:text-gray-400'}`}>
+                                    {med.dosage}
                               </div>
                               {med.notes && !isVitalsEntry && (
                                 <div className="text-xs text-gray-500 dark:text-gray-500 mt-1 italic">
                                   {med.notes}
                                 </div>
                               )}
+                                  {med.parameter && !isVitalsEntry && (
+                                    <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600">
+                                      {med.parameter}
+                                    </div>
+                                  )}
+                                </div>
                             </td>
                             )}
                             {shouldMerge && !isFirstRow ? null : (
@@ -2222,6 +2270,71 @@ export default function ViewMARForm() {
                 className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal"
               >
                 Save Note
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Medication Parameter Modal */}
+      {showMedicationParameterModal && editingMedicationParameter && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowMedicationParameterModal(false)
+              setEditingMedicationParameter(null)
+            }
+          }}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Add/Edit Parameter</h2>
+              <button
+                onClick={() => {
+                  setShowMedicationParameterModal(false)
+                  setEditingMedicationParameter(null)
+                }}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Parameter for Medication
+              </label>
+              <textarea
+                value={editingMedicationParameter.parameter || ''}
+                onChange={(e) => setEditingMedicationParameter({ ...editingMedicationParameter, parameter: e.target.value })}
+                placeholder="Enter parameters for this medication..."
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowMedicationParameterModal(false)
+                  setEditingMedicationParameter(null)
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (editingMedicationParameter) {
+                    await updateMedicationParameter(editingMedicationParameter.medicationId, editingMedicationParameter.parameter?.trim() || null)
+                    setShowMedicationParameterModal(false)
+                    setEditingMedicationParameter(null)
+                  }
+                }}
+                className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+              >
+                Save Parameter
               </button>
             </div>
           </div>
