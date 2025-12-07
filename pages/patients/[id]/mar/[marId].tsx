@@ -234,8 +234,8 @@ export default function ViewMARForm() {
         }))
       }
 
-      // If MC (Medication Discontinued) was selected, mark all future days as discontinued
-      if (initials === 'MC' && status === 'Given') {
+      // If DC (Discontinued) was selected, mark all future days as discontinued
+      if (initials === 'DC' && status === 'Given') {
         // Mark all future days (day + 1 to 31) as discontinued
         const futureDays = []
         for (let futureDay = day + 1; futureDay <= 31; futureDay++) {
@@ -243,7 +243,7 @@ export default function ViewMARForm() {
             mar_medication_id: medId,
             day_number: futureDay,
             status: 'Given',
-            initials: 'MC',
+            initials: 'DC',
             administered_at: null
           })
         }
@@ -1337,18 +1337,18 @@ export default function ViewMARForm() {
                               const isNotGiven = status === 'Not Given'
                               const isGiven = status === 'Given'
                               const isPRN = status === 'PRN'
-                              const isMC = initials === 'MC'
+                              const isDC = initials === 'DC'
                               const isRefused = initials === 'R'
 
-                              // Check if this day is after an MC (Medication Discontinued) day
+                              // Check if this day is after a DC (Discontinued) day
                               let isDiscontinued = false
-                              let mcDay = null
+                              let dcDay = null
                               if (!isVitalsEntry) {
-                                // Find the earliest day with MC for this medication
+                                // Find the earliest day with DC for this medication
                                 for (let checkDay = 1; checkDay < day; checkDay++) {
                                   const checkAdmin = medAdmin[checkDay]
-                                  if (checkAdmin?.initials === 'MC') {
-                                    mcDay = checkDay
+                                  if (checkAdmin?.initials === 'DC') {
+                                    dcDay = checkDay
                                     isDiscontinued = true
                                     break
                                   }
@@ -1399,7 +1399,7 @@ export default function ViewMARForm() {
                                   } : undefined}
                                   title={
                                     isDiscontinued 
-                                      ? `Medication discontinued on day ${mcDay}. Cannot edit future days. Add a new medication to continue.`
+                                      ? `Medication discontinued on day ${dcDay}. Cannot edit future days. Add a new medication to continue.`
                                       : isEditing && isMedActive 
                                         ? (isVitalsEntry ? 'Click to add vital signs' : 'Click to add initials, Double-click to mark as not given')
                                         : !isMedActive 
@@ -1416,7 +1416,7 @@ export default function ViewMARForm() {
                                   {isMedActive ? (
                                     <>
                                       {isDiscontinued ? (
-                                        // Discontinued day - only show red line, no MC text (MC only appears on the day it was selected)
+                                        // Discontinued day - only show red line, no DC text (DC only appears on the day it was selected)
                                         <div className="min-h-[24px] flex items-center justify-center">
                                           {/* Empty - red line is shown via the absolute positioned div above */}
                                         </div>
@@ -1494,7 +1494,7 @@ export default function ViewMARForm() {
                                                 {userInitials && (
                                                   <option value={userInitials}>{userInitials} ({userProfile?.full_name || 'Your Initials'})</option>
                                                 )}
-                                                <option value="MC">MC (Medication Discontinued)</option>
+                                                <option value="DC">DC (Discontinued)</option>
                                                 <option value="G">G (Given)</option>
                                                 <option value="NG">NG (Not Given)</option>
                                                 <option value="PRN">PRN (As Needed)</option>
@@ -1515,12 +1515,12 @@ export default function ViewMARForm() {
                                               isEditing && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
                                             }`}
                                           >
-                                            {isMC && !isDiscontinued && (
+                                            {isDC && !isDiscontinued && (
                                               <div className="text-red-600 dark:text-red-400 font-bold text-xs">
-                                                MC
+                                                DC
                                               </div>
                                             )}
-                                            {isRefused && !isMC && (
+                                            {isRefused && !isDC && (
                                               <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                 <div className="flex items-center justify-center gap-1">
                                                   <div className="font-bold text-red-600 dark:text-red-400">
@@ -1540,12 +1540,12 @@ export default function ViewMARForm() {
                                                 </div>
                                               </div>
                                             )}
-                                            {isGiven && !isMC && !isRefused && (
+                                            {isGiven && !isDC && !isRefused && (
                                             <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
                                               {initials || '—'}
                                             </div>
                                           )}
-                                            {isNotGiven && initials && !isMC && !isRefused && (
+                                            {isNotGiven && initials && !isDC && !isRefused && (
                                             <div className="text-red-600 dark:text-red-400 font-bold">
                                               ○{initials}
                                             </div>
@@ -1556,10 +1556,10 @@ export default function ViewMARForm() {
                                               {initials && <div className="text-xs">{initials}</div>}
                                             </div>
                                           )}
-                                            {isNotGiven && !initials && !isMC && isEditing && (
+                                            {isNotGiven && !initials && !isDC && isEditing && (
                                             <div className="text-gray-400 cursor-text">—</div>
                                           )}
-                                            {isNotGiven && !initials && !isMC && !isEditing && (
+                                            {isNotGiven && !initials && !isDC && !isEditing && (
                                             <div className="text-gray-400">—</div>
                                             )}
                                           </div>
@@ -1737,7 +1737,7 @@ export default function ViewMARForm() {
                         {userInitials && (
                           <div className="font-semibold">{userInitials} = {userProfile?.full_name || 'Your Initials'}</div>
                         )}
-                        <div>MC = Medication Discontinued</div>
+                        <div>DC = Discontinued</div>
                         <div>G = Given</div>
                         <div>NG = Not Given</div>
                         <div>PRN = As Needed</div>
@@ -2600,7 +2600,7 @@ function AddMedicationOrVitalsForm({
 
   // Default legends for MAR forms
   const defaultLegends = [
-    { code: 'MC', description: 'Medication Discontinued' },
+    { code: 'DC', description: 'Discontinued' },
     { code: 'G', description: 'Given' },
     { code: 'NG', description: 'Not Given' },
     { code: 'PRN', description: 'As Needed' },
