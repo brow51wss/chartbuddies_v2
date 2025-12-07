@@ -46,6 +46,8 @@ export default function ViewMARForm() {
   const [editingPRNNote, setEditingPRNNote] = useState<{ recordId: string; note: string | null } | null>(null)
   const [showMedicationParameterModal, setShowMedicationParameterModal] = useState(false)
   const [editingMedicationParameter, setEditingMedicationParameter] = useState<{ medicationId: string; parameter: string | null } | null>(null)
+  const [showAdministrationNoteModal, setShowAdministrationNoteModal] = useState(false)
+  const [editingAdministrationNote, setEditingAdministrationNote] = useState<{ medId: string; day: number; note: string | null } | null>(null)
 
   useEffect(() => {
     // Wait for router to be ready
@@ -381,6 +383,48 @@ export default function ViewMARForm() {
       setTimeout(() => setMessage(''), 3000)
     } catch (err: any) {
       setError(err.message || 'Failed to update medication parameter')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const updateAdministrationNote = async (medId: string, day: number, note: string | null) => {
+    if (!marFormId) return
+    
+    try {
+      setSaving(true)
+      
+      const existingAdmin = administrations[medId]?.[day]
+      
+      if (existingAdmin) {
+        const { error } = await supabase
+          .from('mar_administrations')
+          .update({ notes: note?.trim() || null, updated_at: new Date().toISOString() })
+          .eq('id', existingAdmin.id)
+
+        if (error) throw error
+      } else {
+        // If no administration exists, we need to create one with "R" status
+        // This shouldn't normally happen, but handle it just in case
+        const { error } = await supabase
+          .from('mar_administrations')
+          .insert({
+            mar_medication_id: medId,
+            day_number: day,
+            status: 'Given',
+            initials: 'R',
+            notes: note?.trim() || null
+          })
+
+        if (error) throw error
+      }
+
+      await loadMARForm()
+      setMessage('Administration note updated successfully!')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to update administration note')
       setTimeout(() => setError(''), 5000)
     } finally {
       setSaving(false)
@@ -1275,11 +1319,13 @@ export default function ViewMARForm() {
                             {days.map(day => {
                               const admin = medAdmin[day]
                               const status = admin?.status || 'Not Given'
-                              const initials = admin?.initials || ''
+                              const initials = (admin?.initials || '').trim().toUpperCase()
+                              const notes = admin?.notes || null
                               const isNotGiven = status === 'Not Given'
                               const isGiven = status === 'Given'
                               const isPRN = status === 'PRN'
                               const isMC = initials === 'MC'
+                              const isRefused = initials === 'R'
 
                               // Check if this day is after an MC (Medication Discontinued) day
                               let isDiscontinued = false
@@ -1393,7 +1439,7 @@ export default function ViewMARForm() {
                                             className="w-full text-center text-xs font-bold border-2 border-lasso-blue rounded px-1 py-1 dark:bg-gray-700 dark:text-white"
                                           onClick={(e) => e.stopPropagation()}
                                         />
-                                        ) : (
+                                      ) : (
                                           (() => {
                                             const getUserInitials = () => {
                                               if (userProfile?.staff_initials) {
@@ -1446,41 +1492,68 @@ export default function ViewMARForm() {
                                           })()
                                         )
                                       ) : (
-                                        <div
-                                          onClick={isEditing && !isDiscontinued ? () => {
-                                            setEditingCell({ medId: med.id, day })
-                                            setEditingCellValue(initials || '')
-                                          } : undefined}
-                                          className={`min-h-[24px] flex items-center justify-center ${
-                                            isEditing && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
-                                          }`}
-                                        >
-                                          {isMC && !isDiscontinued && (
-                                            <div className="text-red-600 dark:text-red-400 font-bold text-xs">
-                                              MC
-                                            </div>
-                                          )}
-                                          {isGiven && !isMC && (
+                                        <div className="flex flex-col gap-1 w-full">
+                                          <div
+                                            onClick={isEditing && !isDiscontinued ? () => {
+                                              setEditingCell({ medId: med.id, day })
+                                              setEditingCellValue(initials || '')
+                                            } : undefined}
+                                          className={`min-h-[24px] flex items-center justify-center gap-1 ${
+                                              isEditing && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
+                                            }`}
+                                          >
+                                            {isMC && !isDiscontinued && (
+                                              <div className="text-red-600 dark:text-red-400 font-bold text-xs">
+                                                MC
+                                              </div>
+                                            )}
+                                            {isRefused && !isMC && (
+                                              <div className="flex flex-col items-center justify-center gap-1 w-full">
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <div className="font-bold text-red-600 dark:text-red-400">
+                                                    R
+                                                  </div>
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation()
+                                                      setEditingAdministrationNote({ medId: med.id, day, note: notes })
+                                                      setShowAdministrationNoteModal(true)
+                                                    }}
+                                                    className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap z-10 relative"
+                                                    title={notes ? 'Edit note' : 'Add note'}
+                                                  >
+                                                    {notes ? '📝' : '+'} note
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+                                            {isGiven && !isMC && !isRefused && (
                                             <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
                                               {initials || '—'}
                                             </div>
                                           )}
-                                          {isNotGiven && initials && !isMC && (
+                                            {isNotGiven && initials && !isMC && !isRefused && (
                                             <div className="text-red-600 dark:text-red-400 font-bold">
                                               ○{initials}
                                             </div>
                                           )}
                                           {isPRN && (
-                                            <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
+                                              <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
                                               PRN
                                               {initials && <div className="text-xs">{initials}</div>}
                                             </div>
                                           )}
-                                          {isNotGiven && !initials && !isMC && isEditing && (
+                                            {isNotGiven && !initials && !isMC && isEditing && (
                                             <div className="text-gray-400 cursor-text">—</div>
                                           )}
-                                          {isNotGiven && !initials && !isMC && !isEditing && (
+                                            {isNotGiven && !initials && !isMC && !isEditing && (
                                             <div className="text-gray-400">—</div>
+                                            )}
+                                          </div>
+                                          {isRefused && notes && (
+                                            <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600 px-1">
+                                              {notes}
+                                            </div>
                                           )}
                                         </div>
                                       )}
@@ -2335,6 +2408,71 @@ export default function ViewMARForm() {
                 className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal"
               >
                 Save Parameter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Administration Note Modal (for R - Refused) */}
+      {showAdministrationNoteModal && editingAdministrationNote && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowAdministrationNoteModal(false)
+              setEditingAdministrationNote(null)
+            }
+          }}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Add/Edit Note</h2>
+              <button
+                onClick={() => {
+                  setShowAdministrationNoteModal(false)
+                  setEditingAdministrationNote(null)
+                }}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Note for Refused Medication
+              </label>
+              <textarea
+                value={editingAdministrationNote.note || ''}
+                onChange={(e) => setEditingAdministrationNote({ ...editingAdministrationNote, note: e.target.value })}
+                placeholder="Enter notes about why the medication was refused..."
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowAdministrationNoteModal(false)
+                  setEditingAdministrationNote(null)
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (editingAdministrationNote) {
+                    await updateAdministrationNote(editingAdministrationNote.medId, editingAdministrationNote.day, editingAdministrationNote.note?.trim() || null)
+                    setShowAdministrationNoteModal(false)
+                    setEditingAdministrationNote(null)
+                  }
+                }}
+                className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+              >
+                Save Note
               </button>
             </div>
           </div>
