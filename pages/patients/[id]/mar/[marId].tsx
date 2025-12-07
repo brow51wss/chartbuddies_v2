@@ -38,6 +38,8 @@ export default function ViewMARForm() {
   const [isEditing] = useState(true)
   const [editingComments, setEditingComments] = useState(false)
   const [commentsValue, setCommentsValue] = useState<string>('')
+  const [editingPRNField, setEditingPRNField] = useState<{ recordId: string; field: string } | null>(null)
+  const [editingPRNValue, setEditingPRNValue] = useState<string>('')
 
   useEffect(() => {
     // Wait for router to be ready
@@ -222,10 +224,10 @@ export default function ViewMARForm() {
 
       // Update staff initials legend only if initials and signature are provided
       if (record.initials && record.staffSignature) {
-        setStaffInitials(prev => ({
-          ...prev,
+      setStaffInitials(prev => ({
+        ...prev,
           [record.initials!]: record.staffSignature!
-        }))
+      }))
       }
 
       await loadMARForm()
@@ -237,6 +239,87 @@ export default function ViewMARForm() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const updatePRNRecord = async (recordId: string, field: 'hour' | 'result' | 'initials' | 'staff_signature', value: string | null) => {
+    if (!marFormId) return
+    
+    try {
+      setSaving(true)
+      
+      const updateData: any = { [field]: value }
+      
+      // If updating initials, also update staff_signature from legend if available
+      if (field === 'initials' && value) {
+        const initialsUpper = value.trim().toUpperCase()
+        if (staffInitials[initialsUpper]) {
+          updateData.staff_signature = staffInitials[initialsUpper]
+        }
+      }
+      
+      const { error } = await supabase
+        .from('mar_prn_records')
+        .update(updateData)
+        .eq('id', recordId)
+
+      if (error) throw error
+
+      await loadMARForm()
+      setMessage('PRN record updated successfully!')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to update PRN record')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handlePRNFieldEdit = (recordId: string, field: string, currentValue: string | null) => {
+    setEditingPRNField({ recordId, field })
+    
+    // Auto-populate initials from user profile if editing initials field
+    if (field === 'initials') {
+      let userInitials = ''
+      if (userProfile?.staff_initials) {
+        userInitials = userProfile.staff_initials.toUpperCase()
+      } else if (userProfile?.full_name) {
+        const names = userProfile.full_name.trim().split(/\s+/)
+        if (names.length >= 2) {
+          userInitials = (names[0][0] + names[names.length - 1][0]).toUpperCase()
+        } else if (names.length === 1) {
+          userInitials = names[0][0].toUpperCase()
+        }
+      }
+      setEditingPRNValue(currentValue || userInitials)
+    } else {
+      setEditingPRNValue(currentValue || '')
+    }
+  }
+
+  const handlePRNFieldSave = async (recordId: string, field: string) => {
+    const record = prnRecords.find(r => r.id === recordId)
+    
+    // Validation: Initials can only be set if Time and Result are both filled
+    if (field === 'initials') {
+      if (!record?.hour || !record?.result) {
+        setError('Time and Result must be filled before setting Initials')
+        setTimeout(() => setError(''), 5000)
+        setEditingPRNField(null)
+        setEditingPRNValue('')
+        return
+      }
+    }
+    
+    const dbField = field === 'hour' ? 'hour' : field === 'result' ? 'result' : field === 'initials' ? 'initials' : 'staff_signature'
+    await updatePRNRecord(recordId, dbField as 'hour' | 'result' | 'initials' | 'staff_signature', editingPRNValue.trim() || null)
+    setEditingPRNField(null)
+    setEditingPRNValue('')
+  }
+
+  const handlePRNFieldCancel = () => {
+    setEditingPRNField(null)
+    setEditingPRNValue('')
   }
 
   const saveComments = async () => {
@@ -744,9 +827,9 @@ export default function ViewMARForm() {
         <div className="min-h-screen">
           <Header />
           <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
-            <div className="text-center">
+          <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto"></div>
-              <p className="mt-4 text-gray-600 dark:text-gray-400">Loading MAR form...</p>
+            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading MAR form...</p>
             </div>
           </div>
         </div>
@@ -764,14 +847,14 @@ export default function ViewMARForm() {
         <div className="min-h-screen">
           <Header />
           <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
-            <div className="text-center">
-              <p className="text-red-600 mb-4">{error}</p>
-              <button 
+          <div className="text-center">
+            <p className="text-red-600 mb-4">{error}</p>
+            <button 
                 onClick={() => router.push('/dashboard?module=mar')} 
                 className="px-4 py-2 bg-lasso-navy text-white rounded-md"
               >
                 Back to MAR Patients
-              </button>
+            </button>
             </div>
           </div>
         </div>
@@ -789,14 +872,14 @@ export default function ViewMARForm() {
         <div className="min-h-screen">
           <Header />
           <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
-            <div className="text-center">
-              <p className="text-red-600 mb-4">MAR form not found</p>
-              <button 
+          <div className="text-center">
+            <p className="text-red-600 mb-4">MAR form not found</p>
+            <button 
                 onClick={() => router.push('/dashboard?module=mar')} 
                 className="px-4 py-2 bg-lasso-navy text-white rounded-md"
               >
                 Back to MAR Patients
-              </button>
+            </button>
             </div>
           </div>
         </div>
@@ -813,9 +896,9 @@ export default function ViewMARForm() {
         <div className="min-h-screen">
           <Header />
           <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
-            <div className="text-center">
+          <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto"></div>
-              <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
             </div>
           </div>
         </div>
@@ -1001,58 +1084,58 @@ export default function ViewMARForm() {
                                 className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500"
                               >
                                 <div className={`font-medium text-sm ${isVitalsEntry ? 'text-lasso-teal dark:text-lasso-blue' : 'text-gray-800 dark:text-white'}`}>
-                                  {isVitalsEntry ? '📊 VITALS' : med.medication_name}
-                                </div>
+                                {isVitalsEntry ? '📊 VITALS' : med.medication_name}
+                              </div>
                                 <div className={`text-xs mt-1 ${isVitalsEntry ? 'text-lasso-blue dark:text-lasso-blue italic' : 'text-gray-600 dark:text-gray-400'}`}>
                                   {med.dosage}
+                              </div>
+                              {med.notes && !isVitalsEntry && (
+                                <div className="text-xs text-gray-500 dark:text-gray-500 mt-1 italic">
+                                  {med.notes}
                                 </div>
-                                {med.notes && !isVitalsEntry && (
-                                  <div className="text-xs text-gray-500 dark:text-gray-500 mt-1 italic">
-                                    {med.notes}
-                                  </div>
-                                )}
-                              </td>
+                              )}
+                            </td>
                             )}
                             {shouldMerge && !isFirstRow ? null : (
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
                                 className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[200px] z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500"
                               >
-                                <div>Start: {new Date(med.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                                {med.stop_date && (
-                                  <div>Stop: {new Date(med.stop_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                                )}
-                              </td>
+                              <div>Start: {new Date(med.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                              {med.stop_date && (
+                                <div>Stop: {new Date(med.stop_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                              )}
+                            </td>
                             )}
                             <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500">
                               {isVitalsEntry ? '—' : (
-                                <EditableHourField
-                                  medication={med}
-                                  onUpdate={async (newHour) => {
-                                    try {
-                                      setSaving(true)
-                                      const { error } = await supabase
-                                        .from('mar_medications')
-                                        .update({ hour: newHour })
-                                        .eq('id', med.id)
-                                      
-                                      if (error) throw error
-                                      
-                                      setMedications(prev => prev.map(m => 
-                                        m.id === med.id ? { ...m, hour: newHour } : m
-                                      ))
-                                      
-                                      setMessage('Medication time updated successfully')
-                                      setTimeout(() => setMessage(''), 2000)
-                                    } catch (err) {
-                                      console.error('Error updating medication hour:', err)
-                                      setError('Failed to update medication time')
-                                      setTimeout(() => setError(''), 3000)
-                                    } finally {
-                                      setSaving(false)
-                                    }
-                                  }}
-                                />
+                                  <EditableHourField
+                                    medication={med}
+                                    onUpdate={async (newHour) => {
+                                      try {
+                                        setSaving(true)
+                                        const { error } = await supabase
+                                          .from('mar_medications')
+                                          .update({ hour: newHour })
+                                          .eq('id', med.id)
+                                        
+                                        if (error) throw error
+                                        
+                                        setMedications(prev => prev.map(m => 
+                                          m.id === med.id ? { ...m, hour: newHour } : m
+                                        ))
+                                        
+                                        setMessage('Medication time updated successfully')
+                                        setTimeout(() => setMessage(''), 2000)
+                                      } catch (err) {
+                                        console.error('Error updating medication hour:', err)
+                                        setError('Failed to update medication time')
+                                        setTimeout(() => setError(''), 3000)
+                                      } finally {
+                                        setSaving(false)
+                                      }
+                                    }}
+                                  />
                               )}
                             </td>
                             {days.map(day => {
@@ -1078,7 +1161,7 @@ export default function ViewMARForm() {
                                   }
                                 }
                               }
-
+                              
                               let isMedActive = false
                               
                               if (isVitalsEntry) {
@@ -1146,36 +1229,36 @@ export default function ViewMARForm() {
                                         </div>
                                       ) : isEditing && (editingCell?.medId === med.id && editingCell?.day === day) ? (
                                         isVitalsEntry ? (
-                                          <input
-                                            type="text"
-                                            autoFocus
+                                        <input
+                                          type="text"
+                                          autoFocus
                                             value={editingCellValue}
                                             onChange={(e) => setEditingCellValue(e.target.value)}
-                                            onBlur={async (e) => {
+                                          onBlur={async (e) => {
                                               const enteredValue = e.target.value.trim()
                                               if (enteredValue) {
                                                 await updateAdministration(med.id, day, 'Given', enteredValue)
-                                              }
-                                              setEditingCell(null)
+                                            }
+                                            setEditingCell(null)
                                               setEditingCellValue('')
-                                            }}
-                                            onKeyDown={async (e) => {
-                                              if (e.key === 'Enter') {
+                                          }}
+                                          onKeyDown={async (e) => {
+                                            if (e.key === 'Enter') {
                                                 const enteredValue = editingCellValue.trim()
                                                 if (enteredValue) {
                                                   await updateAdministration(med.id, day, 'Given', enteredValue)
-                                                }
-                                                setEditingCell(null)
-                                                setEditingCellValue('')
-                                              } else if (e.key === 'Escape') {
-                                                setEditingCell(null)
-                                                setEditingCellValue('')
                                               }
-                                            }}
+                                              setEditingCell(null)
+                                                setEditingCellValue('')
+                                            } else if (e.key === 'Escape') {
+                                              setEditingCell(null)
+                                                setEditingCellValue('')
+                                            }
+                                          }}
                                             placeholder="Enter value"
                                             className="w-full text-center text-xs font-bold border-2 border-lasso-blue rounded px-1 py-1 dark:bg-gray-700 dark:text-white"
-                                            onClick={(e) => e.stopPropagation()}
-                                          />
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
                                         ) : (
                                           (() => {
                                             const getUserInitials = () => {
@@ -1297,8 +1380,8 @@ export default function ViewMARForm() {
                   >
                     {marForm.diagnosis || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
                   </button>
-                </div>
-                <div>
+              </div>
+                  <div>
                   <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Allergies:</label>
                   <button
                     onClick={() => setShowEditPatientInfoModal(true)}
@@ -1306,19 +1389,19 @@ export default function ViewMARForm() {
                   >
                     {marForm.allergies || 'None'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
                   </button>
-                </div>
-                <div>
+                  </div>
+                  <div>
                   <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Name:</label>
-                  <div className="text-sm font-medium text-gray-800 dark:text-white">{marForm.patient_name}</div>
+                    <div className="text-sm font-medium text-gray-800 dark:text-white">{marForm.patient_name}</div>
+                  </div>
                 </div>
-              </div>
 
               {/* Column 2: Diet, Physician Name, Phone Number */}
               <div className="space-y-3 p-4 rounded-lg bg-lasso-teal/5 dark:bg-lasso-teal/10">
-                <div>
+                  <div>
                   <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">
-                    DIET (Special Instructions, e.g. Texture, Bite Size, Position, etc.):
-                  </label>
+                      DIET (Special Instructions, e.g. Texture, Bite Size, Position, etc.):
+                    </label>
                   <button
                     onClick={() => setShowEditPatientInfoModal(true)}
                     className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors min-h-[60px]"
@@ -1354,7 +1437,7 @@ export default function ViewMARForm() {
                 <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Comments:</label>
                 {editingComments ? (
                   <div className="space-y-2">
-                    <textarea
+                      <textarea
                       value={commentsValue}
                       onChange={(e) => setCommentsValue(e.target.value)}
                       placeholder="Enter comments or notes..."
@@ -1379,7 +1462,7 @@ export default function ViewMARForm() {
                       >
                         Cancel
                       </button>
-                    </div>
+                  </div>
                   </div>
                 ) : (
                   <div
@@ -1396,16 +1479,16 @@ export default function ViewMARForm() {
                     )}
                   </div>
                 )}
-              </div>
+                </div>
 
               {/* Column 2: Instructions */}
               <div className="text-xs text-gray-700 dark:text-gray-300 space-y-1 p-4 rounded-lg bg-lasso-navy/5 dark:bg-lasso-navy/10">
                 <div><strong className="font-bold uppercase">Instructions:</strong></div>
-                <div>A. Put initials in appropriate box when medication is given.</div>
-                <div>B. Circle initials when not given.</div>
-                <div>C. State reason for refusal / omission on back of form.</div>
-                <div>D. PRN Medications: Reason given and results must be noted on back of form.</div>
-              </div>
+                    <div>A. Put initials in appropriate box when medication is given.</div>
+                    <div>B. Circle initials when not given.</div>
+                    <div>C. State reason for refusal / omission on back of form.</div>
+                    <div>D. PRN Medications: Reason given and results must be noted on back of form.</div>
+                  </div>
 
               {/* Column 3: Legend */}
               <div className="text-xs text-gray-700 dark:text-gray-300 p-4 rounded-lg bg-lasso-teal/5 dark:bg-lasso-teal/10">
@@ -1443,22 +1526,22 @@ export default function ViewMARForm() {
                       </>
                     )
                   })()}
-                </div>
+                    </div>
               </div>
 
               {/* Column 4: Date of Birth, Sex */}
               <div className="space-y-3 text-xs p-4 rounded-lg bg-lasso-blue/5 dark:bg-lasso-blue/10">
-                <div>
+                    <div>
                   <label className="block font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Date of Birth:</label>
-                  <div className="text-gray-800 dark:text-white">{new Date(marForm.date_of_birth).toLocaleDateString()}</div>
-                </div>
-                <div>
+                      <div className="text-gray-800 dark:text-white">{new Date(marForm.date_of_birth).toLocaleDateString()}</div>
+                    </div>
+                    <div>
                   <label className="block font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Sex:</label>
-                  <div className="text-gray-800 dark:text-white">{marForm.sex}</div>
+                      <div className="text-gray-800 dark:text-white">{marForm.sex}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
 
           {/* PRN Records Section */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mt-8">
@@ -1472,7 +1555,7 @@ export default function ViewMARForm() {
                 >
                   + Add PRN Record
                 </button>
-              </div>
+            </div>
 
               {prnRecords.length === 0 ? (
                 <p className="text-gray-500 dark:text-gray-400 text-sm italic">
@@ -1502,11 +1585,87 @@ export default function ViewMARForm() {
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
                             {new Date(prn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </td>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
-                            {prn.hour || '—'}
+                          <td 
+                            className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                            onClick={() => handlePRNFieldEdit(prn.id, 'hour', prn.hour)}
+                          >
+                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'hour' ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editingPRNValue}
+                                  onChange={(e) => setEditingPRNValue(e.target.value)}
+                                  onBlur={() => handlePRNFieldSave(prn.id, 'hour')}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handlePRNFieldSave(prn.id, 'hour')
+                                    } else if (e.key === 'Escape') {
+                                      handlePRNFieldCancel()
+                                    }
+                                  }}
+                                  autoFocus
+                                  placeholder="e.g., 14:00 or 2:00 PM"
+                                  className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            ) : (
+                              <span>{prn.hour || '—'}</span>
+                            )}
                           </td>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
-                            {prn.initials || '—'}
+                          <td 
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
+                              prn.hour && prn.result ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
+                            }`}
+                            onClick={() => {
+                              if (prn.hour && prn.result) {
+                                // If initials is empty, auto-populate and save immediately
+                                if (!prn.initials) {
+                                  let userInitials = ''
+                                  if (userProfile?.staff_initials) {
+                                    userInitials = userProfile.staff_initials.toUpperCase()
+                                  } else if (userProfile?.full_name) {
+                                    const names = userProfile.full_name.trim().split(/\s+/)
+                                    if (names.length >= 2) {
+                                      userInitials = (names[0][0] + names[names.length - 1][0]).toUpperCase()
+                                    } else if (names.length === 1) {
+                                      userInitials = names[0][0].toUpperCase()
+                                    }
+                                  }
+                                  if (userInitials) {
+                                    updatePRNRecord(prn.id, 'initials', userInitials)
+                                    return
+                                  }
+                                }
+                                handlePRNFieldEdit(prn.id, 'initials', prn.initials)
+                              }
+                            }}
+                            title={!prn.hour || !prn.result ? 'Time and Result must be filled first' : ''}
+                          >
+                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'initials' ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editingPRNValue}
+                                  onChange={(e) => setEditingPRNValue(e.target.value.toUpperCase())}
+                                  onBlur={() => handlePRNFieldSave(prn.id, 'initials')}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handlePRNFieldSave(prn.id, 'initials')
+                                    } else if (e.key === 'Escape') {
+                                      handlePRNFieldCancel()
+                                    }
+                                  }}
+                                  autoFocus
+                                  placeholder="e.g., JD"
+                                  maxLength={4}
+                                  className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            ) : (
+                              <span>{prn.initials || '—'}</span>
+                            )}
                           </td>
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
                             {prn.medication || '—'}
@@ -1514,11 +1673,68 @@ export default function ViewMARForm() {
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
                             {prn.reason || '—'}
                           </td>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
-                            {prn.result || '—'}
+                          <td 
+                            className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                            onClick={() => handlePRNFieldEdit(prn.id, 'result', prn.result)}
+                          >
+                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'result' ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editingPRNValue}
+                                  onChange={(e) => setEditingPRNValue(e.target.value)}
+                                  onBlur={() => handlePRNFieldSave(prn.id, 'result')}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handlePRNFieldSave(prn.id, 'result')
+                                    } else if (e.key === 'Escape') {
+                                      handlePRNFieldCancel()
+                                    }
+                                  }}
+                                  autoFocus
+                                  placeholder="e.g., Pain relieved within 30 mins"
+                                  className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            ) : (
+                              <span>{prn.result || '—'}</span>
+                            )}
                           </td>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
-                            {prn.staff_signature || '—'}
+                          <td 
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
+                              prn.initials ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50'
+                            }`}
+                            onClick={() => {
+                              if (prn.initials) {
+                                handlePRNFieldEdit(prn.id, 'staff_signature', prn.staff_signature)
+                              }
+                            }}
+                            title={!prn.initials ? 'Initials must be set first' : ''}
+                          >
+                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'staff_signature' ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editingPRNValue}
+                                  onChange={(e) => setEditingPRNValue(e.target.value)}
+                                  onBlur={() => handlePRNFieldSave(prn.id, 'staff_signature')}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handlePRNFieldSave(prn.id, 'staff_signature')
+                                    } else if (e.key === 'Escape') {
+                                      handlePRNFieldCancel()
+                                    }
+                                  }}
+                                  autoFocus
+                                  placeholder="e.g., J. Smith, RN"
+                                  className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            ) : (
+                              <span>{prn.staff_signature || '—'}</span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -2458,15 +2674,15 @@ function AddPRNRecordForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Date *
-        </label>
-        <input
-          type="date"
-          value={formData.date}
-          onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-          required
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Date *
+          </label>
+          <input
+            type="date"
+            value={formData.date}
+            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+            required
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
       </div>
