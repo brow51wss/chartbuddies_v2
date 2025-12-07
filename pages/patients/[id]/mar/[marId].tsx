@@ -619,7 +619,7 @@ export default function ViewMARForm() {
       await loadMARForm()
       const displayDay = startDateParts.length === 3 ? parseInt(startDateParts[2], 10) : 'N/A'
       const freqMessage = frequency > 1 ? ` (${frequency} times per day)` : ''
-      setMessage(`Medication added successfully${freqMessage}! Initials "${medData.initials}" recorded for start date (day ${displayDay}).`)
+      setMessage(`Medication added successfully${freqMessage}!`)
       setTimeout(() => setMessage(''), 5000)
     } catch (err: any) {
       console.error('Error adding medication:', err)
@@ -2576,8 +2576,6 @@ function AddMedicationOrVitalsForm({
   defaultType?: 'medication' | 'vitals'
 }) {
   const [entryType, setEntryType] = useState<'medication' | 'vitals'>(defaultType)
-  const [initialsType, setInitialsType] = useState<'initials' | 'legend'>('initials')
-  const [selectedLegend, setSelectedLegend] = useState<string>('')
   const [medicationData, setMedicationData] = useState({
     medicationName: '',
     dosage: '',
@@ -2585,7 +2583,7 @@ function AddMedicationOrVitalsForm({
     stopDate: '',
     hour: defaultHour,
     notes: '',
-    initials: defaultInitials,
+    initials: '', // No longer collected from form, will be empty
     frequency: 1, // Number of times per day
     times: [] as string[] // Array of times for each frequency
   })
@@ -2597,16 +2595,6 @@ function AddMedicationOrVitalsForm({
     hour: defaultHour
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  // Default legends for MAR forms
-  const defaultLegends = [
-    { code: 'DC', description: 'Discontinued' },
-    { code: 'G', description: 'Given' },
-    { code: 'NG', description: 'Not Given' },
-    { code: 'PRN', description: 'As Needed' },
-    { code: 'H', description: 'Held' },
-    { code: 'R', description: 'Refused' }
-  ]
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -2632,15 +2620,7 @@ function AddMedicationOrVitalsForm({
           return
         }
       }
-      // Validate initials/legend selection
-      if (initialsType === 'initials' && !medicationData.initials.trim()) {
-        alert('Please enter initials or select a legend')
-        return
-      }
-      if (initialsType === 'legend' && !selectedLegend) {
-        alert('Please select a legend code')
-        return
-      }
+      // No longer validating initials/legend - they are optional
     } else {
       if (!vitalsData.notes.trim() || !vitalsData.startDate || !vitalsData.hour) {
         alert('Please fill in all required fields')
@@ -2650,10 +2630,8 @@ function AddMedicationOrVitalsForm({
 
     setIsSubmitting(true)
     try {
-      // Determine the final initials value based on selection
-      const finalInitials = initialsType === 'initials' 
-        ? medicationData.initials.trim().toUpperCase()
-        : selectedLegend
+      // Initials are no longer collected from form - use empty string
+      const finalInitials = ''
 
       // For vitals, use the text value as-is (no uppercase conversion, no legend)
       const finalVitalsInitials = vitalsData.initials.trim()
@@ -2694,7 +2672,7 @@ function AddMedicationOrVitalsForm({
         stopDate: '',
         hour: defaultHour,
         notes: '',
-        initials: defaultInitials,
+        initials: '', // Reset to empty
         frequency: 1,
         times: []
       })
@@ -2705,8 +2683,6 @@ function AddMedicationOrVitalsForm({
         stopDate: '',
         hour: defaultHour
       })
-      setInitialsType('initials')
-      setSelectedLegend('')
     } catch (err) {
       console.error('Error submitting entry:', err)
     } finally {
@@ -2892,84 +2868,6 @@ function AddMedicationOrVitalsForm({
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Initials or Legend *
-            </label>
-            
-            {/* Radio buttons to choose between Initials or Legend */}
-            <div className="flex gap-4 mb-3">
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="initialsType"
-                  value="initials"
-                  checked={initialsType === 'initials'}
-                  onChange={(e) => {
-                    setInitialsType('initials')
-                    setSelectedLegend('')
-                  }}
-                  className="mr-2"
-                />
-                <span className="text-sm text-gray-700 dark:text-gray-300">Initials</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="initialsType"
-                  value="legend"
-                  checked={initialsType === 'legend'}
-                  onChange={(e) => {
-                    setInitialsType('legend')
-                    setMedicationData({ ...medicationData, initials: '' })
-                  }}
-                  className="mr-2"
-                />
-                <span className="text-sm text-gray-700 dark:text-gray-300">Legend</span>
-              </label>
-            </div>
-
-            {/* Show initials input if "Initials" is selected */}
-            {initialsType === 'initials' && (
-              <div>
-                <input
-                  type="text"
-                  value={medicationData.initials}
-                  onChange={(e) => setMedicationData({ ...medicationData, initials: e.target.value.toUpperCase() })}
-                  required
-                  placeholder="e.g., JD or JS"
-                  maxLength={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">This will be used as default when you manually enter initials in individual day cells</p>
-              </div>
-            )}
-
-            {/* Show legend radio buttons if "Legend" is selected */}
-            {initialsType === 'legend' && (
-              <div>
-                <div className="grid grid-cols-2 gap-3">
-                  {defaultLegends.map((legend) => (
-                    <label key={legend.code} className="flex items-center p-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="selectedLegend"
-                        value={legend.code}
-                        checked={selectedLegend === legend.code}
-                        onChange={(e) => setSelectedLegend(e.target.value)}
-                        className="mr-2"
-                      />
-                      <div className="flex-1">
-                        <span className="font-semibold text-gray-800 dark:text-gray-200">{legend.code}</span>
-                        <span className="text-xs text-gray-600 dark:text-gray-400 ml-2">- {legend.description}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Select a legend code to use as the default marker</p>
-              </div>
-            )}
-          </div>
         </>
       )}
 
@@ -3049,21 +2947,6 @@ function AddMedicationOrVitalsForm({
         </>
       )}
 
-      {/* Legends Section */}
-      <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">MAR Legends</h3>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          {defaultLegends.map((legend) => (
-            <div key={legend.code} className="flex items-start">
-              <span className="font-semibold text-gray-800 dark:text-gray-200 mr-2 min-w-[2rem]">{legend.code}:</span>
-              <span className="text-gray-600 dark:text-gray-400">{legend.description}</span>
-            </div>
-          ))}
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">
-          These codes can be used when marking medication administration in the daily grid.
-        </p>
-      </div>
 
       <div className="flex justify-end space-x-3 pt-4">
         <button
