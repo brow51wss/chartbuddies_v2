@@ -40,6 +40,8 @@ export default function ViewMARForm() {
   const [commentsValue, setCommentsValue] = useState<string>('')
   const [editingPRNField, setEditingPRNField] = useState<{ recordId: string; field: string } | null>(null)
   const [editingPRNValue, setEditingPRNValue] = useState<string>('')
+  const [showLeaveConfirmModal, setShowLeaveConfirmModal] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
 
   useEffect(() => {
     // Wait for router to be ready
@@ -58,6 +60,88 @@ export default function ViewMARForm() {
       setLoading(false)
     }
   }, [router.isReady, router.query.marId])
+
+  // Handle browser back button and navigation
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = '' // Chrome requires returnValue to be set
+      return '' // Some browsers require return value
+    }
+
+    // Handle browser back/forward button
+    const handlePopState = (e: PopStateEvent) => {
+      e.preventDefault()
+      setShowLeaveConfirmModal(true)
+      // Push current state back to prevent navigation
+      window.history.pushState(null, '', window.location.href)
+    }
+
+    // Push a state to track navigation
+    window.history.pushState(null, '', window.location.href)
+
+    // Listen for browser back/forward/refresh
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    window.addEventListener('popstate', handlePopState)
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [])
+
+  // Handle Next.js router navigation
+  useEffect(() => {
+    let shouldBlockNavigation = true
+
+    const handleRouteChangeStart = (url: string) => {
+      // Don't show modal if navigating to the same page
+      if (url === router.asPath) return
+      
+      if (shouldBlockNavigation) {
+        // Show confirmation modal
+        setPendingNavigation(url)
+        setShowLeaveConfirmModal(true)
+        
+        // Prevent navigation
+        router.events.emit('routeChangeError', new Error('Navigation cancelled'), url)
+        throw 'Navigation cancelled'
+      }
+    }
+
+    router.events.on('routeChangeStart', handleRouteChangeStart)
+
+    return () => {
+      router.events.off('routeChangeStart', handleRouteChangeStart)
+    }
+  }, [router, router.asPath])
+
+  const handleConfirmLeave = async () => {
+    setShowLeaveConfirmModal(false)
+    const navUrl = pendingNavigation
+    setPendingNavigation(null)
+    
+    // Small delay to ensure modal closes before navigation
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    if (navUrl) {
+      // Use window.location for external navigation or router.push for internal
+      if (navUrl.startsWith('http')) {
+        window.location.href = navUrl
+      } else {
+        // Temporarily disable navigation blocking
+        router.push(navUrl)
+      }
+    } else {
+      // Browser back button - go back
+      window.history.back()
+    }
+  }
+
+  const handleCancelLeave = () => {
+    setShowLeaveConfirmModal(false)
+    setPendingNavigation(null)
+  }
 
   const loadUserProfile = async () => {
     const profile = await getCurrentUserProfile()
@@ -2026,6 +2110,50 @@ export default function ViewMARForm() {
               onCancel={() => setShowAddPRNModal(false)}
               defaultDate={new Date().toISOString().split('T')[0]}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Leave Confirmation Modal */}
+      {showLeaveConfirmModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCancelLeave()
+            }
+          }}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Leave This Page?</h2>
+              <button
+                onClick={handleCancelLeave}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mb-6">
+              <p className="text-gray-700 dark:text-gray-300">
+                Are you sure you want to leave this page? Any unsaved changes may be lost.
+              </p>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleCancelLeave}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+              >
+                Stay on Page
+              </button>
+              <button
+                onClick={handleConfirmLeave}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+              >
+                Leave Page
+              </button>
+            </div>
           </div>
         </div>
       )}
