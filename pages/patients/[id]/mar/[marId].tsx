@@ -1672,7 +1672,7 @@ export default function ViewMARForm() {
                                                       setEditingAdministrationNote({ medId: med.id, day, note: notes })
                                                       setShowAdministrationNoteModal(true)
                                                     }}
-                                                    className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap z-10 relative"
+                                                    className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap relative z-0"
                                                     title={notes ? 'Edit note' : 'Add note'}
                                                   >
                                                     {notes ? '📝' : '+'} note

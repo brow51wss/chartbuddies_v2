@@ -95,10 +95,15 @@ export default function PatientForms() {
 
       if (error) throw error
 
-      // Filter out vitals entries
+      // Separate medications and vitals
       const filteredMeds = (medications || []).filter(med => {
         const isVitals = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
         return !isVitals
+      })
+
+      const vitalsEntries = (medications || []).filter(med => {
+        const isVitals = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
+        return isVitals
       })
 
       // Group medications by medication_name, dosage, start_date, stop_date, route, notes, parameter, frequency, frequency_display
@@ -136,7 +141,25 @@ export default function PatientForms() {
         }
       })
 
-      setMedicationsToDuplicate(medsToDuplicate)
+      // Add vitals entries (they don't need grouping)
+      const vitalsToDuplicate = vitalsEntries.map(vital => ({
+        id: vital.id,
+        medication_name: vital.medication_name,
+        dosage: vital.dosage, // This contains the vital sign instructions
+        start_date: vital.start_date,
+        stop_date: vital.stop_date,
+        hours: [vital.hour], // Single hour for vitals
+        route: vital.route,
+        notes: vital.notes, // 'Vital Signs Entry'
+        parameter: vital.parameter,
+        frequency: vital.frequency || 1,
+        frequency_display: vital.frequency_display,
+        isVitals: true,
+        isGrouped: false
+      }))
+
+      // Combine medications and vitals - vitals first
+      setMedicationsToDuplicate([...vitalsToDuplicate, ...medsToDuplicate])
     } catch (err: any) {
       console.error('Error loading medications:', err)
       alert('Failed to load medications: ' + err.message)
@@ -468,82 +491,89 @@ export default function PatientForms() {
                   </thead>
                   <tbody>
                     {medicationsToDuplicate.map((med, index) => (
-                      <tr key={med.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${med.isGrouped || (med.hours.length > 1) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
-                        <td className={`border border-gray-300 dark:border-gray-600 px-3 py-2 ${med.isGrouped || (med.hours.length > 1) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
+                      <tr key={med.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${med.isGrouped || (med.hours.length > 1) ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${med.isVitals ? 'bg-green-50 dark:bg-green-900/20' : ''}`}>
+                        <td className={`border border-gray-300 dark:border-gray-600 px-3 py-2 ${med.isGrouped || (med.hours.length > 1) ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${med.isVitals ? 'bg-green-50 dark:bg-green-900/20' : ''}`}>
                           <div className="space-y-1">
                             <input
                               type="text"
                               value={med.medication_name}
                               onChange={(e) => updateMedicationInList(index, 'medication_name', e.target.value)}
-                              placeholder="Medication Name"
+                              placeholder={med.isVitals ? "VITALS" : "Medication Name"}
                               className="w-full text-sm px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                              disabled={med.isVitals} // VITALS name should not be changed
                             />
                             <input
                               type="text"
                               value={med.dosage}
                               onChange={(e) => updateMedicationInList(index, 'dosage', e.target.value)}
-                              placeholder="Dosage"
+                              placeholder={med.isVitals ? "Vital Signs Instructions" : "Dosage"}
                               className="w-full text-sm px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                             />
-                            <div className="flex gap-1">
-                              <select
-                                value={med.frequency || med.hours.length}
-                                onChange={(e) => {
-                                  const freq = parseInt(e.target.value, 10)
-                                  const currentHours = med.hours.length
-                                  
-                                  // Adjust hours array to match frequency
-                                  let newHours = [...med.hours]
-                                  if (freq > currentHours) {
-                                    // Add empty hours
-                                    for (let i = currentHours; i < freq; i++) {
-                                      newHours.push('')
+                            {!med.isVitals && (
+                              <div className="flex gap-1">
+                                <select
+                                  value={med.frequency || med.hours.length}
+                                  onChange={(e) => {
+                                    const freq = parseInt(e.target.value, 10)
+                                    const currentHours = med.hours.length
+                                    
+                                    // Adjust hours array to match frequency
+                                    let newHours = [...med.hours]
+                                    if (freq > currentHours) {
+                                      // Add empty hours
+                                      for (let i = currentHours; i < freq; i++) {
+                                        newHours.push('')
+                                      }
+                                    } else if (freq < currentHours) {
+                                      // Remove excess hours
+                                      newHours = newHours.slice(0, freq)
                                     }
-                                  } else if (freq < currentHours) {
-                                    // Remove excess hours
-                                    newHours = newHours.slice(0, freq)
-                                  }
-                                  
-                                  // Auto-populate frequency_display if empty
-                                  const defaultDisplay = `${freq} time${freq > 1 ? 's' : ''} per day`
-                                  
-                                  updateMedicationInList(index, 'frequency', freq)
-                                  updateMedicationInList(index, 'hours', newHours)
-                                  if (!med.frequency_display) {
-                                    updateMedicationInList(index, 'frequency_display', defaultDisplay)
-                                  }
-                                }}
-                                className="w-20 text-xs px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                              >
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
-                                  <option key={num} value={num}>{num}</option>
-                                ))}
-                              </select>
+                                    
+                                    // Auto-populate frequency_display if empty
+                                    const defaultDisplay = `${freq} time${freq > 1 ? 's' : ''} per day`
+                                    
+                                    updateMedicationInList(index, 'frequency', freq)
+                                    updateMedicationInList(index, 'hours', newHours)
+                                    if (!med.frequency_display) {
+                                      updateMedicationInList(index, 'frequency_display', defaultDisplay)
+                                    }
+                                  }}
+                                  className="w-20 text-xs px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                >
+                                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                                    <option key={num} value={num}>{num}</option>
+                                  ))}
+                                </select>
+                                <input
+                                  type="text"
+                                  value={med.frequency_display || ''}
+                                  onChange={(e) => updateMedicationInList(index, 'frequency_display', e.target.value || null)}
+                                  placeholder="Frequency display (e.g., 3 times per day)"
+                                  className="flex-1 text-xs px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                />
+                              </div>
+                            )}
+                            {!med.isVitals && (
                               <input
                                 type="text"
-                                value={med.frequency_display || ''}
-                                onChange={(e) => updateMedicationInList(index, 'frequency_display', e.target.value || null)}
-                                placeholder="Frequency display (e.g., 3 times per day)"
-                                className="flex-1 text-xs px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                value={med.notes || ''}
+                                onChange={(e) => updateMedicationInList(index, 'notes', e.target.value || null)}
+                                placeholder="Notes (optional)"
+                                className="w-full text-xs px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                               />
-                            </div>
-                            <input
-                              type="text"
-                              value={med.notes || ''}
-                              onChange={(e) => updateMedicationInList(index, 'notes', e.target.value || null)}
-                              placeholder="Notes (optional)"
-                              className="w-full text-xs px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                            />
-                            <input
-                              type="text"
-                              value={med.parameter || ''}
-                              onChange={(e) => updateMedicationInList(index, 'parameter', e.target.value || null)}
-                              placeholder="Parameter (optional)"
-                              className="w-full text-xs px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                            />
+                            )}
+                            {!med.isVitals && (
+                              <input
+                                type="text"
+                                value={med.parameter || ''}
+                                onChange={(e) => updateMedicationInList(index, 'parameter', e.target.value || null)}
+                                placeholder="Parameter (optional)"
+                                className="w-full text-xs px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                              />
+                            )}
                           </div>
                         </td>
-                        <td className={`border border-gray-300 dark:border-gray-600 px-3 py-2 ${med.isGrouped || (med.hours.length > 1) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
+                        <td className={`border border-gray-300 dark:border-gray-600 px-3 py-2 ${med.isGrouped || (med.hours.length > 1) ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${med.isVitals ? 'bg-green-50 dark:bg-green-900/20' : ''}`}>
                           <div className="space-y-1">
                             <input
                               type="date"
@@ -560,7 +590,7 @@ export default function PatientForms() {
                             />
                           </div>
                         </td>
-                        <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
+                        <td className={`border border-gray-300 dark:border-gray-600 px-3 py-2 ${med.isGrouped || (med.hours.length > 1) ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${med.isVitals ? 'bg-green-50 dark:bg-green-900/20' : ''}`}>
                           <div className="space-y-1">
                             {med.hours.map((hour, hourIndex) => (
                               <div key={hourIndex} className="flex gap-1 items-center">
@@ -571,7 +601,7 @@ export default function PatientForms() {
                                   placeholder="e.g., 09:00"
                                   className="flex-1 text-sm px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                 />
-                                {med.hours.length > 1 && (
+                                {med.hours.length > 1 && !med.isVitals && (
                                   <button
                                     type="button"
                                     onClick={() => removeHourFromGroup(index, hourIndex)}
@@ -583,23 +613,29 @@ export default function PatientForms() {
                                 )}
                               </div>
                             ))}
-                            <button
-                              type="button"
-                              onClick={() => addHourToGroup(index)}
-                              className="text-xs text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue px-1"
-                            >
-                              + Add Hour
-                            </button>
+                            {!med.isVitals && (
+                              <button
+                                type="button"
+                                onClick={() => addHourToGroup(index)}
+                                className="text-xs text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue px-1"
+                              >
+                                + Add Hour
+                              </button>
+                            )}
                           </div>
                         </td>
-                        <td className={`border border-gray-300 dark:border-gray-600 px-3 py-2 ${med.isGrouped || (med.hours.length > 1) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
-                          <input
-                            type="text"
-                            value={med.route || ''}
-                            onChange={(e) => updateMedicationInList(index, 'route', e.target.value || null)}
-                            placeholder="e.g., PO, IV"
-                            className="w-full text-sm px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                          />
+                        <td className={`border border-gray-300 dark:border-gray-600 px-3 py-2 ${med.isGrouped || (med.hours.length > 1) ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${med.isVitals ? 'bg-green-50 dark:bg-green-900/20' : ''}`}>
+                          {med.isVitals ? (
+                            <span className="text-gray-400 dark:text-gray-500 text-sm">—</span>
+                          ) : (
+                            <input
+                              type="text"
+                              value={med.route || ''}
+                              onChange={(e) => updateMedicationInList(index, 'route', e.target.value || null)}
+                              placeholder="e.g., PO, IV"
+                              className="w-full text-sm px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            />
+                          )}
                         </td>
                         <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center">
                           <button
