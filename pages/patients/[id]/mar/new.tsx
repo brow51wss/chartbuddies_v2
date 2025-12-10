@@ -619,7 +619,7 @@ export default function NewMARForm() {
                                     className="w-full text-xs px-1 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                   >
                                     <option value="Not Given">NG</option>
-                                    <option value="Given">G</option>
+                                    <option value="Given">Given</option>
                                     {/* PRN option hidden but kept for future use - uncomment to restore */}
                                     {/* <option value="PRN">PRN</option> */}
                                   </select>
@@ -639,7 +639,7 @@ export default function NewMARForm() {
                           </div>
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                          G = Given, NG = Not Given
+                          NG = Not Given
                           {/* PRN = As Needed (hidden) */}
                         </p>
                       </div>

@@ -88,3 +88,12 @@ export interface MARFormData extends MARForm {
   vital_signs: MARVitalSigns[]
 }
 
+export interface MARCustomLegend {
+  id: string
+  user_id: string
+  code: string
+  description: string
+  created_at: string
+  updated_at: string
+}
+

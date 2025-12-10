@@ -5,7 +5,7 @@ import Link from 'next/link'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../../../../lib/auth'
-import type { MARForm, MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns } from '../../../../types/mar'
+import type { MARForm, MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns, MARCustomLegend } from '../../../../types/mar'
 
 export default function ViewMARForm() {
   const router = useRouter()
@@ -48,6 +48,9 @@ export default function ViewMARForm() {
   const [editingMedicationParameter, setEditingMedicationParameter] = useState<{ medicationId: string; parameter: string | null } | null>(null)
   const [showAdministrationNoteModal, setShowAdministrationNoteModal] = useState(false)
   const [editingAdministrationNote, setEditingAdministrationNote] = useState<{ medId: string; day: number; note: string | null } | null>(null)
+  const [customLegends, setCustomLegends] = useState<Array<{ id: string; code: string; description: string }>>([])
+  const [showCustomLegendModal, setShowCustomLegendModal] = useState(false)
+  const [editingCustomLegend, setEditingCustomLegend] = useState<{ id: string | null; code: string; description: string } | null>(null)
   const allowNavigationRef = useRef(false)
 
   useEffect(() => {
@@ -183,6 +186,9 @@ export default function ViewMARForm() {
         } else if (showAdministrationNoteModal) {
           setShowAdministrationNoteModal(false)
           setEditingAdministrationNote(null)
+        } else if (showCustomLegendModal) {
+          setShowCustomLegendModal(false)
+          setEditingCustomLegend(null)
         } else if (showLeaveConfirmModal) {
           handleCancelLeave()
         }
@@ -193,11 +199,86 @@ export default function ViewMARForm() {
     return () => {
       window.removeEventListener('keydown', handleEscKey)
     }
-  }, [showAddMedModal, showEditPatientInfoModal, showVitalSignsModal, showAddPRNModal, showPRNNoteModal, showMedicationParameterModal, showAdministrationNoteModal, showLeaveConfirmModal])
+  }, [showAddMedModal, showEditPatientInfoModal, showVitalSignsModal, showAddPRNModal, showPRNNoteModal, showMedicationParameterModal, showAdministrationNoteModal, showCustomLegendModal, showLeaveConfirmModal])
 
   const loadUserProfile = async () => {
     const profile = await getCurrentUserProfile()
     setUserProfile(profile)
+  }
+
+  const loadCustomLegends = async () => {
+    if (!userProfile?.id) return
+    
+    try {
+      const { data, error } = await supabase
+        .from('mar_custom_legends')
+        .select('*')
+        .eq('user_id', userProfile.id)
+        .order('code', { ascending: true })
+
+      if (error) throw error
+      setCustomLegends(data || [])
+    } catch (err) {
+      console.error('Error loading custom legends:', err)
+    }
+  }
+
+  // Load custom legends when userProfile changes
+  useEffect(() => {
+    if (userProfile?.id) {
+      loadCustomLegends()
+    }
+  }, [userProfile?.id])
+
+  const saveCustomLegend = async (code: string, description: string, id: string | null = null) => {
+    if (!userProfile?.id) return
+
+    try {
+      if (id) {
+        // Update existing
+        const { error } = await supabase
+          .from('mar_custom_legends')
+          .update({ code: code.toUpperCase(), description, updated_at: new Date().toISOString() })
+          .eq('id', id)
+          .eq('user_id', userProfile.id)
+
+        if (error) throw error
+      } else {
+        // Create new
+        const { error } = await supabase
+          .from('mar_custom_legends')
+          .insert({ user_id: userProfile.id, code: code.toUpperCase(), description })
+
+        if (error) throw error
+      }
+
+      await loadCustomLegends()
+      setShowCustomLegendModal(false)
+      setEditingCustomLegend(null)
+    } catch (err: any) {
+      console.error('Error saving custom legend:', err)
+      alert(err.message || 'Failed to save custom legend')
+    }
+  }
+
+  const deleteCustomLegend = async (id: string) => {
+    if (!userProfile?.id) return
+
+    if (!confirm('Are you sure you want to delete this custom legend?')) return
+
+    try {
+      const { error } = await supabase
+        .from('mar_custom_legends')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userProfile.id)
+
+      if (error) throw error
+      await loadCustomLegends()
+    } catch (err: any) {
+      console.error('Error deleting custom legend:', err)
+      alert(err.message || 'Failed to delete custom legend')
+    }
   }
 
   const handleLogout = async () => {
@@ -1550,11 +1631,15 @@ export default function ViewMARForm() {
                                                   <option value={userInitials}>{userInitials} ({userProfile?.full_name || 'Your Initials'})</option>
                                                 )}
                                                 <option value="DC">DC (Discontinued)</option>
-                                                <option value="G">G (Given)</option>
                                                 <option value="NG">NG (Not Given)</option>
                                                 <option value="PRN">PRN (As Needed)</option>
                                                 <option value="H">H (Held)</option>
                                                 <option value="R">R (Refused)</option>
+                                                {customLegends.map(legend => (
+                                                  <option key={legend.id} value={legend.code}>
+                                                    {legend.code} ({legend.description})
+                                                  </option>
+                                                ))}
                                               </select>
                                             )
                                           })()
@@ -1793,11 +1878,36 @@ export default function ViewMARForm() {
                           <div className="font-semibold">{userInitials} = {userProfile?.full_name || 'Your Initials'}</div>
                         )}
                         <div>DC = Discontinued</div>
-                        <div>G = Given</div>
                         <div>NG = Not Given</div>
                         <div>PRN = As Needed</div>
                         <div>H = Held</div>
                         <div>R = Refused</div>
+                        {customLegends.map(legend => (
+                          <div key={legend.id} className="flex items-center justify-between group">
+                            <span className="text-gray-700 dark:text-gray-300">
+                              {legend.code} = {legend.description}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setEditingCustomLegend({ id: legend.id, code: legend.code, description: legend.description })
+                                setShowCustomLegendModal(true)
+                              }}
+                              className="opacity-0 group-hover:opacity-100 text-xs px-2 py-0.5 text-lasso-blue hover:text-lasso-teal transition-opacity"
+                              title="Edit"
+                            >
+                              ✏️
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => {
+                            setEditingCustomLegend({ id: null, code: '', description: '' })
+                            setShowCustomLegendModal(true)
+                          }}
+                          className="mt-2 text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors"
+                        >
+                          + Add Custom Legend
+                        </button>
                       </>
                     )
                   })()}
@@ -2505,6 +2615,113 @@ export default function ViewMARForm() {
                 Save Note
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Legend Modal */}
+      {showCustomLegendModal && editingCustomLegend && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">
+                {editingCustomLegend.id ? 'Edit Custom Legend' : 'Add Custom Legend'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowCustomLegendModal(false)
+                  setEditingCustomLegend(null)
+                }}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault()
+                if (editingCustomLegend) {
+                  await saveCustomLegend(
+                    editingCustomLegend.code,
+                    editingCustomLegend.description,
+                    editingCustomLegend.id
+                  )
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Code *
+                </label>
+                <input
+                  type="text"
+                  value={editingCustomLegend.code}
+                  onChange={(e) => setEditingCustomLegend({
+                    ...editingCustomLegend,
+                    code: e.target.value.toUpperCase()
+                  })}
+                  required
+                  maxLength={10}
+                  placeholder="e.g., ABC"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Short code (max 10 characters)</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Description *
+                </label>
+                <input
+                  type="text"
+                  value={editingCustomLegend.description}
+                  onChange={(e) => setEditingCustomLegend({
+                    ...editingCustomLegend,
+                    description: e.target.value
+                  })}
+                  required
+                  placeholder="e.g., Absent from Care"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+              </div>
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCustomLegendModal(false)
+                    setEditingCustomLegend(null)
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                >
+                  {editingCustomLegend.id ? 'Update' : 'Add'} Legend
+                </button>
+              </div>
+            </form>
+            {editingCustomLegend.id && (
+              <div className="mt-4 pt-4 border-t border-gray-300 dark:border-gray-600">
+                <button
+                  onClick={async () => {
+                    if (editingCustomLegend.id) {
+                      await deleteCustomLegend(editingCustomLegend.id)
+                      setShowCustomLegendModal(false)
+                      setEditingCustomLegend(null)
+                    }
+                  }}
+                  className="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  Delete Legend
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
