@@ -113,7 +113,7 @@ export default function PatientForms() {
                     Create and manage MAR forms for this patient
                   </p>
                   <Link
-                    href={`/patients/${id}/mar/new`}
+                    href={`/patients/${id}/mar`}
                     className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium"
                   >
                     + New MAR Form

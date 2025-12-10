@@ -66,6 +66,7 @@ export default function MARIndex() {
             .from('mar_forms')
             .insert({
               patient_id: patientId,
+              hospital_id: patient.hospital_id || profile.hospital_id || '',
               month_year: monthYear,
               patient_name: patient.patient_name,
               record_number: patient.record_number,
