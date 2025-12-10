@@ -31,6 +31,9 @@ export interface MARMedication {
   hour: string // Time format
   notes: string | null
   parameter: string | null
+  route: string | null
+  frequency: number | null
+  frequency_display: string | null
   created_at: string
   updated_at: string
 }

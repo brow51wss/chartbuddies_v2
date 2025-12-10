@@ -162,6 +162,39 @@ export default function ViewMARForm() {
     setPendingNavigation(null)
   }
 
+  // Handle ESC key to close modals
+  useEffect(() => {
+    const handleEscKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showAddMedModal) {
+          setShowAddMedModal(false)
+        } else if (showEditPatientInfoModal) {
+          setShowEditPatientInfoModal(false)
+        } else if (showVitalSignsModal) {
+          setShowVitalSignsModal(false)
+        } else if (showAddPRNModal) {
+          setShowAddPRNModal(false)
+        } else if (showPRNNoteModal) {
+          setShowPRNNoteModal(false)
+          setEditingPRNNote(null)
+        } else if (showMedicationParameterModal) {
+          setShowMedicationParameterModal(false)
+          setEditingMedicationParameter(null)
+        } else if (showAdministrationNoteModal) {
+          setShowAdministrationNoteModal(false)
+          setEditingAdministrationNote(null)
+        } else if (showLeaveConfirmModal) {
+          handleCancelLeave()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleEscKey)
+    return () => {
+      window.removeEventListener('keydown', handleEscKey)
+    }
+  }, [showAddMedModal, showEditPatientInfoModal, showVitalSignsModal, showAddPRNModal, showPRNNoteModal, showMedicationParameterModal, showAdministrationNoteModal, showLeaveConfirmModal])
+
   const loadUserProfile = async () => {
     const profile = await getCurrentUserProfile()
     setUserProfile(profile)
@@ -531,6 +564,8 @@ export default function ViewMARForm() {
     initials: string
     frequency: number
     times?: string[] // Optional array of times for each frequency
+    route: string | null
+    frequencyDisplay: string | null
   }) => {
     if (!userProfile || !marForm || !marFormId) return
     
@@ -555,7 +590,10 @@ export default function ViewMARForm() {
           start_date: medData.startDate,
           stop_date: medData.stopDate,
           hour: hour,
-          notes: medData.notes
+          notes: medData.notes,
+          route: medData.route,
+          frequency: frequency,
+          frequency_display: medData.frequencyDisplay
         })
       }
       
@@ -941,7 +979,7 @@ export default function ViewMARForm() {
 
   // Header component (reusable)
   const Header = () => (
-    <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
+    <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-[999]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -1178,6 +1216,7 @@ export default function ViewMARForm() {
                     <col className="w-[200px]" /> {/* Medication */}
                     <col className="w-[120px]" /> {/* Start/Stop Date */}
                     <col className="w-[80px]" /> {/* Hour */}
+                    <col className="w-[100px]" /> {/* Route */}
                   </colgroup>
                   <thead>
                     <tr className="bg-gray-100 dark:bg-gray-700">
@@ -1189,6 +1228,9 @@ export default function ViewMARForm() {
                       </th>
                       <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-[320px] z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500" style={{ minWidth: '80px' }}>
                         Hour
+                      </th>
+                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-[400px] z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500" style={{ minWidth: '100px' }}>
+                        Route
                       </th>
                       {/* Days 1-31 */}
                       {days.map(day => (
@@ -1205,7 +1247,7 @@ export default function ViewMARForm() {
                   <tbody>
                     {medications.length === 0 ? (
                       <tr>
-                        <td colSpan={34} className="border border-gray-300 dark:border-gray-600 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={35} className="border border-gray-300 dark:border-gray-600 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                           No medications recorded. Click "+ Medication" to add one.
                         </td>
                       </tr>
@@ -1273,7 +1315,12 @@ export default function ViewMARForm() {
                                   </div>
                                   <div className={`text-xs mt-1 ${isVitalsEntry ? 'text-lasso-blue dark:text-lasso-blue italic' : 'text-gray-600 dark:text-gray-400'}`}>
                                     {med.dosage}
-                              </div>
+                                  </div>
+                                  {med.frequency && med.frequency > 0 && !isVitalsEntry && (
+                                    <div className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+                                      {med.frequency_display || `${med.frequency} time${med.frequency > 1 ? 's' : ''} per day`}
+                                    </div>
+                                  )}
                               {med.notes && !isVitalsEntry && (
                                 <div className="text-xs text-gray-500 dark:text-gray-500 mt-1 italic">
                                   {med.notes}
@@ -1329,6 +1376,14 @@ export default function ViewMARForm() {
                                   />
                               )}
                             </td>
+                            {shouldMerge && !isFirstRow ? null : (
+                              <td 
+                                rowSpan={shouldMerge ? group.rowSpan : undefined}
+                                className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[400px] z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500"
+                              >
+                                {isVitalsEntry ? '—' : (med.route || '—')}
+                              </td>
+                            )}
                             {days.map(day => {
                               const admin = medAdmin[day]
                               const status = admin?.status || 'Not Given'
@@ -2016,12 +2071,7 @@ export default function ViewMARForm() {
       {/* Add Medication/Vitals Modal */}
       {showAddMedModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowAddMedModal(false)
-            }
-          }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
@@ -2075,12 +2125,7 @@ export default function ViewMARForm() {
       {/* Edit Patient Info Modal */}
       {showEditPatientInfoModal && marForm && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowEditPatientInfoModal(false)
-            }
-          }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
@@ -2205,12 +2250,7 @@ export default function ViewMARForm() {
       {/* Vital Signs Modal */}
       {showVitalSignsModal && marForm && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowVitalSignsModal(false)
-            }
-          }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
@@ -2262,12 +2302,7 @@ export default function ViewMARForm() {
       {/* Add PRN Record Modal */}
       {showAddPRNModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowAddPRNModal(false)
-            }
-          }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -2300,13 +2335,7 @@ export default function ViewMARForm() {
       {/* PRN Note Modal */}
       {showPRNNoteModal && editingPRNNote && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowPRNNoteModal(false)
-              setEditingPRNNote(null)
-            }
-          }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -2365,13 +2394,7 @@ export default function ViewMARForm() {
       {/* Medication Parameter Modal */}
       {showMedicationParameterModal && editingMedicationParameter && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowMedicationParameterModal(false)
-              setEditingMedicationParameter(null)
-            }
-          }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -2430,13 +2453,7 @@ export default function ViewMARForm() {
       {/* Administration Note Modal (for R - Refused) */}
       {showAdministrationNoteModal && editingAdministrationNote && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowAdministrationNoteModal(false)
-              setEditingAdministrationNote(null)
-            }
-          }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -2495,12 +2512,7 @@ export default function ViewMARForm() {
       {/* Leave Confirmation Modal */}
       {showLeaveConfirmModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              handleCancelLeave()
-            }
-          }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -2560,6 +2572,8 @@ function AddMedicationOrVitalsForm({
       initials: string
       frequency: number
       times?: string[]
+      route: string | null
+      frequencyDisplay: string | null
     }
     vitalsData?: {
       notes: string
@@ -2585,7 +2599,9 @@ function AddMedicationOrVitalsForm({
     notes: '',
     initials: '', // No longer collected from form, will be empty
     frequency: 1, // Number of times per day
-    times: [] as string[] // Array of times for each frequency
+    times: [] as string[], // Array of times for each frequency
+    route: '', // Route of administration
+    frequencyDisplay: '1 time per day' // Custom frequency display text (e.g., "Daily 3x", "TID") - auto-populated with default
   })
   const [vitalsData, setVitalsData] = useState({
     notes: '',
@@ -2654,7 +2670,9 @@ function AddMedicationOrVitalsForm({
           notes: medicationData.notes || null,
           initials: finalInitials,
           frequency: medicationData.frequency,
-          times: times
+          times: times,
+          route: medicationData.route || null,
+          frequencyDisplay: medicationData.frequencyDisplay || null
         } : undefined,
         vitalsData: entryType === 'vitals' ? {
           notes: vitalsData.notes,
@@ -2674,7 +2692,9 @@ function AddMedicationOrVitalsForm({
         notes: '',
         initials: '', // Reset to empty
         frequency: 1,
-        times: []
+        times: [],
+        route: '',
+        frequencyDisplay: '1 time per day'
       })
       setVitalsData({
         notes: '',
@@ -2754,6 +2774,19 @@ function AddMedicationOrVitalsForm({
             />
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Route
+            </label>
+            <input
+              type="text"
+              value={medicationData.route}
+              onChange={(e) => setMedicationData({ ...medicationData, route: e.target.value })}
+              placeholder="e.g., PO, IV, IM, SubQ"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -2793,7 +2826,14 @@ function AddMedicationOrVitalsForm({
                 const newTimes = Array.from({ length: freq }, (_, i) => 
                   medicationData.times[i] || (i === 0 ? medicationData.hour : '')
                 )
-                setMedicationData({ ...medicationData, frequency: freq, times: newTimes })
+                // Auto-populate frequency display with default format
+                const defaultDisplay = `${freq} time${freq > 1 ? 's' : ''} per day`
+                setMedicationData({ 
+                  ...medicationData, 
+                  frequency: freq, 
+                  times: newTimes,
+                  frequencyDisplay: medicationData.frequencyDisplay || defaultDisplay
+                })
               }}
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -2803,6 +2843,20 @@ function AddMedicationOrVitalsForm({
               ))}
             </select>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Select how many times per day this medication should be given</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Frequency Display Text (Optional)
+            </label>
+            <input
+              type="text"
+              value={medicationData.frequencyDisplay}
+              onChange={(e) => setMedicationData({ ...medicationData, frequencyDisplay: e.target.value })}
+              placeholder="e.g., Daily 3x, TID, Q8H, 3 times per day"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Custom frequency text to display in the chart. Leave empty to use default format.</p>
           </div>
 
           <div>
