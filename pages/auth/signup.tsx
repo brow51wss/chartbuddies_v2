@@ -382,7 +382,7 @@ export default function Signup() {
           {/* Brand Section */}
           <div className="text-center mb-8">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-              Create Account
+            Create Account
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Get started with your EHR system
@@ -460,7 +460,7 @@ export default function Signup() {
                 <label htmlFor="fullName" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Full Name
                 </label>
-                  <input
+                <input
                   id="fullName"
                   name="fullName"
                   type="text"
@@ -476,7 +476,7 @@ export default function Signup() {
                 <label htmlFor="email" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Email
                 </label>
-                  <input
+                <input
                   id="email"
                   name="email"
                   type="email"
@@ -492,7 +492,7 @@ export default function Signup() {
                 <label htmlFor="password" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Password
                 </label>
-                  <input
+                <input
                   id="password"
                   name="password"
                   type="password"
@@ -509,7 +509,7 @@ export default function Signup() {
                 <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Confirm Password
                 </label>
-                  <input
+                <input
                   id="confirmPassword"
                   name="confirmPassword"
                   type="password"
@@ -538,7 +538,7 @@ export default function Signup() {
                 <label htmlFor="inviteCode" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Invite Code (Optional)
                 </label>
-                  <input
+                <input
                   id="inviteCode"
                   name="inviteCode"
                   type="text"
