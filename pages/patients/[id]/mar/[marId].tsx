@@ -1476,6 +1476,7 @@ export default function ViewMARForm() {
                               const isDC = initials === 'DC'
                               const isRefused = initials === 'R'
                               const isHeld = initials === 'H'
+                              const hasParameter = !!med.parameter
 
                               // Check if this day is after a DC (Discontinued) day
                               let isDiscontinued = false
@@ -1657,9 +1658,30 @@ export default function ViewMARForm() {
                                             }`}
                                           >
                                             {isDC && !isDiscontinued && (
-                                              <div className="text-red-600 dark:text-red-400 font-bold text-xs">
-                                                DC
-                                              </div>
+                                              hasParameter ? (
+                                                <div className="flex flex-col items-center justify-center gap-1 w-full">
+                                                  <div className="flex items-center justify-center gap-1">
+                                                    <div className="text-red-600 dark:text-red-400 font-bold text-xs">
+                                                      DC
+                                                    </div>
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setEditingAdministrationNote({ medId: med.id, day, note: notes })
+                                                        setShowAdministrationNoteModal(true)
+                                                      }}
+                                                      className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap relative z-0"
+                                                      title={notes ? 'Edit note' : 'Add note'}
+                                                    >
+                                                      {notes ? '📝' : '+'} note
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <div className="text-red-600 dark:text-red-400 font-bold text-xs">
+                                                  DC
+                                                </div>
+                                              )
                                             )}
                                             {isRefused && !isDC && (
                                               <div className="flex flex-col items-center justify-center gap-1 w-full">
@@ -1702,20 +1724,84 @@ export default function ViewMARForm() {
                                               </div>
                                             )}
                                             {isGiven && !isDC && !isRefused && !isHeld && (
-                                            <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
-                                              {initials || '—'}
-                                            </div>
+                                              hasParameter && initials ? (
+                                                <div className="flex flex-col items-center justify-center gap-1 w-full">
+                                                  <div className="flex items-center justify-center gap-1">
+                                                    <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
+                                                      {initials}
+                                                    </div>
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setEditingAdministrationNote({ medId: med.id, day, note: notes })
+                                                        setShowAdministrationNoteModal(true)
+                                                      }}
+                                                      className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap relative z-0"
+                                                      title={notes ? 'Edit note' : 'Add note'}
+                                                    >
+                                                      {notes ? '📝' : '+'} note
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
+                                                  {initials || '—'}
+                                                </div>
+                                              )
                                           )}
                                             {isNotGiven && initials && !isDC && !isRefused && !isHeld && (
-                                            <div className="text-red-600 dark:text-red-400 font-bold">
-                                              ○{initials}
-                                            </div>
+                                              hasParameter ? (
+                                                <div className="flex flex-col items-center justify-center gap-1 w-full">
+                                                  <div className="flex items-center justify-center gap-1">
+                                                    <div className="text-red-600 dark:text-red-400 font-bold">
+                                                      ○{initials}
+                                                    </div>
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setEditingAdministrationNote({ medId: med.id, day, note: notes })
+                                                        setShowAdministrationNoteModal(true)
+                                                      }}
+                                                      className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap relative z-0"
+                                                      title={notes ? 'Edit note' : 'Add note'}
+                                                    >
+                                                      {notes ? '📝' : '+'} note
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <div className="text-red-600 dark:text-red-400 font-bold">
+                                                  ○{initials}
+                                                </div>
+                                              )
                                           )}
                                           {isPRN && (
-                                              <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
-                                              PRN
-                                              {initials && <div className="text-xs">{initials}</div>}
-                                            </div>
+                                              hasParameter ? (
+                                                <div className="flex flex-col items-center justify-center gap-1 w-full">
+                                                  <div className="flex items-center justify-center gap-1">
+                                                    <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
+                                                      PRN
+                                                    </div>
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setEditingAdministrationNote({ medId: med.id, day, note: notes })
+                                                        setShowAdministrationNoteModal(true)
+                                                      }}
+                                                      className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap relative z-0"
+                                                      title={notes ? 'Edit note' : 'Add note'}
+                                                    >
+                                                      {notes ? '📝' : '+'} note
+                                                    </button>
+                                                  </div>
+                                                  {initials && <div className="text-xs text-lasso-blue">{initials}</div>}
+                                                </div>
+                                              ) : (
+                                                <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
+                                                  PRN
+                                                  {initials && <div className="text-xs">{initials}</div>}
+                                                </div>
+                                              )
                                           )}
                                             {isNotGiven && !initials && !isDC && isEditing && (
                                             <div className="text-gray-400 cursor-text">—</div>
@@ -1730,6 +1816,16 @@ export default function ViewMARForm() {
                                             </div>
                                           )}
                                           {isHeld && notes && (
+                                            <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600 px-1">
+                                              {notes}
+                                            </div>
+                                          )}
+                                          {hasParameter && !isRefused && !isHeld && !isDC && notes && (
+                                            <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600 px-1">
+                                              {notes}
+                                            </div>
+                                          )}
+                                          {hasParameter && isDC && !isDiscontinued && notes && (
                                             <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600 px-1">
                                               {notes}
                                             </div>
