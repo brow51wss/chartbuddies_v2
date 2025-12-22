@@ -1475,6 +1475,7 @@ export default function ViewMARForm() {
                               const isPRN = status === 'PRN'
                               const isDC = initials === 'DC'
                               const isRefused = initials === 'R'
+                              const isHeld = initials === 'H'
 
                               // Check if this day is after a DC (Discontinued) day
                               let isDiscontinued = false
@@ -1680,12 +1681,32 @@ export default function ViewMARForm() {
                                                 </div>
                                               </div>
                                             )}
-                                            {isGiven && !isDC && !isRefused && (
+                                            {isHeld && !isDC && (
+                                              <div className="flex flex-col items-center justify-center gap-1 w-full">
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <div className="font-bold text-orange-600 dark:text-orange-400">
+                                                    H
+                                                  </div>
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation()
+                                                      setEditingAdministrationNote({ medId: med.id, day, note: notes })
+                                                      setShowAdministrationNoteModal(true)
+                                                    }}
+                                                    className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap relative z-0"
+                                                    title={notes ? 'Edit note' : 'Add note'}
+                                                  >
+                                                    {notes ? '📝' : '+'} note
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+                                            {isGiven && !isDC && !isRefused && !isHeld && (
                                             <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
                                               {initials || '—'}
                                             </div>
                                           )}
-                                            {isNotGiven && initials && !isDC && !isRefused && (
+                                            {isNotGiven && initials && !isDC && !isRefused && !isHeld && (
                                             <div className="text-red-600 dark:text-red-400 font-bold">
                                               ○{initials}
                                             </div>
@@ -1704,6 +1725,11 @@ export default function ViewMARForm() {
                                             )}
                                           </div>
                                           {isRefused && notes && (
+                                            <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600 px-1">
+                                              {notes}
+                                            </div>
+                                          )}
+                                          {isHeld && notes && (
                                             <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600 px-1">
                                               {notes}
                                             </div>
@@ -2560,7 +2586,7 @@ export default function ViewMARForm() {
         </div>
       )}
 
-      {/* Administration Note Modal (for R - Refused) */}
+      {/* Administration Note Modal (for R - Refused and H - Held) */}
       {showAdministrationNoteModal && editingAdministrationNote && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
@@ -2581,12 +2607,12 @@ export default function ViewMARForm() {
             </div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Note for Refused Medication
+                Administration Note
               </label>
               <textarea
                 value={editingAdministrationNote.note || ''}
                 onChange={(e) => setEditingAdministrationNote({ ...editingAdministrationNote, note: e.target.value })}
-                placeholder="Enter notes about why the medication was refused..."
+                placeholder="Enter notes about the medication administration..."
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 autoFocus
