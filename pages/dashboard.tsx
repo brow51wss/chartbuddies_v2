@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -18,6 +18,17 @@ interface EHRModule {
   route?: string
 }
 
+type SortColumn = 'date_of_birth' | 'created_at' | 'first_name' | 'last_name' | null
+type SortDirection = 'asc' | 'desc'
+
+// Helper to parse first/last name from full name
+const parsePatientName = (fullName: string) => {
+  const parts = fullName.trim().split(/\s+/)
+  const firstName = parts[0] || ''
+  const lastName = parts.length > 1 ? parts[parts.length - 1] : ''
+  return { firstName, lastName }
+}
+
 export default function Dashboard() {
   const router = useRouter()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
@@ -26,6 +37,108 @@ export default function Dashboard() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [selectedModule, setSelectedModule] = useState<string | null>(null)
+  const [sortColumn, setSortColumn] = useState<SortColumn>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [showNameSortMenu, setShowNameSortMenu] = useState(false)
+  const nameSortRef = useRef<HTMLTableCellElement>(null)
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (nameSortRef.current && !nameSortRef.current.contains(event.target as Node)) {
+        setShowNameSortMenu(false)
+      }
+    }
+
+    if (showNameSortMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showNameSortMenu])
+
+  // Sort patients based on current sort settings
+  const sortedPatients = [...patients].sort((a, b) => {
+    if (!sortColumn) return 0
+    
+    let compareA: string | number
+    let compareB: string | number
+    
+    if (sortColumn === 'first_name') {
+      compareA = parsePatientName(a.patient_name).firstName.toLowerCase()
+      compareB = parsePatientName(b.patient_name).firstName.toLowerCase()
+    } else if (sortColumn === 'last_name') {
+      compareA = parsePatientName(a.patient_name).lastName.toLowerCase()
+      compareB = parsePatientName(b.patient_name).lastName.toLowerCase()
+    } else {
+      // Date columns
+      compareA = new Date(a[sortColumn]).getTime()
+      compareB = new Date(b[sortColumn]).getTime()
+    }
+    
+    if (typeof compareA === 'string' && typeof compareB === 'string') {
+      const result = compareA.localeCompare(compareB)
+      return sortDirection === 'asc' ? result : -result
+    } else {
+      const result = (compareA as number) - (compareB as number)
+      return sortDirection === 'asc' ? result : -result
+    }
+  })
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      // Toggle direction if same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // Set new column with ascending direction
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+    setShowNameSortMenu(false)
+  }
+
+  const SortIcon = ({ column }: { column: SortColumn }) => {
+    if (sortColumn !== column) {
+      // Show neutral sort icon
+      return (
+        <svg className="w-4 h-4 ml-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      )
+    }
+    // Show directional arrow
+    return sortDirection === 'asc' ? (
+      <svg className="w-4 h-4 ml-1 text-lasso-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+      </svg>
+    ) : (
+      <svg className="w-4 h-4 ml-1 text-lasso-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    )
+  }
+
+  const NameSortIcon = () => {
+    const isNameSort = sortColumn === 'first_name' || sortColumn === 'last_name'
+    if (!isNameSort) {
+      return (
+        <svg className="w-4 h-4 ml-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      )
+    }
+    return sortDirection === 'asc' ? (
+      <svg className="w-4 h-4 ml-1 text-lasso-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+      </svg>
+    ) : (
+      <svg className="w-4 h-4 ml-1 text-lasso-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    )
+  }
 
   // Define EHR modules
   const modules: EHRModule[] = [
@@ -438,14 +551,83 @@ export default function Dashboard() {
                         <colgroup>
                           <col className="w-48" /> {/* Patient Name - ~192px */}
                           <col className="w-36" /> {/* Date of Birth - ~144px */}
+                          <col className="w-36" /> {/* Date Added - ~144px */}
                         </colgroup>
                         <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
                           <tr>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-0 z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600">
-                              Patient Name
+                            <th 
+                              ref={nameSortRef}
+                              className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-0 z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600 relative"
+                            >
+                              <div 
+                                className="flex items-center cursor-pointer hover:text-lasso-blue transition-colors select-none"
+                                onClick={() => setShowNameSortMenu(!showNameSortMenu)}
+                              >
+                                Patient Name
+                                <NameSortIcon />
+                                <svg className="w-3 h-3 ml-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </div>
+                              {(sortColumn === 'first_name' || sortColumn === 'last_name') && (
+                                <div className="text-[10px] text-lasso-blue font-normal normal-case mt-0.5">
+                                  by {sortColumn === 'first_name' ? 'First Name' : 'Last Name'}
+                                </div>
+                              )}
+                              {/* Dropdown Menu */}
+                              {showNameSortMenu && (
+                                <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50 min-w-[160px]">
+                                  <div className="py-1">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleSort('first_name'); }}
+                                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between ${sortColumn === 'first_name' ? 'text-lasso-blue font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+                                    >
+                                      <span>First Name</span>
+                                      {sortColumn === 'first_name' && (
+                                        <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                      )}
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleSort('last_name'); }}
+                                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between ${sortColumn === 'last_name' ? 'text-lasso-blue font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+                                    >
+                                      <span>Last Name</span>
+                                      {sortColumn === 'last_name' && (
+                                        <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                      )}
+                                    </button>
+                                    {(sortColumn === 'first_name' || sortColumn === 'last_name') && (
+                                      <>
+                                        <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setSortColumn(null); setShowNameSortMenu(false); }}
+                                          className="w-full px-4 py-2 text-left text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        >
+                                          Clear Sort
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-[192px] z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600">
-                              Date of Birth
+                            <th 
+                              className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-[192px] z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors select-none"
+                              onClick={() => handleSort('date_of_birth')}
+                            >
+                              <div className="flex items-center">
+                                Date of Birth
+                                <SortIcon column="date_of_birth" />
+                              </div>
+                            </th>
+                            <th 
+                              className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors select-none"
+                              onClick={() => handleSort('created_at')}
+                            >
+                              <div className="flex items-center">
+                                Date Added
+                                <SortIcon column="created_at" />
+                              </div>
                             </th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                               Diagnosis
@@ -456,7 +638,7 @@ export default function Dashboard() {
                           </tr>
                         </thead>
                         <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                          {patients.map((patient) => (
+                          {sortedPatients.map((patient) => (
                             <tr
                               key={patient.id}
                               className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-150"
@@ -469,6 +651,11 @@ export default function Dashboard() {
                               <td className="px-6 py-4 whitespace-nowrap sticky left-[192px] z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
                                 <div className="text-sm text-gray-600 dark:text-gray-400">
                                   {new Date(patient.date_of_birth).toLocaleDateString()}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">
+                                  {new Date(patient.created_at).toLocaleDateString()}
                                 </div>
                               </td>
                               <td className="px-6 py-4">

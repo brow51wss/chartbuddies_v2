@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
+import TimeInput from '../../../../components/TimeInput'
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../../lib/auth'
 import type { Patient } from '../../../../types/auth'
@@ -581,12 +582,10 @@ export default function NewMARForm() {
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Administration Time *
                           </label>
-                          <input
-                            type="time"
+                          <TimeInput
                             value={med.hour}
-                            onChange={(e) => updateMedication(medIndex, 'hour', e.target.value)}
+                            onChange={(newTime) => updateMedication(medIndex, 'hour', newTime)}
                             required
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div>
@@ -701,12 +700,10 @@ export default function NewMARForm() {
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Time *
                           </label>
-                          <input
-                            type="time"
+                          <TimeInput
                             value={prn.hour}
-                            onChange={(e) => updatePRNRecord(index, 'hour', e.target.value)}
+                            onChange={(newTime) => updatePRNRecord(index, 'hour', newTime)}
                             required
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           />
                         </div>
                         <div>

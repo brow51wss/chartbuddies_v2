@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
+import TimeInput, { formatTimeDisplay } from '../../../../components/TimeInput'
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../../../../lib/auth'
 import type { MARForm, MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns, MARCustomLegend } from '../../../../types/mar'
@@ -1427,35 +1428,34 @@ export default function ViewMARForm() {
                             </td>
                             )}
                             <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500">
-                              {isVitalsEntry ? '—' : (
-                                  <EditableHourField
-                                    medication={med}
-                                    onUpdate={async (newHour) => {
-                                      try {
-                                        setSaving(true)
-                                        const { error } = await supabase
-                                          .from('mar_medications')
-                                          .update({ hour: newHour })
-                                          .eq('id', med.id)
-                                        
-                                        if (error) throw error
-                                        
-                                        setMedications(prev => prev.map(m => 
-                                          m.id === med.id ? { ...m, hour: newHour } : m
-                                        ))
-                                        
-                                        setMessage('Medication time updated successfully')
-                                        setTimeout(() => setMessage(''), 2000)
-                                      } catch (err) {
-                                        console.error('Error updating medication hour:', err)
-                                        setError('Failed to update medication time')
+                              {/* Show time input for both medications and vitals */}
+                              <EditableHourField
+                                medication={med}
+                                onUpdate={async (newHour) => {
+                                  try {
+                                    setSaving(true)
+                                    const { error } = await supabase
+                                      .from('mar_medications')
+                                      .update({ hour: newHour })
+                                      .eq('id', med.id)
+                                    
+                                    if (error) throw error
+                                    
+                                    setMedications(prev => prev.map(m => 
+                                      m.id === med.id ? { ...m, hour: newHour } : m
+                                    ))
+                                    
+                                    setMessage(`${isVitalsEntry ? 'Vitals' : 'Medication'} time updated successfully`)
+                                    setTimeout(() => setMessage(''), 2000)
+                                  } catch (err) {
+                                    console.error('Error updating hour:', err)
+                                    setError(`Failed to update ${isVitalsEntry ? 'vitals' : 'medication'} time`)
                                         setTimeout(() => setError(''), 3000)
                                       } finally {
                                         setSaving(false)
                                       }
                                     }}
                                   />
-                              )}
                             </td>
                             {shouldMerge && !isFirstRow ? null : (
                               <td 
@@ -2097,27 +2097,28 @@ export default function ViewMARForm() {
                             onClick={() => handlePRNFieldEdit(prn.id, 'hour', prn.hour)}
                           >
                             {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'hour' ? (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="text"
+                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                <TimeInput
                                   value={editingPRNValue}
-                                  onChange={(e) => setEditingPRNValue(e.target.value)}
-                                  onBlur={() => handlePRNFieldSave(prn.id, 'hour')}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      handlePRNFieldSave(prn.id, 'hour')
-                                    } else if (e.key === 'Escape') {
-                                      handlePRNFieldCancel()
-                                    }
+                                  onChange={async (newTime) => {
+                                    setEditingPRNValue(newTime)
+                                    // Save directly with the new value (don't rely on state)
+                                    await updatePRNRecord(prn.id, 'hour', newTime.trim() || null)
+                                    setEditingPRNField(null)
+                                    setEditingPRNValue('')
                                   }}
-                                  autoFocus
-                                  placeholder="e.g., 14:00 or 2:00 PM"
-                                  className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
-                                  onClick={(e) => e.stopPropagation()}
+                                  compact
                                 />
+                                <button
+                                  type="button"
+                                  onClick={() => handlePRNFieldCancel()}
+                                  className="text-xs text-gray-500 hover:text-gray-700"
+                                >
+                                  ✕
+                                </button>
                               </div>
                             ) : (
-                              <span>{prn.hour || '—'}</span>
+                              <span>{prn.hour ? formatTimeDisplay(prn.hour) : '—'}</span>
                             )}
                           </td>
                           <td 
@@ -3204,29 +3205,25 @@ function AddMedicationOrVitalsForm({
             </label>
             {medicationData.frequency === 1 ? (
               <>
-                <input
-                  type="text"
+                <TimeInput
                   value={medicationData.hour}
-                  onChange={(e) => setMedicationData({ ...medicationData, hour: e.target.value })}
+                  onChange={(newTime) => setMedicationData({ ...medicationData, hour: newTime })}
                   required
-                  placeholder="e.g., 09:00 or 9:00 AM"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Format: HH:MM or HH:MM AM/PM</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Select hour, minute, and AM/PM</p>
               </>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {Array.from({ length: medicationData.frequency }, (_, i) => (
                   <div key={i}>
                     <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
                       Time {i + 1}:
                     </label>
-                    <input
-                      type="text"
+                    <TimeInput
                       value={medicationData.times[i] || ''}
-                      onChange={(e) => {
+                      onChange={(newTime) => {
                         const newTimes = [...medicationData.times]
-                        newTimes[i] = e.target.value
+                        newTimes[i] = newTime
                         // Ensure array is the right length
                         while (newTimes.length < medicationData.frequency) {
                           newTimes.push('')
@@ -3234,12 +3231,10 @@ function AddMedicationOrVitalsForm({
                         setMedicationData({ 
                           ...medicationData, 
                           times: newTimes,
-                          hour: i === 0 ? e.target.value : medicationData.hour // Keep first time as default hour
+                          hour: i === 0 ? newTime : medicationData.hour // Keep first time as default hour
                         })
                       }}
                       required
-                      placeholder={`e.g., ${i === 0 ? '09:00' : i === 1 ? '13:00' : i === 2 ? '18:00' : '21:00'}`}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                     />
                   </div>
                 ))}
@@ -3313,15 +3308,12 @@ function AddMedicationOrVitalsForm({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Administration Time *
             </label>
-            <input
-              type="text"
+            <TimeInput
               value={vitalsData.hour}
-              onChange={(e) => setVitalsData({ ...vitalsData, hour: e.target.value })}
+              onChange={(newTime) => setVitalsData({ ...vitalsData, hour: newTime })}
               required
-              placeholder="e.g., 09:00 or 9:00 AM"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Format: HH:MM or HH:MM AM/PM</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Select hour, minute, and AM/PM</p>
           </div>
 
           <div>
@@ -3369,32 +3361,29 @@ function EditableHourField({
   medication: MARMedication
   onUpdate: (newHour: string) => Promise<void>
 }) {
-  const [localHour, setLocalHour] = useState(medication.hour || '')
-  const [isEditing, setIsEditing] = useState(false)
+  // Track if user has interacted to prevent auto-updates on load
+  const [userInteracted, setUserInteracted] = useState(false)
 
-  useEffect(() => {
-    setLocalHour(medication.hour || '')
-  }, [medication.hour])
-
-  const handleBlur = async () => {
-    setIsEditing(false)
-    const trimmed = localHour.trim()
-    if (trimmed !== medication.hour) {
-      await onUpdate(trimmed)
+  const handleChange = async (newTime: string) => {
+    // Only update database if user has actually interacted
+    if (userInteracted) {
+      await onUpdate(newTime)
     }
   }
 
   return (
-    <input
-      type="text"
-      value={localHour}
-      onChange={(e) => setLocalHour(e.target.value)}
-      onFocus={() => setIsEditing(true)}
-      onBlur={handleBlur}
-      placeholder="e.g., 09:00"
-      className="w-full text-center text-xs border border-gray-300 rounded px-1 py-1 dark:bg-gray-700 dark:text-white dark:border-gray-600"
-      onClick={(e) => e.stopPropagation()}
-    />
+    <div 
+      onClick={(e) => {
+        e.stopPropagation()
+        setUserInteracted(true)
+      }}
+    >
+      <TimeInput
+        value={medication.hour || ''}
+        onChange={handleChange}
+        compact
+      />
+    </div>
   )
 }
 

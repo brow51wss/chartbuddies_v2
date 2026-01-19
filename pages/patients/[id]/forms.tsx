@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import TimeInput from '../../../components/TimeInput'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../lib/auth'
 import type { Patient } from '../../../types/auth'
@@ -591,22 +592,20 @@ export default function PatientForms() {
                           </div>
                         </td>
                         <td className={`border border-gray-300 dark:border-gray-600 px-3 py-2 ${med.isGrouped || (med.hours.length > 1) ? 'bg-blue-50 dark:bg-blue-900/20' : ''} ${med.isVitals ? 'bg-green-50 dark:bg-green-900/20' : ''}`}>
-                          <div className="space-y-1">
+                          <div className="space-y-2">
                             {med.hours.map((hour, hourIndex) => (
                               <div key={hourIndex} className="flex gap-1 items-center">
-                                <input
-                                  type="text"
+                                <TimeInput
                                   value={hour}
-                                  onChange={(e) => updateHourInGroup(index, hourIndex, e.target.value)}
-                                  placeholder="e.g., 09:00"
-                                  className="flex-1 text-sm px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                  onChange={(newTime) => updateHourInGroup(index, hourIndex, newTime)}
+                                  compact
                                 />
                                 {med.hours.length > 1 && !med.isVitals && (
                                   <button
                                     type="button"
                                     onClick={() => removeHourFromGroup(index, hourIndex)}
                                     className="text-red-600 hover:text-red-800 dark:text-red-400 text-xs px-1"
-                                    title="Remove hour"
+                                    title="Remove time"
                                   >
                                     ×
                                   </button>
@@ -619,7 +618,7 @@ export default function PatientForms() {
                                 onClick={() => addHourToGroup(index)}
                                 className="text-xs text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue px-1"
                               >
-                                + Add Hour
+                                + Add Time
                               </button>
                             )}
                           </div>
