@@ -156,6 +156,8 @@ export default function ViewMARForm() {
   const [editingPRNNote, setEditingPRNNote] = useState<{ recordId: string; note: string | null } | null>(null)
   const [showMedicationParameterModal, setShowMedicationParameterModal] = useState(false)
   const [editingMedicationParameter, setEditingMedicationParameter] = useState<{ medicationId: string; parameter: string | null } | null>(null)
+  const [showMedicationNotesModal, setShowMedicationNotesModal] = useState(false)
+  const [editingMedicationNotes, setEditingMedicationNotes] = useState<{ medicationId: string; notes: string | null } | null>(null)
   // Row hover state for add-between-rows feature
   const [rowHover, setRowHover] = useState<{ rowId: string; position: 'top' | 'bottom' } | null>(null)
   // Insert position for adding medication/vitals between rows
@@ -300,6 +302,9 @@ export default function ViewMARForm() {
         } else if (showMedicationParameterModal) {
           setShowMedicationParameterModal(false)
           setEditingMedicationParameter(null)
+        } else if (showMedicationNotesModal) {
+          setShowMedicationNotesModal(false)
+          setEditingMedicationNotes(null)
         } else if (showAdministrationNoteModal) {
           setShowAdministrationNoteModal(false)
           setEditingAdministrationNote(null)
@@ -319,7 +324,7 @@ export default function ViewMARForm() {
     return () => {
       window.removeEventListener('keydown', handleEscKey)
     }
-  }, [showAddMedModal, showEditPatientInfoModal, showVitalSignsModal, showAddPRNModal, showPRNNoteModal, showMedicationParameterModal, showAdministrationNoteModal, showCustomLegendModal, showDeleteConfirmModal, showLeaveConfirmModal])
+  }, [showAddMedModal, showEditPatientInfoModal, showVitalSignsModal, showAddPRNModal, showPRNNoteModal, showMedicationParameterModal, showMedicationNotesModal, showAdministrationNoteModal, showCustomLegendModal, showDeleteConfirmModal, showLeaveConfirmModal])
 
   const loadUserProfile = async () => {
     const profile = await getCurrentUserProfile()
@@ -630,6 +635,30 @@ export default function ViewMARForm() {
       setTimeout(() => setMessage(''), 3000)
     } catch (err: any) {
       setError(err.message || 'Failed to update medication parameter')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const updateMedicationNotes = async (medicationId: string, notes: string | null) => {
+    if (!marFormId) return
+    
+    try {
+      setSaving(true)
+      
+      const { error } = await supabase
+        .from('mar_medications')
+        .update({ notes: notes?.trim() || null })
+        .eq('id', medicationId)
+
+      if (error) throw error
+
+      await loadMARForm()
+      setMessage('Medication notes updated successfully!')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to update medication notes')
       setTimeout(() => setError(''), 5000)
     } finally {
       setSaving(false)
@@ -3319,6 +3348,66 @@ export default function ViewMARForm() {
                 className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal"
               >
                 Save Parameter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Medication Notes Modal */}
+      {showMedicationNotesModal && editingMedicationNotes && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Edit Notes</h2>
+              <button
+                onClick={() => {
+                  setShowMedicationNotesModal(false)
+                  setEditingMedicationNotes(null)
+                }}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Notes
+              </label>
+              <textarea
+                value={editingMedicationNotes.notes || ''}
+                onChange={(e) => setEditingMedicationNotes({ ...editingMedicationNotes, notes: e.target.value })}
+                placeholder="Enter additional notes about this medication..."
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                autoFocus
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Notes will appear under the frequency in the medication column.</p>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowMedicationNotesModal(false)
+                  setEditingMedicationNotes(null)
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (editingMedicationNotes) {
+                    await updateMedicationNotes(editingMedicationNotes.medicationId, editingMedicationNotes.notes?.trim() || null)
+                    setShowMedicationNotesModal(false)
+                    setEditingMedicationNotes(null)
+                  }
+                }}
+                className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+              >
+                Save Notes
               </button>
             </div>
           </div>
