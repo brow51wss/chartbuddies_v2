@@ -51,6 +51,9 @@ export default function ViewMARForm() {
   const [rowHover, setRowHover] = useState<{ rowId: string; position: 'top' | 'bottom' } | null>(null)
   // Insert position for adding medication/vitals between rows
   const [insertPosition, setInsertPosition] = useState<{ targetMedId: string; position: 'above' | 'below' } | null>(null)
+  // Delete confirmation state
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
+  const [deletingEntry, setDeletingEntry] = useState<{ id: string; name: string; dosage: string; isVitals: boolean } | null>(null)
   const [showAdministrationNoteModal, setShowAdministrationNoteModal] = useState(false)
   const [editingAdministrationNote, setEditingAdministrationNote] = useState<{ medId: string; day: number; note: string | null } | null>(null)
   const [customLegends, setCustomLegends] = useState<Array<{ id: string; code: string; description: string }>>([])
@@ -194,6 +197,9 @@ export default function ViewMARForm() {
         } else if (showCustomLegendModal) {
           setShowCustomLegendModal(false)
           setEditingCustomLegend(null)
+        } else if (showDeleteConfirmModal) {
+          setShowDeleteConfirmModal(false)
+          setDeletingEntry(null)
         } else if (showLeaveConfirmModal) {
           handleCancelLeave()
         }
@@ -204,7 +210,7 @@ export default function ViewMARForm() {
     return () => {
       window.removeEventListener('keydown', handleEscKey)
     }
-  }, [showAddMedModal, showEditPatientInfoModal, showVitalSignsModal, showAddPRNModal, showPRNNoteModal, showMedicationParameterModal, showAdministrationNoteModal, showCustomLegendModal, showLeaveConfirmModal])
+  }, [showAddMedModal, showEditPatientInfoModal, showVitalSignsModal, showAddPRNModal, showPRNNoteModal, showMedicationParameterModal, showAdministrationNoteModal, showCustomLegendModal, showDeleteConfirmModal, showLeaveConfirmModal])
 
   const loadUserProfile = async () => {
     const profile = await getCurrentUserProfile()
@@ -955,6 +961,49 @@ export default function ViewMARForm() {
     }
   }
 
+  // Delete medication or vitals entry
+  const deleteMedicationEntry = async (medId: string) => {
+    if (!userProfile || !marFormId) return
+    
+    try {
+      setSaving(true)
+      setError('')
+      
+      // First, delete all administration records for this medication
+      const { error: adminError } = await supabase
+        .from('mar_administrations')
+        .delete()
+        .eq('mar_medication_id', medId)
+      
+      if (adminError) {
+        console.error('Error deleting administrations:', adminError)
+        // Continue anyway - the medication delete might still work due to CASCADE
+      }
+      
+      // Delete the medication entry
+      const { error: medError } = await supabase
+        .from('mar_medications')
+        .delete()
+        .eq('id', medId)
+      
+      if (medError) throw medError
+      
+      // Reload the form to reflect changes
+      await loadMARForm()
+      
+      setMessage('Entry deleted successfully!')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      console.error('Error deleting entry:', err)
+      setError(err.message || 'Failed to delete entry')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setSaving(false)
+      setShowDeleteConfirmModal(false)
+      setDeletingEntry(null)
+    }
+  }
+
   const updateVitalSigns = async (day: number, field: string, value: number | string) => {
     if (!userProfile || !marForm || !marFormId) return
     
@@ -1588,24 +1637,46 @@ export default function ViewMARForm() {
                                     </div>
                                   </div>
                                 )}
-                                <div className="flex flex-col gap-1">
+                                <div className="flex flex-col gap-1 group/medcell">
                                   <div className="flex items-center justify-between gap-2">
                                     <div className={`font-medium text-sm ${isVitalsEntry ? 'text-lasso-teal dark:text-lasso-blue' : 'text-gray-800 dark:text-white'}`}>
-                                {isVitalsEntry ? '📊 VITALS' : med.medication_name}
-                              </div>
-                                    {!isVitalsEntry && med.medication_name && (
+                                      {isVitalsEntry ? '📊 VITALS' : med.medication_name}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      {!isVitalsEntry && med.medication_name && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setEditingMedicationParameter({ medicationId: med.id, parameter: med.parameter })
+                                            setShowMedicationParameterModal(true)
+                                          }}
+                                          className="text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-1 whitespace-nowrap"
+                                          title={med.parameter ? 'Edit parameter' : 'Add parameter'}
+                                        >
+                                          {med.parameter ? '📝' : '+'} parameter
+                                        </button>
+                                      )}
+                                      {/* Delete button - shows on hover */}
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()
-                                          setEditingMedicationParameter({ medicationId: med.id, parameter: med.parameter })
-                                          setShowMedicationParameterModal(true)
+                                          setDeletingEntry({
+                                            id: med.id,
+                                            name: med.medication_name,
+                                            dosage: med.dosage,
+                                            isVitals: isVitalsEntry
+                                          })
+                                          setShowDeleteConfirmModal(true)
                                         }}
-                                        className="text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-1 whitespace-nowrap"
-                                        title={med.parameter ? 'Edit parameter' : 'Add parameter'}
+                                        className="opacity-0 group-hover/medcell:opacity-100 text-xs px-2 py-1.5 bg-red-500 text-white rounded hover:bg-red-600 transition-all flex items-center justify-center whitespace-nowrap"
+                                        title="Delete entry"
+                                        aria-label="Delete entry"
                                       >
-                                        {med.parameter ? '📝' : '+'} parameter
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
                                       </button>
-                                    )}
+                                    </div>
                                   </div>
                                   <div className={`text-xs mt-1 ${isVitalsEntry ? 'text-lasso-blue dark:text-lasso-blue italic' : 'text-gray-600 dark:text-gray-400'}`}>
                                     {med.dosage}
@@ -3062,6 +3133,62 @@ export default function ViewMARForm() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Entry Confirmation Modal */}
+      {showDeleteConfirmModal && deletingEntry && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-red-600 dark:text-red-400">
+                Delete {deletingEntry.isVitals ? 'Vital Signs Entry' : 'Medication'}?
+              </h2>
+              <button
+                onClick={() => {
+                  setShowDeleteConfirmModal(false)
+                  setDeletingEntry(null)
+                }}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mb-6">
+              <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg mb-4">
+                <p className="font-medium text-gray-800 dark:text-white">
+                  {deletingEntry.isVitals ? '📊 VITALS' : deletingEntry.name}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {deletingEntry.dosage}
+                </p>
+              </div>
+              <p className="text-sm text-red-600 dark:text-red-400">
+                ⚠️ This will permanently delete this entry and all its administration records. This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirmModal(false)
+                  setDeletingEntry(null)
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteMedicationEntry(deletingEntry.id)}
+                disabled={saving}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+              >
+                {saving ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
