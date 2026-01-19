@@ -7,6 +7,115 @@ import TimeInput, { formatTimeDisplay } from '../../../../components/TimeInput'
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../../../../lib/auth'
 import type { MARForm, MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns, MARCustomLegend } from '../../../../types/mar'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
+// Context for passing drag handle props to children (declared first)
+const SortableRowContext = React.createContext<{
+  listeners: any
+  attributes: any
+  setActivatorNodeRef: (node: HTMLElement | null) => void
+  isDragging: boolean
+} | null>(null)
+
+// Sortable table row wrapper component
+function SortableTableRow({ 
+  id, 
+  children, 
+  className,
+  onMouseMove,
+  onMouseLeave,
+}: { 
+  id: string
+  children: React.ReactNode
+  className?: string
+  onMouseMove?: (e: React.MouseEvent<HTMLTableRowElement>) => void
+  onMouseLeave?: () => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    position: 'relative',
+    zIndex: isDragging ? 1000 : 'auto',
+  }
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className={`${className || ''} ${isDragging ? '!bg-blue-100 dark:!bg-blue-900/50 shadow-lg' : ''}`}
+      onMouseMove={isDragging ? undefined : onMouseMove}
+      onMouseLeave={onMouseLeave}
+    >
+      {/* Inject drag handle ref and listeners via context for child components */}
+      <SortableRowContext.Provider value={{ listeners, attributes, setActivatorNodeRef, isDragging }}>
+        {children}
+      </SortableRowContext.Provider>
+    </tr>
+  )
+}
+
+// Hook to get drag handle props in child components
+function useDragHandle() {
+  const context = React.useContext(SortableRowContext)
+  return context
+}
+
+// Drag handle button component that uses context
+function DragHandleButton({ medId }: { medId: string }) {
+  const dragContext = useDragHandle()
+  
+  if (!dragContext) return null
+  
+  const { listeners, attributes, setActivatorNodeRef, isDragging } = dragContext
+  
+  return (
+    <div
+      ref={setActivatorNodeRef}
+      {...listeners}
+      {...attributes}
+      className={`cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-all touch-none ${isDragging ? 'cursor-grabbing' : ''}`}
+      title="Drag to reorder"
+      aria-label="Drag to reorder row"
+    >
+      {/* 6-dot grip icon - standard drag handle pattern */}
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="9" cy="6" r="1.5" />
+        <circle cx="15" cy="6" r="1.5" />
+        <circle cx="9" cy="12" r="1.5" />
+        <circle cx="15" cy="12" r="1.5" />
+        <circle cx="9" cy="18" r="1.5" />
+        <circle cx="15" cy="18" r="1.5" />
+      </svg>
+    </div>
+  )
+}
 
 export default function ViewMARForm() {
   const router = useRouter()
@@ -1004,6 +1113,107 @@ export default function ViewMARForm() {
     }
   }
 
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5, // 5px movement before drag starts
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  // Handle drag end for row reordering
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      const oldIndex = medications.findIndex((med) => med.id === active.id)
+      const newIndex = medications.findIndex((med) => med.id === over.id)
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        // Reorder locally first for immediate UI feedback
+        const newMedications = arrayMove(medications, oldIndex, newIndex)
+        setMedications(newMedications)
+
+        // Update display_order in database for all rows
+        try {
+          setSaving(true)
+          const updates = newMedications.map((med, index) => ({
+            id: med.id,
+            display_order: (index + 1) * 10
+          }))
+
+          // Update all medications with their new display_order
+          for (const update of updates) {
+            await supabase
+              .from('mar_medications')
+              .update({ display_order: update.display_order })
+              .eq('id', update.id)
+          }
+
+          setMessage('Row order updated!')
+          setTimeout(() => setMessage(''), 2000)
+        } catch (err: any) {
+          console.error('Error updating row order:', err)
+          setError('Failed to save row order')
+          setTimeout(() => setError(''), 3000)
+          // Reload to restore original order
+          await loadMARForm()
+        } finally {
+          setSaving(false)
+        }
+      }
+    }
+  }
+
+  // Handle moving row up or down (backup for arrow buttons)
+  const handleMoveRow = async (medId: string, direction: 'up' | 'down') => {
+    const currentIndex = medications.findIndex((med) => med.id === medId)
+    if (currentIndex === -1) return
+    
+    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+    if (newIndex < 0 || newIndex >= medications.length) return
+
+    // Swap positions locally for immediate UI feedback
+    const newMedications = [...medications]
+    const temp = newMedications[currentIndex]
+    newMedications[currentIndex] = newMedications[newIndex]
+    newMedications[newIndex] = temp
+    setMedications(newMedications)
+
+    // Update display_order in database
+    try {
+      setSaving(true)
+      
+      // Update both affected rows
+      const updates = [
+        { id: newMedications[currentIndex].id, display_order: (currentIndex + 1) * 10 },
+        { id: newMedications[newIndex].id, display_order: (newIndex + 1) * 10 }
+      ]
+
+      for (const update of updates) {
+        await supabase
+          .from('mar_medications')
+          .update({ display_order: update.display_order })
+          .eq('id', update.id)
+      }
+
+      setMessage('Row moved!')
+      setTimeout(() => setMessage(''), 1500)
+    } catch (err: any) {
+      console.error('Error moving row:', err)
+      setError('Failed to move row')
+      setTimeout(() => setError(''), 3000)
+      // Reload to restore original order
+      await loadMARForm()
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const updateVitalSigns = async (day: number, field: string, value: number | string) => {
     if (!userProfile || !marForm || !marFormId) return
     
@@ -1301,6 +1511,7 @@ export default function ViewMARForm() {
     </header>
   )
 
+
   // Show loading state while router is initializing
   if (!router.isReady || loading) {
     return (
@@ -1524,10 +1735,19 @@ export default function ViewMARForm() {
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext
+                      items={medications.map(m => m.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <tbody>
                     {medications.length === 0 ? (
                       <tr>
-                        <td colSpan={35} className="border border-gray-300 dark:border-gray-600 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={36} className="border border-gray-300 dark:border-gray-600 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                           No medications recorded. Click "+ Medication" to add one.
                         </td>
                       </tr>
@@ -1568,10 +1788,10 @@ export default function ViewMARForm() {
                         const isFirstRow = isFirstInGroup[med.id] || false
                         
                         return (
-                          <tr 
+                          <SortableTableRow 
                             key={med.id}
+                            id={med.id}
                             className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isVitalsEntry ? 'bg-lasso-blue/10 dark:bg-lasso-blue/20' : ''}`}
-                            style={{ position: 'relative' }}
                             onMouseMove={(e) => {
                               const rect = e.currentTarget.getBoundingClientRect()
                               const mouseY = e.clientY - rect.top
@@ -1639,8 +1859,12 @@ export default function ViewMARForm() {
                                 )}
                                 <div className="flex flex-col gap-1 group/medcell">
                                   <div className="flex items-center justify-between gap-2">
-                                    <div className={`font-medium text-sm ${isVitalsEntry ? 'text-lasso-teal dark:text-lasso-blue' : 'text-gray-800 dark:text-white'}`}>
-                                      {isVitalsEntry ? '📊 VITALS' : med.medication_name}
+                                    <div className="flex items-center gap-2">
+                                      {/* Drag Handle */}
+                                      <DragHandleButton medId={med.id} />
+                                      <div className={`font-medium text-sm ${isVitalsEntry ? 'text-lasso-teal dark:text-lasso-blue' : 'text-gray-800 dark:text-white'}`}>
+                                        {isVitalsEntry ? '📊 VITALS' : med.medication_name}
+                                      </div>
                                     </div>
                                     <div className="flex items-center gap-1">
                                       {!isVitalsEntry && med.medication_name && (
@@ -2122,11 +2346,13 @@ export default function ViewMARForm() {
                                 </td>
                               )
                             })}
-                          </tr>
+                          </SortableTableRow>
                         )
                       })
                     })()}
-                  </tbody>
+                      </tbody>
+                    </SortableContext>
+                  </DndContext>
                 </table>
               </div>
           </div>
