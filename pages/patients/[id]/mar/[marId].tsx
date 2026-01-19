@@ -158,6 +158,20 @@ export default function ViewMARForm() {
   const [editingMedicationParameter, setEditingMedicationParameter] = useState<{ medicationId: string; parameter: string | null } | null>(null)
   const [showMedicationNotesModal, setShowMedicationNotesModal] = useState(false)
   const [editingMedicationNotes, setEditingMedicationNotes] = useState<{ medicationId: string; notes: string | null } | null>(null)
+  // Edit medication/vitals - uses the same modal as add but with editingEntry populated
+  const [editingEntry, setEditingEntry] = useState<{
+    id: string
+    isVitals: boolean
+    medication_name: string
+    dosage: string
+    route: string | null
+    start_date: string
+    stop_date: string | null
+    frequency: number | null
+    frequency_display: string | null
+    notes: string | null
+    hour: string | null
+  } | null>(null)
   // Row hover state for add-between-rows feature
   const [rowHover, setRowHover] = useState<{ rowId: string; position: 'top' | 'bottom' } | null>(null)
   // Insert position for adding medication/vitals between rows
@@ -659,6 +673,58 @@ export default function ViewMARForm() {
       setTimeout(() => setMessage(''), 3000)
     } catch (err: any) {
       setError(err.message || 'Failed to update medication notes')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const updateMedicationEntry = async (entry: {
+    id: string
+    isVitals: boolean
+    medication_name: string
+    dosage: string
+    route: string | null
+    start_date: string
+    stop_date: string | null
+    frequency: number | null
+    frequency_display: string | null
+    notes: string | null
+    hour: string | null
+  }) => {
+    if (!marFormId) return
+    
+    try {
+      setSaving(true)
+      
+      const updateData: any = {
+        medication_name: entry.medication_name.trim(),
+        dosage: entry.dosage.trim(),
+        start_date: entry.start_date,
+        stop_date: entry.stop_date || null,
+      }
+
+      // For medications (not vitals), include additional fields
+      if (!entry.isVitals) {
+        updateData.route = entry.route?.trim() || null
+        updateData.frequency = entry.frequency
+        updateData.frequency_display = entry.frequency_display?.trim() || null
+        updateData.notes = entry.notes?.trim() || null
+        updateData.hour = entry.hour
+      }
+
+      const { error } = await supabase
+        .from('mar_medications')
+        .update(updateData)
+        .eq('id', entry.id)
+
+      if (error) throw error
+
+      await loadMARForm()
+      setMessage(`${entry.isVitals ? 'Vitals' : 'Medication'} entry updated successfully!`)
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      setError(err.message || `Failed to update ${entry.isVitals ? 'vitals' : 'medication'} entry`)
       setTimeout(() => setError(''), 5000)
     } finally {
       setSaving(false)
@@ -1778,6 +1844,7 @@ export default function ViewMARForm() {
                 <button
                   onClick={() => {
                     setInsertPosition(null) // Clear position when using regular add button
+                    setEditingEntry(null) // Clear editing entry to ensure add mode
                     setShowAddMedModal(true)
                   }}
                   className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium"
@@ -1986,6 +2053,7 @@ export default function ViewMARForm() {
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       setInsertPosition({ targetMedId: med.id, position: 'above' })
+                                      setEditingEntry(null) // Clear editing entry to ensure add mode
                                       setShowAddMedModal(true)
                                     }}
                                     onMouseEnter={() => setRowHover({ rowId: med.id, position: 'top' })}
@@ -2003,6 +2071,7 @@ export default function ViewMARForm() {
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       setInsertPosition({ targetMedId: med.id, position: 'below' })
+                                      setEditingEntry(null) // Clear editing entry to ensure add mode
                                       setShowAddMedModal(true)
                                     }}
                                     onMouseEnter={() => setRowHover({ rowId: med.id, position: 'bottom' })}
@@ -2022,6 +2091,37 @@ export default function ViewMARForm() {
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-1">
+                                      {/* Edit button */}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setEditingEntry({
+                                            id: med.id,
+                                            isVitals: isVitalsEntry,
+                                            medication_name: med.medication_name,
+                                            dosage: med.dosage,
+                                            route: med.route,
+                                            start_date: med.start_date,
+                                            stop_date: med.stop_date,
+                                            frequency: med.frequency,
+                                            frequency_display: med.frequency_display,
+                                            notes: med.notes,
+                                            hour: med.hour
+                                          })
+                                          setInsertPosition(null) // Clear insert position
+                                          setShowAddMedModal(true) // Use same modal as add
+                                        }}
+                                        className="opacity-0 group-hover/medcell:opacity-100 text-xs px-2 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 transition-all flex items-center justify-center whitespace-nowrap group/edit relative"
+                                        aria-label="Edit entry"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                        {/* Tooltip */}
+                                        <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/edit:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                                          Edit {isVitalsEntry ? 'vitals' : 'medication'}
+                                        </span>
+                                      </button>
                                       {!isVitalsEntry && med.medication_name && (
                                         <button
                                           onClick={(e) => {
@@ -2029,10 +2129,14 @@ export default function ViewMARForm() {
                                             setEditingMedicationParameter({ medicationId: med.id, parameter: med.parameter })
                                             setShowMedicationParameterModal(true)
                                           }}
-                                          className="text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-1 whitespace-nowrap"
-                                          title={med.parameter ? 'Edit parameter' : 'Add parameter'}
+                                          className="text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-1 whitespace-nowrap group/param relative"
+                                          title={med.parameter ? 'Click to edit parameter' : 'Click to add parameter for this medication'}
                                         >
-                                          {med.parameter ? '📝' : '+'} parameter
+                                          {med.parameter ? '📝' : '+'}
+                                          {/* Tooltip */}
+                                          <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/param:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                                            {med.parameter ? 'Edit parameter' : 'Add parameter'}
+                                          </span>
                                         </button>
                                       )}
                                       {/* Delete button - shows on hover */}
@@ -2047,13 +2151,16 @@ export default function ViewMARForm() {
                                           })
                                           setShowDeleteConfirmModal(true)
                                         }}
-                                        className="opacity-0 group-hover/medcell:opacity-100 text-xs px-2 py-1.5 bg-red-500 text-white rounded hover:bg-red-600 transition-all flex items-center justify-center whitespace-nowrap"
-                                        title="Delete entry"
+                                        className="opacity-0 group-hover/medcell:opacity-100 text-xs px-2 py-1.5 bg-red-500 text-white rounded hover:bg-red-600 transition-all flex items-center justify-center whitespace-nowrap group/delete relative"
                                         aria-label="Delete entry"
                                       >
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                           <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
+                                        {/* Tooltip */}
+                                        <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/delete:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                                          Delete {isVitalsEntry ? 'vitals' : 'medication'}
+                                        </span>
                                       </button>
                                     </div>
                                   </div>
@@ -2974,9 +3081,17 @@ export default function ViewMARForm() {
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Add Medication or Vitals</h2>
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">
+                {editingEntry 
+                  ? `Edit ${editingEntry.isVitals ? 'Vitals' : 'Medication'}` 
+                  : 'Add Medication or Vitals'
+                }
+              </h2>
               <button
-                onClick={() => setShowAddMedModal(false)}
+                onClick={() => {
+                  setShowAddMedModal(false)
+                  setEditingEntry(null)
+                }}
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                 aria-label="Close"
               >
@@ -2986,23 +3101,45 @@ export default function ViewMARForm() {
             <AddMedicationOrVitalsForm
               onSubmit={async (data) => {
                 try {
-                  if (data.type === 'medication') {
-                    await addMedication(data.medicationData!, insertPosition)
+                  if (editingEntry) {
+                    // Edit mode - update existing entry
+                    const updateData = {
+                      id: editingEntry.id,
+                      isVitals: editingEntry.isVitals,
+                      medication_name: data.type === 'medication' ? data.medicationData!.medicationName : 'VITALS',
+                      dosage: data.type === 'medication' ? data.medicationData!.dosage : data.vitalsData!.notes,
+                      route: data.type === 'medication' ? data.medicationData!.route : null,
+                      start_date: data.type === 'medication' ? data.medicationData!.startDate : data.vitalsData!.startDate,
+                      stop_date: data.type === 'medication' ? data.medicationData!.stopDate : data.vitalsData!.stopDate,
+                      frequency: data.type === 'medication' ? data.medicationData!.frequency : null,
+                      frequency_display: data.type === 'medication' ? data.medicationData!.frequencyDisplay : null,
+                      notes: data.type === 'medication' ? data.medicationData!.notes : 'Vital Signs Entry',
+                      hour: data.type === 'medication' ? data.medicationData!.hour : null
+                    }
+                    await updateMedicationEntry(updateData)
                     setShowAddMedModal(false)
-                    setInsertPosition(null) // Clear insert position after use
+                    setEditingEntry(null)
                   } else {
-                    await addVitals(data.vitalsData!, insertPosition)
-                    setShowAddMedModal(false)
-                    setInsertPosition(null) // Clear insert position after use
+                    // Add mode - create new entry
+                    if (data.type === 'medication') {
+                      await addMedication(data.medicationData!, insertPosition)
+                      setShowAddMedModal(false)
+                      setInsertPosition(null)
+                    } else {
+                      await addVitals(data.vitalsData!, insertPosition)
+                      setShowAddMedModal(false)
+                      setInsertPosition(null)
+                    }
                   }
                 } catch (err) {
-                  console.error('Error adding entry:', err)
+                  console.error('Error saving entry:', err)
                   // Don't close modal on error so user can fix and retry
                 }
               }}
               onCancel={() => {
                 setShowAddMedModal(false)
-                setInsertPosition(null) // Clear insert position on cancel
+                setInsertPosition(null)
+                setEditingEntry(null)
               }}
               defaultStartDate={new Date().toISOString().split('T')[0]}
               defaultHour={new Date().toTimeString().slice(0, 5)}
@@ -3021,6 +3158,8 @@ export default function ViewMARForm() {
                 }
                 return ''
               })()}
+              editData={editingEntry}
+              isEditMode={!!editingEntry}
             />
           </div>
         </div>
@@ -3685,7 +3824,9 @@ function AddMedicationOrVitalsForm({
   defaultStartDate,
   defaultHour,
   defaultInitials,
-  defaultType = 'medication'
+  defaultType = 'medication',
+  editData,
+  isEditMode = false
 }: { 
   onSubmit: (data: {
     type: 'medication' | 'vitals'
@@ -3715,27 +3856,43 @@ function AddMedicationOrVitalsForm({
   defaultHour: string
   defaultInitials: string
   defaultType?: 'medication' | 'vitals'
+  editData?: {
+    id: string
+    isVitals: boolean
+    medication_name: string
+    dosage: string
+    route: string | null
+    start_date: string
+    stop_date: string | null
+    frequency: number | null
+    frequency_display: string | null
+    notes: string | null
+    hour: string | null
+  } | null
+  isEditMode?: boolean
 }) {
-  const [entryType, setEntryType] = useState<'medication' | 'vitals'>(defaultType)
+  const [entryType, setEntryType] = useState<'medication' | 'vitals'>(
+    isEditMode && editData ? (editData.isVitals ? 'vitals' : 'medication') : defaultType
+  )
   const [medicationData, setMedicationData] = useState({
-    medicationName: '',
-    dosage: '',
-    startDate: defaultStartDate,
-    stopDate: '',
-    hour: defaultHour,
-    notes: '',
+    medicationName: isEditMode && editData && !editData.isVitals ? editData.medication_name : '',
+    dosage: isEditMode && editData && !editData.isVitals ? editData.dosage : '',
+    startDate: isEditMode && editData && !editData.isVitals ? editData.start_date : defaultStartDate,
+    stopDate: isEditMode && editData && !editData.isVitals ? (editData.stop_date || '') : '',
+    hour: isEditMode && editData && !editData.isVitals ? (editData.hour || defaultHour) : defaultHour,
+    notes: isEditMode && editData && !editData.isVitals ? (editData.notes || '') : '',
     initials: '', // No longer collected from form, will be empty
-    frequency: 1, // Number of times per day
+    frequency: isEditMode && editData && !editData.isVitals ? (editData.frequency || 1) : 1, // Number of times per day
     times: [] as string[], // Array of times for each frequency
-    route: '', // Route of administration
-    frequencyDisplay: '' // Custom frequency display text (e.g., "Daily 3x", "TID") - leave empty to use default
+    route: isEditMode && editData && !editData.isVitals ? (editData.route || '') : '', // Route of administration
+    frequencyDisplay: isEditMode && editData && !editData.isVitals ? (editData.frequency_display || '') : '' // Custom frequency display text
   })
   const [vitalsData, setVitalsData] = useState({
-    notes: '',
+    notes: isEditMode && editData && editData.isVitals ? editData.dosage : '', // Vitals uses dosage field for notes/description
     initials: '', // For vitals, this is just a default text value, not initials
-    startDate: defaultStartDate,
-    stopDate: '',
-    hour: defaultHour
+    startDate: isEditMode && editData && editData.isVitals ? editData.start_date : defaultStartDate,
+    stopDate: isEditMode && editData && editData.isVitals ? (editData.stop_date || '') : '',
+    hour: isEditMode && editData && editData.isVitals ? (editData.hour || defaultHour) : defaultHour
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -3839,36 +3996,38 @@ function AddMedicationOrVitalsForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Type Selection */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Type *
-        </label>
-        <div className="flex gap-4">
-          <label className="flex items-center">
-            <input
-              type="radio"
-              name="entryType"
-              value="medication"
-              checked={entryType === 'medication'}
-              onChange={(e) => setEntryType(e.target.value as 'medication' | 'vitals')}
-              className="mr-2"
-            />
-            <span className="text-sm text-gray-700 dark:text-gray-300">Medication</span>
+      {/* Type Selection - hidden in edit mode */}
+      {!isEditMode && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Type *
           </label>
-          <label className="flex items-center">
-            <input
-              type="radio"
-              name="entryType"
-              value="vitals"
-              checked={entryType === 'vitals'}
-              onChange={(e) => setEntryType(e.target.value as 'medication' | 'vitals')}
-              className="mr-2"
-            />
-            <span className="text-sm text-gray-700 dark:text-gray-300">Vitals</span>
-          </label>
+          <div className="flex gap-4">
+            <label className="flex items-center">
+              <input
+                type="radio"
+                name="entryType"
+                value="medication"
+                checked={entryType === 'medication'}
+                onChange={(e) => setEntryType(e.target.value as 'medication' | 'vitals')}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">Medication</span>
+            </label>
+            <label className="flex items-center">
+              <input
+                type="radio"
+                name="entryType"
+                value="vitals"
+                checked={entryType === 'vitals'}
+                onChange={(e) => setEntryType(e.target.value as 'medication' | 'vitals')}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">Vitals</span>
+            </label>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Medication Fields */}
       {entryType === 'medication' && (
@@ -4119,7 +4278,12 @@ function AddMedicationOrVitalsForm({
           disabled={isSubmitting}
           className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isSubmitting ? 'Adding...' : entryType === 'medication' ? 'Add Medication' : 'Add Vitals'}
+          {isSubmitting 
+            ? (isEditMode ? 'Saving...' : 'Adding...') 
+            : isEditMode 
+              ? 'Save Changes' 
+              : (entryType === 'medication' ? 'Add Medication' : 'Add Vitals')
+          }
         </button>
       </div>
     </form>
