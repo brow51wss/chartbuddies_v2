@@ -47,6 +47,10 @@ export default function ViewMARForm() {
   const [editingPRNNote, setEditingPRNNote] = useState<{ recordId: string; note: string | null } | null>(null)
   const [showMedicationParameterModal, setShowMedicationParameterModal] = useState(false)
   const [editingMedicationParameter, setEditingMedicationParameter] = useState<{ medicationId: string; parameter: string | null } | null>(null)
+  // Row hover state for add-between-rows feature
+  const [rowHover, setRowHover] = useState<{ rowId: string; position: 'top' | 'bottom' } | null>(null)
+  // Insert position for adding medication/vitals between rows
+  const [insertPosition, setInsertPosition] = useState<{ targetMedId: string; position: 'above' | 'below' } | null>(null)
   const [showAdministrationNoteModal, setShowAdministrationNoteModal] = useState(false)
   const [editingAdministrationNote, setEditingAdministrationNote] = useState<{ medId: string; day: number; note: string | null } | null>(null)
   const [customLegends, setCustomLegends] = useState<Array<{ id: string; code: string; description: string }>>([])
@@ -648,7 +652,7 @@ export default function ViewMARForm() {
     times?: string[] // Optional array of times for each frequency
     route: string | null
     frequencyDisplay: string | null
-  }) => {
+  }, position?: { targetMedId: string; position: 'above' | 'below' } | null) => {
     if (!userProfile || !marForm || !marFormId) return
     
     try {
@@ -657,6 +661,72 @@ export default function ViewMARForm() {
       
       const frequency = medData.frequency || 1
       const times = medData.times || []
+      
+      // Calculate display_order based on insert position
+      let displayOrder: number
+      if (position) {
+        // First, ensure ALL existing medications have display_order set
+        // This prevents sorting issues when mixing entries with and without display_order
+        const medsNeedingOrder = medications.filter(m => m.display_order == null)
+        if (medsNeedingOrder.length > 0) {
+          // Assign display_order to all existing meds based on their CURRENT visual order
+          // (which is the order in the medications array)
+          const updates = medications.map((med, index) => ({
+            id: med.id,
+            display_order: (index + 1) * 10
+          }))
+          
+          // Update all medications with their display_order
+          for (const update of updates) {
+            await supabase
+              .from('mar_medications')
+              .update({ display_order: update.display_order })
+              .eq('id', update.id)
+          }
+          
+          // Update local state to reflect new display_orders
+          medications.forEach((med, index) => {
+            med.display_order = (index + 1) * 10
+          })
+        }
+        
+        const targetMed = medications.find(m => m.id === position.targetMedId)
+        if (targetMed) {
+          const targetOrder = targetMed.display_order || 0
+          
+          if (position.position === 'above') {
+            // Find the medication above the target (if any) to calculate the midpoint
+            const sortedMeds = [...medications].sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+            const targetIndex = sortedMeds.findIndex(m => m.id === position.targetMedId)
+            const prevMed = targetIndex > 0 ? sortedMeds[targetIndex - 1] : null
+            const prevOrder = prevMed?.display_order || 0
+            displayOrder = Math.floor((prevOrder + targetOrder) / 2)
+            // If there's no gap, we need to renumber (for now, just use target - 1)
+            if (displayOrder === prevOrder || displayOrder === targetOrder) {
+              displayOrder = targetOrder - 1
+            }
+          } else {
+            // Below - find the next medication
+            const sortedMeds = [...medications].sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+            const targetIndex = sortedMeds.findIndex(m => m.id === position.targetMedId)
+            const nextMed = targetIndex < sortedMeds.length - 1 ? sortedMeds[targetIndex + 1] : null
+            const nextOrder = nextMed?.display_order || targetOrder + 20
+            displayOrder = Math.floor((targetOrder + nextOrder) / 2)
+            // If there's no gap, use target + 1
+            if (displayOrder === targetOrder || displayOrder === nextOrder) {
+              displayOrder = targetOrder + 1
+            }
+          }
+        } else {
+          // Fallback: add at the end
+          const maxOrder = Math.max(...medications.map(m => m.display_order || 0), 0)
+          displayOrder = maxOrder + 10
+        }
+      } else {
+        // No position specified - add at the end
+        const maxOrder = Math.max(...medications.map(m => m.display_order || 0), 0)
+        displayOrder = maxOrder + 10
+      }
       
       // Create array of medications to insert
       const medicationsToInsert = []
@@ -675,7 +745,8 @@ export default function ViewMARForm() {
           notes: medData.notes,
           route: medData.route,
           frequency: frequency,
-          frequency_display: medData.frequencyDisplay
+          frequency_display: medData.frequencyDisplay,
+          display_order: displayOrder + i // Each frequency gets consecutive orders
         })
       }
       
@@ -756,12 +827,76 @@ export default function ViewMARForm() {
     startDate: string
     stopDate: string | null
     hour: string
-  }) => {
+  }, position?: { targetMedId: string; position: 'above' | 'below' } | null) => {
     if (!userProfile || !marForm || !marFormId) return
     
     try {
       setSaving(true)
       setError('')
+      
+      // Calculate display_order based on insert position
+      let displayOrder: number
+      if (position) {
+        // First, ensure ALL existing medications have display_order set
+        const medsNeedingOrder = medications.filter(m => m.display_order == null)
+        if (medsNeedingOrder.length > 0) {
+          // Assign display_order to all existing meds based on their CURRENT visual order
+          const updates = medications.map((med, index) => ({
+            id: med.id,
+            display_order: (index + 1) * 10
+          }))
+          
+          // Update all medications with their display_order
+          for (const update of updates) {
+            await supabase
+              .from('mar_medications')
+              .update({ display_order: update.display_order })
+              .eq('id', update.id)
+          }
+          
+          // Update local state to reflect new display_orders
+          medications.forEach((med, index) => {
+            med.display_order = (index + 1) * 10
+          })
+        }
+        
+        const targetMed = medications.find(m => m.id === position.targetMedId)
+        if (targetMed) {
+          const targetOrder = targetMed.display_order || 0
+          
+          if (position.position === 'above') {
+            const sortedMeds = [...medications].sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+            const targetIndex = sortedMeds.findIndex(m => m.id === position.targetMedId)
+            const prevMed = targetIndex > 0 ? sortedMeds[targetIndex - 1] : null
+            const prevOrder = prevMed?.display_order || 0
+            displayOrder = Math.floor((prevOrder + targetOrder) / 2)
+            if (displayOrder === prevOrder || displayOrder === targetOrder) {
+              displayOrder = targetOrder - 1
+            }
+          } else {
+            const sortedMeds = [...medications].sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+            const targetIndex = sortedMeds.findIndex(m => m.id === position.targetMedId)
+            const nextMed = targetIndex < sortedMeds.length - 1 ? sortedMeds[targetIndex + 1] : null
+            const nextOrder = nextMed?.display_order || targetOrder + 20
+            displayOrder = Math.floor((targetOrder + nextOrder) / 2)
+            if (displayOrder === targetOrder || displayOrder === nextOrder) {
+              displayOrder = targetOrder + 1
+            }
+          }
+        } else {
+          // Target not found, add at the TOP for vitals
+          const minOrder = Math.min(...medications.map(m => m.display_order || 0), 10)
+          displayOrder = minOrder - 10
+        }
+      } else {
+        // No position specified - vitals go to the TOP
+        if (medications.length === 0) {
+          displayOrder = 10
+        } else {
+          const minOrder = Math.min(...medications.map(m => m.display_order || 0), 10)
+          displayOrder = minOrder - 10
+        }
+      }
       
       // Create a medication entry for vitals so it appears in the same table
       // Use a special naming convention to identify it as a vital sign entry
@@ -774,7 +909,8 @@ export default function ViewMARForm() {
           start_date: vitalsData.startDate,
           stop_date: vitalsData.stopDate,
           hour: vitalsData.hour,
-          notes: 'Vital Signs Entry' // Mark as vital sign entry
+          notes: 'Vital Signs Entry', // Mark as vital sign entry
+          display_order: displayOrder
         })
         .select()
         .single()
@@ -965,13 +1101,23 @@ export default function ViewMARForm() {
         .from('mar_medications')
         .select('*')
         .eq('mar_form_id', marFormId)
+        .order('display_order', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: true })
 
       if (medsError) throw medsError
       
-      // Sort medications: vitals entries first, then regular medications
-      // Group medications with same name, dosage, and dates together
+      // Sort medications by display_order (primary), falling back to original grouping logic
       const sortedMeds = (medsData || []).sort((a, b) => {
+        // If both have display_order, use that
+        if (a.display_order != null && b.display_order != null) {
+          return a.display_order - b.display_order
+        }
+        
+        // If only one has display_order, prioritize the one that has it
+        if (a.display_order != null) return -1
+        if (b.display_order != null) return 1
+        
+        // Fallback: original sorting logic for backward compatibility
         const aIsVitals = a.medication_name === 'VITALS' || a.notes === 'Vital Signs Entry'
         const bIsVitals = b.medication_name === 'VITALS' || b.notes === 'Vital Signs Entry'
         
@@ -1219,7 +1365,10 @@ export default function ViewMARForm() {
               </h1>
               <div className="flex space-x-3">
                 <button
-                  onClick={() => setShowAddMedModal(true)}
+                  onClick={() => {
+                    setInsertPosition(null) // Clear position when using regular add button
+                    setShowAddMedModal(true)
+                  }}
                   className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium"
                 >
                   + Medication
@@ -1370,12 +1519,75 @@ export default function ViewMARForm() {
                         const isFirstRow = isFirstInGroup[med.id] || false
                         
                         return (
-                          <tr key={med.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isVitalsEntry ? 'bg-lasso-blue/10 dark:bg-lasso-blue/20' : ''}`}>
+                          <tr 
+                            key={med.id}
+                            className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isVitalsEntry ? 'bg-lasso-blue/10 dark:bg-lasso-blue/20' : ''}`}
+                            style={{ position: 'relative' }}
+                            onMouseMove={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect()
+                              const mouseY = e.clientY - rect.top
+                              const rowHeight = rect.height
+                              const edgeZone = 10 // pixels from edge to trigger
+                              
+                              if (mouseY < edgeZone) {
+                                if (rowHover?.rowId !== med.id || rowHover?.position !== 'top') {
+                                  setRowHover({ rowId: med.id, position: 'top' })
+                                }
+                              } else if (mouseY > rowHeight - edgeZone) {
+                                if (rowHover?.rowId !== med.id || rowHover?.position !== 'bottom') {
+                                  setRowHover({ rowId: med.id, position: 'bottom' })
+                                }
+                              } else {
+                                if (rowHover?.rowId === med.id) {
+                                  setRowHover(null)
+                                }
+                              }
+                            }}
+                            onMouseLeave={() => {
+                              if (rowHover?.rowId === med.id) {
+                                setRowHover(null)
+                              }
+                            }}
+                          >
                             {shouldMerge && !isFirstRow ? null : (
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
-                                className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500"
+                                className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500 relative"
                               >
+                                {/* Add Row Indicator - Top */}
+                                {rowHover?.rowId === med.id && rowHover?.position === 'top' && (
+                                  <div 
+                                    className="absolute left-0 right-0 -top-1 h-2 bg-lasso-teal z-50 flex items-center cursor-pointer hover:bg-lasso-blue transition-colors"
+                                    style={{ width: '5000px' }}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setInsertPosition({ targetMedId: med.id, position: 'above' })
+                                      setShowAddMedModal(true)
+                                    }}
+                                    onMouseEnter={() => setRowHover({ rowId: med.id, position: 'top' })}
+                                  >
+                                    <div className="ml-4 bg-lasso-teal text-white text-xs px-3 py-0.5 rounded-full shadow-lg flex items-center gap-1 whitespace-nowrap font-medium">
+                                      <span className="text-sm font-bold">+</span> Add above
+                                    </div>
+                                  </div>
+                                )}
+                                {/* Add Row Indicator - Bottom */}
+                                {rowHover?.rowId === med.id && rowHover?.position === 'bottom' && (
+                                  <div 
+                                    className="absolute left-0 right-0 -bottom-1 h-2 bg-lasso-teal z-50 flex items-center cursor-pointer hover:bg-lasso-blue transition-colors"
+                                    style={{ width: '5000px' }}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setInsertPosition({ targetMedId: med.id, position: 'below' })
+                                      setShowAddMedModal(true)
+                                    }}
+                                    onMouseEnter={() => setRowHover({ rowId: med.id, position: 'bottom' })}
+                                  >
+                                    <div className="ml-4 bg-lasso-teal text-white text-xs px-3 py-0.5 rounded-full shadow-lg flex items-center gap-1 whitespace-nowrap font-medium">
+                                      <span className="text-sm font-bold">+</span> Add below
+                                    </div>
+                                  </div>
+                                )}
                                 <div className="flex flex-col gap-1">
                                   <div className="flex items-center justify-between gap-2">
                                     <div className={`font-medium text-sm ${isVitalsEntry ? 'text-lasso-teal dark:text-lasso-blue' : 'text-gray-800 dark:text-white'}`}>
@@ -2321,18 +2533,23 @@ export default function ViewMARForm() {
               onSubmit={async (data) => {
                 try {
                   if (data.type === 'medication') {
-                    await addMedication(data.medicationData!)
+                    await addMedication(data.medicationData!, insertPosition)
                     setShowAddMedModal(false)
+                    setInsertPosition(null) // Clear insert position after use
                   } else {
-                    await addVitals(data.vitalsData!)
-                  setShowAddMedModal(false)
+                    await addVitals(data.vitalsData!, insertPosition)
+                    setShowAddMedModal(false)
+                    setInsertPosition(null) // Clear insert position after use
                   }
                 } catch (err) {
                   console.error('Error adding entry:', err)
                   // Don't close modal on error so user can fix and retry
                 }
               }}
-              onCancel={() => setShowAddMedModal(false)}
+              onCancel={() => {
+                setShowAddMedModal(false)
+                setInsertPosition(null) // Clear insert position on cancel
+              }}
               defaultStartDate={new Date().toISOString().split('T')[0]}
               defaultHour={new Date().toTimeString().slice(0, 5)}
               defaultInitials={(() => {

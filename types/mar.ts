@@ -34,6 +34,7 @@ export interface MARMedication {
   route: string | null
   frequency: number | null
   frequency_display: string | null
+  display_order: number | null // Custom display order for row positioning
   created_at: string
   updated_at: string
 }
