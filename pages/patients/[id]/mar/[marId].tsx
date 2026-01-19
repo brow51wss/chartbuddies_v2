@@ -1130,42 +1130,164 @@ export default function ViewMARForm() {
     const { active, over } = event
 
     if (over && active.id !== over.id) {
-      const oldIndex = medications.findIndex((med) => med.id === active.id)
-      const newIndex = medications.findIndex((med) => med.id === over.id)
-
-      if (oldIndex !== -1 && newIndex !== -1) {
-        // Reorder locally first for immediate UI feedback
-        const newMedications = arrayMove(medications, oldIndex, newIndex)
-        setMedications(newMedications)
-
-        // Update display_order in database for all rows
-        try {
-          setSaving(true)
-          const updates = newMedications.map((med, index) => ({
-            id: med.id,
-            display_order: (index + 1) * 10
-          }))
-
-          // Update all medications with their new display_order
-          for (const update of updates) {
-            await supabase
-              .from('mar_medications')
-              .update({ display_order: update.display_order })
-              .eq('id', update.id)
-          }
-
-          setMessage('Row order updated!')
-          setTimeout(() => setMessage(''), 2000)
-        } catch (err: any) {
-          console.error('Error updating row order:', err)
-          setError('Failed to save row order')
-          setTimeout(() => setError(''), 3000)
-          // Reload to restore original order
-          await loadMARForm()
-        } finally {
-          setSaving(false)
-        }
+      // Helper to get group key for a medication
+      const getGroupKey = (med: MARMedication) => {
+        const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
+        return isVitalsEntry 
+          ? `vitals_${med.id}`
+          : `${med.medication_name}|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
       }
+
+      // Find the dragged medication and its group
+      const draggedMed = medications.find(m => m.id === active.id)
+      const targetMed = medications.find(m => m.id === over.id)
+      
+      if (!draggedMed || !targetMed) return
+
+      const draggedGroupKey = getGroupKey(draggedMed)
+      const targetGroupKey = getGroupKey(targetMed)
+
+      // Get all medications in the dragged group
+      const draggedGroupMeds = medications.filter(m => getGroupKey(m) === draggedGroupKey)
+      
+      // Get the indices of the first med in each group
+      const draggedFirstIndex = medications.findIndex(m => m.id === draggedGroupMeds[0].id)
+      const targetIndex = medications.findIndex(m => m.id === over.id)
+
+      if (draggedFirstIndex === -1 || targetIndex === -1) return
+
+      // Remove all meds from dragged group from the array
+      let newMedications = medications.filter(m => getGroupKey(m) !== draggedGroupKey)
+      
+      // Find where to insert the dragged group
+      // If target was in the dragged group, just restore original order
+      if (draggedGroupKey === targetGroupKey) return
+
+      // Find the new target index after removal
+      const newTargetIndex = newMedications.findIndex(m => m.id === over.id)
+      
+      if (newTargetIndex === -1) {
+        // Target was removed (shouldn't happen), restore
+        return
+      }
+
+      // Determine insert position: before or after target based on drag direction
+      const insertIndex = targetIndex > draggedFirstIndex ? newTargetIndex + 1 : newTargetIndex
+
+      // Insert all dragged group meds at the new position
+      newMedications = [
+        ...newMedications.slice(0, insertIndex),
+        ...draggedGroupMeds,
+        ...newMedications.slice(insertIndex)
+      ]
+
+      // Update local state for immediate UI feedback
+      setMedications(newMedications)
+
+      // Update display_order in database for all rows
+      try {
+        setSaving(true)
+        const updates = newMedications.map((med, index) => ({
+          id: med.id,
+          display_order: (index + 1) * 10
+        }))
+
+        // Update all medications with their new display_order
+        for (const update of updates) {
+          await supabase
+            .from('mar_medications')
+            .update({ display_order: update.display_order })
+            .eq('id', update.id)
+        }
+
+        setMessage('Row order updated!')
+        setTimeout(() => setMessage(''), 2000)
+      } catch (err: any) {
+        console.error('Error updating row order:', err)
+        setError('Failed to save row order')
+        setTimeout(() => setError(''), 3000)
+        // Reload to restore original order
+        await loadMARForm()
+      } finally {
+        setSaving(false)
+      }
+    }
+  }
+
+  // Repair display order to ensure medication groups are consecutive
+  const repairDisplayOrder = async () => {
+    if (!medications.length) return
+
+    // Helper to get group key for a medication
+    const getGroupKey = (med: MARMedication) => {
+      const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
+      return isVitalsEntry 
+        ? `vitals_${med.id}`
+        : `${med.medication_name}|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
+    }
+
+    // Group medications
+    const groups: { [key: string]: MARMedication[] } = {}
+    const groupOrder: string[] = [] // Track order groups first appeared
+    
+    medications.forEach(med => {
+      const key = getGroupKey(med)
+      if (!groups[key]) {
+        groups[key] = []
+        groupOrder.push(key)
+      }
+      groups[key].push(med)
+    })
+
+    // Flatten groups back into array (groups stay together)
+    const reorderedMeds: MARMedication[] = []
+    groupOrder.forEach(key => {
+      // Sort within group by hour to keep times in order
+      groups[key].sort((a, b) => {
+        if (!a.hour && !b.hour) return 0
+        if (!a.hour) return 1
+        if (!b.hour) return -1
+        return a.hour.localeCompare(b.hour)
+      })
+      reorderedMeds.push(...groups[key])
+    })
+
+    // Check if order changed
+    const orderChanged = reorderedMeds.some((med, idx) => med.id !== medications[idx]?.id)
+    
+    if (!orderChanged) {
+      console.log('Display order is already correct')
+      return
+    }
+
+    console.log('Repairing display order...')
+    
+    // Update local state
+    setMedications(reorderedMeds)
+
+    // Update database
+    try {
+      setSaving(true)
+      const updates = reorderedMeds.map((med, index) => ({
+        id: med.id,
+        display_order: (index + 1) * 10
+      }))
+
+      for (const update of updates) {
+        await supabase
+          .from('mar_medications')
+          .update({ display_order: update.display_order })
+          .eq('id', update.id)
+      }
+
+      setMessage('Row order repaired!')
+      setTimeout(() => setMessage(''), 2000)
+    } catch (err: any) {
+      console.error('Error repairing display order:', err)
+      setError('Failed to repair row order')
+      setTimeout(() => setError(''), 3000)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -1644,6 +1766,14 @@ export default function ViewMARForm() {
                   className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
                 >
                   + PRN
+                </button>
+                <button
+                  onClick={repairDisplayOrder}
+                  disabled={saving}
+                  className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 text-sm font-medium disabled:opacity-50"
+                  title="Fix row order if medications with multiple times got separated"
+                >
+                  🔧 Repair Order
                 </button>
               </div>
             </div>
@@ -3509,7 +3639,7 @@ function AddMedicationOrVitalsForm({
     frequency: 1, // Number of times per day
     times: [] as string[], // Array of times for each frequency
     route: '', // Route of administration
-    frequencyDisplay: '1 time per day' // Custom frequency display text (e.g., "Daily 3x", "TID") - auto-populated with default
+    frequencyDisplay: '' // Custom frequency display text (e.g., "Daily 3x", "TID") - leave empty to use default
   })
   const [vitalsData, setVitalsData] = useState({
     notes: '',
@@ -3602,7 +3732,7 @@ function AddMedicationOrVitalsForm({
         frequency: 1,
         times: [],
         route: '',
-        frequencyDisplay: '1 time per day'
+        frequencyDisplay: ''
       })
       setVitalsData({
         notes: '',
@@ -3734,13 +3864,11 @@ function AddMedicationOrVitalsForm({
                 const newTimes = Array.from({ length: freq }, (_, i) => 
                   medicationData.times[i] || (i === 0 ? medicationData.hour : '')
                 )
-                // Auto-populate frequency display with default format
-                const defaultDisplay = `${freq} time${freq > 1 ? 's' : ''} per day`
+                // Don't auto-populate frequencyDisplay - leave empty for default display
                 setMedicationData({ 
                   ...medicationData, 
                   frequency: freq, 
-                  times: newTimes,
-                  frequencyDisplay: medicationData.frequencyDisplay || defaultDisplay
+                  times: newTimes
                 })
               }}
               required
@@ -3761,7 +3889,7 @@ function AddMedicationOrVitalsForm({
               type="text"
               value={medicationData.frequencyDisplay}
               onChange={(e) => setMedicationData({ ...medicationData, frequencyDisplay: e.target.value })}
-              placeholder="e.g., Daily 3x, TID, Q8H, 3 times per day"
+              placeholder="e.g., Daily in morning, with meals, once at bed time"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Custom frequency text to display in the chart. Leave empty to use default format.</p>
