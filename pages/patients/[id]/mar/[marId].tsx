@@ -941,7 +941,7 @@ export default function ViewMARForm() {
     initials: string
     startDate: string
     stopDate: string | null
-    hour: string
+    hour: string | null
   }, position?: { targetMedId: string; position: 'above' | 'below' } | null) => {
     if (!userProfile || !marForm || !marFormId) return
     
@@ -1023,7 +1023,7 @@ export default function ViewMARForm() {
           dosage: vitalsData.notes, // Store the vital sign instructions in dosage field
           start_date: vitalsData.startDate,
           stop_date: vitalsData.stopDate,
-          hour: vitalsData.hour,
+          hour: null, // Vitals don't have administration time
           notes: 'Vital Signs Entry', // Mark as vital sign entry
           display_order: displayOrder
         })
@@ -1707,7 +1707,6 @@ export default function ViewMARForm() {
                     <col className="w-[200px]" /> {/* Medication */}
                     <col className="w-[120px]" /> {/* Start/Stop Date */}
                     <col className="w-[80px]" /> {/* Hour */}
-                    <col className="w-[100px]" /> {/* Route */}
                   </colgroup>
                   <thead>
                     <tr className="bg-gray-100 dark:bg-gray-700">
@@ -1719,9 +1718,6 @@ export default function ViewMARForm() {
                       </th>
                       <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-[320px] z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500" style={{ minWidth: '80px' }}>
                         Hour
-                      </th>
-                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-[400px] z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500" style={{ minWidth: '100px' }}>
-                        Route
                       </th>
                       {/* Days 1-31 */}
                       {days.map(day => (
@@ -1747,7 +1743,7 @@ export default function ViewMARForm() {
                       <tbody>
                     {medications.length === 0 ? (
                       <tr>
-                        <td colSpan={36} className="border border-gray-300 dark:border-gray-600 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={35} className="border border-gray-300 dark:border-gray-600 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                           No medications recorded. Click "+ Medication" to add one.
                         </td>
                       </tr>
@@ -1905,6 +1901,12 @@ export default function ViewMARForm() {
                                   <div className={`text-xs mt-1 ${isVitalsEntry ? 'text-lasso-blue dark:text-lasso-blue italic' : 'text-gray-600 dark:text-gray-400'}`}>
                                     {med.dosage}
                                   </div>
+                                  {/* Route - shown under dosage for medications only */}
+                                  {!isVitalsEntry && med.route && (
+                                    <div className="text-xs text-gray-500 dark:text-gray-500 mt-0.5 italic">
+                                      {med.route}
+                                    </div>
+                                  )}
                                   {med.frequency && med.frequency > 0 && !isVitalsEntry && (
                                     <div className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
                                       {med.frequency_display || `${med.frequency} time${med.frequency > 1 ? 's' : ''} per day`}
@@ -1935,43 +1937,39 @@ export default function ViewMARForm() {
                             </td>
                             )}
                             <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500">
-                              {/* Show time input for both medications and vitals */}
-                              <EditableHourField
-                                medication={med}
-                                onUpdate={async (newHour) => {
-                                  try {
-                                    setSaving(true)
-                                    const { error } = await supabase
-                                      .from('mar_medications')
-                                      .update({ hour: newHour })
-                                      .eq('id', med.id)
-                                    
-                                    if (error) throw error
-                                    
-                                    setMedications(prev => prev.map(m => 
-                                      m.id === med.id ? { ...m, hour: newHour } : m
-                                    ))
-                                    
-                                    setMessage(`${isVitalsEntry ? 'Vitals' : 'Medication'} time updated successfully`)
-                                    setTimeout(() => setMessage(''), 2000)
-                                  } catch (err) {
-                                    console.error('Error updating hour:', err)
-                                    setError(`Failed to update ${isVitalsEntry ? 'vitals' : 'medication'} time`)
-                                        setTimeout(() => setError(''), 3000)
-                                      } finally {
-                                        setSaving(false)
-                                      }
-                                    }}
-                                  />
+                              {/* Vitals don't have administration time - show dash */}
+                              {isVitalsEntry ? (
+                                <span className="text-gray-400">—</span>
+                              ) : (
+                                <EditableHourField
+                                  medication={med}
+                                  onUpdate={async (newHour) => {
+                                    try {
+                                      setSaving(true)
+                                      const { error } = await supabase
+                                        .from('mar_medications')
+                                        .update({ hour: newHour })
+                                        .eq('id', med.id)
+                                      
+                                      if (error) throw error
+                                      
+                                      setMedications(prev => prev.map(m => 
+                                        m.id === med.id ? { ...m, hour: newHour } : m
+                                      ))
+                                      
+                                      setMessage('Medication time updated successfully')
+                                      setTimeout(() => setMessage(''), 2000)
+                                    } catch (err) {
+                                      console.error('Error updating hour:', err)
+                                      setError('Failed to update medication time')
+                                      setTimeout(() => setError(''), 3000)
+                                    } finally {
+                                      setSaving(false)
+                                    }
+                                  }}
+                                />
+                              )}
                             </td>
-                            {shouldMerge && !isFirstRow ? null : (
-                              <td 
-                                rowSpan={shouldMerge ? group.rowSpan : undefined}
-                                className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[400px] z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500"
-                              >
-                                {isVitalsEntry ? '—' : (med.route || '—')}
-                              </td>
-                            )}
                             {days.map(day => {
                               const admin = medAdmin[day]
                               const status = admin?.status || 'Not Given'
@@ -3490,7 +3488,7 @@ function AddMedicationOrVitalsForm({
       initials: string
       startDate: string
       stopDate: string | null
-      hour: string
+      hour: string | null
     }
   }) => Promise<void>
   onCancel: () => void
@@ -3548,7 +3546,7 @@ function AddMedicationOrVitalsForm({
       }
       // No longer validating initials/legend - they are optional
     } else {
-      if (!vitalsData.notes.trim() || !vitalsData.startDate || !vitalsData.hour) {
+      if (!vitalsData.notes.trim() || !vitalsData.startDate) {
         alert('Please fill in all required fields')
         return
       }
@@ -3589,7 +3587,7 @@ function AddMedicationOrVitalsForm({
           initials: finalVitalsInitials,
           startDate: vitalsData.startDate,
           stopDate: vitalsData.stopDate || null,
-          hour: vitalsData.hour
+          hour: null // Vitals don't have administration time
         } : undefined
       })
       // Reset form
@@ -3872,18 +3870,6 @@ function AddMedicationOrVitalsForm({
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Administration Time *
-            </label>
-            <TimeInput
-              value={vitalsData.hour}
-              onChange={(newTime) => setVitalsData({ ...vitalsData, hour: newTime })}
-              required
-            />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Select hour, minute, and AM/PM</p>
           </div>
 
           <div>
