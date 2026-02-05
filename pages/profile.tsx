@@ -10,6 +10,7 @@ import type { UserProfile } from '../types/auth'
 export default function Profile() {
   const router = useRouter()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [facilityName, setFacilityName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -60,6 +61,16 @@ export default function Profile() {
         staff_signature: profile.staff_signature || '',
         designation: profile.designation || ''
       })
+      if (profile.hospital_id) {
+        const { data: hospital } = await supabase
+          .from('hospitals')
+          .select('name')
+          .eq('id', profile.hospital_id)
+          .single()
+        setFacilityName(hospital?.name ?? null)
+      } else {
+        setFacilityName(null)
+      }
       setLoading(false)
     }
     loadProfile()
@@ -293,11 +304,8 @@ export default function Profile() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 >
                   <option value="">Select designation</option>
-                  <option value="RN">RN (Registered Nurse)</option>
-                  <option value="LPN">LPN (Licensed Practical Nurse)</option>
-                  <option value="CNA">CNA (Certified Nursing Assistant)</option>
-                  <option value="NP">NP (Nurse Practitioner)</option>
-                  <option value="Other">Other</option>
+                  <option value="PCG">PCG</option>
+                  <option value="SCG">SCG</option>
                 </select>
               </div>
 
@@ -313,6 +321,22 @@ export default function Profile() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 dark:bg-gray-700 dark:border-gray-600 dark:text-white cursor-not-allowed"
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Role is managed by administrators</p>
+              </div>
+
+              {/* Facility (Read-only) - assigned via your account */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Facility
+                </label>
+                <input
+                  type="text"
+                  value={facilityName ?? ''}
+                  disabled
+                  readOnly
+                  placeholder="No facility assigned"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 dark:bg-gray-700 dark:border-gray-600 dark:text-white cursor-not-allowed"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Your assigned facility. This is shown as Facility Name on MAR forms. Contact an administrator to change.</p>
               </div>
 
               {/* Submit Button */}

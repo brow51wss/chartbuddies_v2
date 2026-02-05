@@ -136,6 +136,7 @@ export default function ViewMARForm() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [userProfile, setUserProfile] = useState<any>(null)
+  const [facilityNameFromProfile, setFacilityNameFromProfile] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   // Removed page navigation - everything shows in one table
   const [showAddMedModal, setShowAddMedModal] = useState(false)
@@ -159,6 +160,7 @@ export default function ViewMARForm() {
   const [showMedicationNotesModal, setShowMedicationNotesModal] = useState(false)
   const [editingMedicationNotes, setEditingMedicationNotes] = useState<{ medicationId: string; notes: string | null } | null>(null)
   // Edit medication/vitals - uses the same modal as add but with editingEntry populated
+  // For medications with multiple administration times, ids/times hold all rows in the group
   const [editingEntry, setEditingEntry] = useState<{
     id: string
     isVitals: boolean
@@ -171,6 +173,10 @@ export default function ViewMARForm() {
     frequency_display: string | null
     notes: string | null
     hour: string | null
+    /** All row ids in this medication group (when frequency > 1). Otherwise undefined. */
+    ids?: string[]
+    /** Administration time for each row in group, same order as ids. */
+    times?: string[]
   } | null>(null)
   // Row hover state for add-between-rows feature
   const [rowHover, setRowHover] = useState<{ rowId: string; position: 'top' | 'bottom' } | null>(null)
@@ -185,6 +191,7 @@ export default function ViewMARForm() {
   const [showCustomLegendModal, setShowCustomLegendModal] = useState(false)
   const [editingCustomLegend, setEditingCustomLegend] = useState<{ id: string | null; code: string; description: string } | null>(null)
   const allowNavigationRef = useRef(false)
+  const marTableScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     // Wait for router to be ready
@@ -343,6 +350,16 @@ export default function ViewMARForm() {
   const loadUserProfile = async () => {
     const profile = await getCurrentUserProfile()
     setUserProfile(profile)
+    if (profile?.hospital_id) {
+      const { data: hospital } = await supabase
+        .from('hospitals')
+        .select('name')
+        .eq('id', profile.hospital_id)
+        .single()
+      setFacilityNameFromProfile(hospital?.name ?? null)
+    } else {
+      setFacilityNameFromProfile(null)
+    }
   }
 
   const loadCustomLegends = async () => {
@@ -368,6 +385,45 @@ export default function ViewMARForm() {
       loadCustomLegends()
     }
   }, [userProfile?.id])
+
+  // Sync MAR form facility_name from logged-in user's profile when form has none
+  useEffect(() => {
+    if (!marFormId || !marForm || !facilityNameFromProfile) return
+    if (marForm.facility_name?.trim()) return
+    supabase
+      .from('mar_forms')
+      .update({ facility_name: facilityNameFromProfile })
+      .eq('id', marFormId)
+      .then(({ error }) => {
+        if (!error && marForm) setMarForm({ ...marForm, facility_name: facilityNameFromProfile })
+      })
+  }, [marFormId, marForm?.id, facilityNameFromProfile, marForm?.facility_name])
+
+  // Scroll MAR table so the last filled day (or today) is in view when the chart loads
+  useEffect(() => {
+    if (loading || !marForm) return
+    let lastFilledDay = 0
+    for (const medId of Object.keys(administrations)) {
+      for (const dayStr of Object.keys(administrations[medId] || {})) {
+        const d = parseInt(dayStr, 10)
+        if (d > lastFilledDay) lastFilledDay = d
+      }
+    }
+    const dayToScroll = lastFilledDay > 0
+      ? Math.min(31, lastFilledDay)
+      : Math.min(31, Math.max(1, new Date().getDate()))
+    const fixedColsWidth = 200 + 120 + 80
+    const dayColWidth = 40
+    const scrollLeft = Math.max(0, fixedColsWidth + (dayToScroll - 1) * dayColWidth - 80)
+    const applyScroll = () => {
+      const el = marTableScrollRef.current
+      if (el) el.scrollLeft = scrollLeft
+    }
+    requestAnimationFrame(() => {
+      applyScroll()
+      if (!marTableScrollRef.current) setTimeout(applyScroll, 50)
+    })
+  }, [loading, marForm])
 
   const saveCustomLegend = async (code: string, description: string, id: string | null = null) => {
     if (!userProfile?.id) return
@@ -552,6 +608,7 @@ export default function ViewMARForm() {
     hour: string | null
     initials: string | null
     medication: string
+    dosage: string | null
     reason: string
     result: string | null
     staffSignature: string | null
@@ -570,6 +627,7 @@ export default function ViewMARForm() {
           hour: record.hour,
           initials: record.initials,
           medication: record.medication,
+          dosage: record.dosage?.trim() || null,
           reason: record.reason,
           result: record.result,
           staff_signature: record.staffSignature,
@@ -597,7 +655,7 @@ export default function ViewMARForm() {
     }
   }
 
-  const updatePRNRecord = async (recordId: string, field: 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'note', value: string | null) => {
+  const updatePRNRecord = async (recordId: string, field: 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'note' | 'dosage', value: string | null) => {
     if (!marFormId) return
     
     try {
@@ -680,7 +738,7 @@ export default function ViewMARForm() {
   }
 
   const updateMedicationEntry = async (entry: {
-    id: string
+    ids: string[]
     isVitals: boolean
     medication_name: string
     dosage: string
@@ -690,35 +748,80 @@ export default function ViewMARForm() {
     frequency: number | null
     frequency_display: string | null
     notes: string | null
-    hour: string | null
+    times: (string | null)[]
   }) => {
     if (!marFormId) return
-    
+    if (!entry.ids.length) return
+
     try {
       setSaving(true)
-      
-      const updateData: any = {
+
+      const baseData: any = {
         medication_name: entry.medication_name.trim(),
         dosage: entry.dosage.trim(),
         start_date: entry.start_date,
         stop_date: entry.stop_date || null,
       }
 
-      // For medications (not vitals), include additional fields
       if (!entry.isVitals) {
-        updateData.route = entry.route?.trim() || null
-        updateData.frequency = entry.frequency
-        updateData.frequency_display = entry.frequency_display?.trim() || null
-        updateData.notes = entry.notes?.trim() || null
-        updateData.hour = entry.hour
+        baseData.route = entry.route?.trim() || null
+        baseData.frequency = entry.frequency
+        baseData.frequency_display = entry.frequency_display?.trim() || null
+        baseData.notes = entry.notes?.trim() || null
       }
 
-      const { error } = await supabase
-        .from('mar_medications')
-        .update(updateData)
-        .eq('id', entry.id)
+      // Update existing rows
+      for (let i = 0; i < entry.ids.length; i++) {
+        const id = entry.ids[i]
+        const updateData = { ...baseData }
+        if (!entry.isVitals && i < entry.times.length) {
+          updateData.hour = entry.times[i] ?? null
+        } else if (entry.isVitals) {
+          updateData.hour = null
+        }
+        const { error } = await supabase
+          .from('mar_medications')
+          .update(updateData)
+          .eq('id', id)
+        if (error) throw error
+      }
 
-      if (error) throw error
+      // If form has more times than existing rows (e.g. frequency 3 but only 2 rows), insert missing rows
+      if (!entry.isVitals && entry.times.length > entry.ids.length) {
+        let startOrder = 0
+        if (entry.ids.length > 0) {
+          const { data: existing } = await supabase
+            .from('mar_medications')
+            .select('display_order')
+            .in('id', entry.ids)
+          const maxOrder = existing?.length
+            ? Math.max(...existing.map((r: { display_order: number | null }) => r.display_order ?? 0))
+            : 0
+          startOrder = maxOrder + 1
+        } else {
+          const { data: maxRow } = await supabase
+            .from('mar_medications')
+            .select('display_order')
+            .eq('mar_form_id', marFormId)
+            .order('display_order', { ascending: false })
+            .limit(1)
+            .single()
+          startOrder = (maxRow?.display_order ?? 0) + 1
+        }
+        const toInsert = []
+        for (let i = entry.ids.length; i < entry.times.length; i++) {
+          toInsert.push({
+            mar_form_id: marFormId,
+            ...baseData,
+            hour: entry.times[i] ?? null,
+            display_order: startOrder + (i - entry.ids.length),
+          })
+        }
+        const { error: insertError } = await supabase
+          .from('mar_medications')
+          .insert(toInsert)
+        if (insertError) throw insertError
+      }
 
       await loadMARForm()
       setMessage(`${entry.isVitals ? 'Vitals' : 'Medication'} entry updated successfully!`)
@@ -809,8 +912,8 @@ export default function ViewMARForm() {
       }
     }
     
-    const dbField = field === 'hour' ? 'hour' : field === 'result' ? 'result' : field === 'initials' ? 'initials' : field === 'reason' ? 'reason' : 'staff_signature'
-    await updatePRNRecord(recordId, dbField as 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason', editingPRNValue.trim() || null)
+    const dbField = field === 'hour' ? 'hour' : field === 'result' ? 'result' : field === 'initials' ? 'initials' : field === 'reason' ? 'reason' : field === 'dosage' ? 'dosage' : 'staff_signature'
+    await updatePRNRecord(recordId, dbField as 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'dosage', editingPRNValue.trim() || null)
     setEditingPRNField(null)
     setEditingPRNValue('')
   }
@@ -1916,27 +2019,25 @@ export default function ViewMARForm() {
                     )}
                   </div>
                   <div>
-                    <button
-                      onClick={() => setShowEditPatientInfoModal(true)}
-                      className="text-left text-lg font-medium text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-                    >
-                      Facility Name: {marForm.facility_name || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
-                    </button>
+                    <p className="text-lg font-medium text-gray-800 dark:text-white">
+                      Facility Name: {facilityNameFromProfile ?? marForm.facility_name ?? 'N/A'}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">From your profile (assigned facility)</p>
                   </div>
                 </div>
               </div>
 
               {/* Medication Administration Table */}
-              <div className="overflow-x-auto">
+              <div ref={marTableScrollRef} className="overflow-x-auto">
                 <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
                   <colgroup>
-                    <col className="w-[200px]" /> {/* Medication */}
+                    <col style={{ width: '200px', minWidth: '200px' }} /> {/* Medication - fixed so it doesn't shrink on horizontal scroll */}
                     <col className="w-[120px]" /> {/* Start/Stop Date */}
                     <col className="w-[80px]" /> {/* Hour */}
                   </colgroup>
                   <thead>
                     <tr className="bg-gray-100 dark:bg-gray-700">
-                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-0 z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500" style={{ minWidth: '200px' }}>
+                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-0 z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500" style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}>
                         Medication
                       </th>
                       <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-[200px] z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500" style={{ minWidth: '120px' }}>
@@ -2044,6 +2145,7 @@ export default function ViewMARForm() {
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
                                 className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500 relative"
+                                style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}
                               >
                                 {/* Add Row Indicator - Top */}
                                 {rowHover?.rowId === med.id && rowHover?.position === 'top' && (
@@ -2095,6 +2197,13 @@ export default function ViewMARForm() {
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()
+                                          // For medications with multiple times, load full group so form shows all times
+                                          const isMulti = !isVitalsEntry && group.rowSpan > 1
+                                          const sortedMeds = isMulti
+                                            ? [...group.meds].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+                                            : [med]
+                                          const ids = sortedMeds.map(m => m.id)
+                                          const times = sortedMeds.map(m => (m.hour != null && m.hour !== '') ? m.hour : '00:00')
                                           setEditingEntry({
                                             id: med.id,
                                             isVitals: isVitalsEntry,
@@ -2103,10 +2212,11 @@ export default function ViewMARForm() {
                                             route: med.route,
                                             start_date: med.start_date,
                                             stop_date: med.stop_date,
-                                            frequency: med.frequency,
+                                            frequency: med.frequency ?? (isMulti ? sortedMeds.length : 1),
                                             frequency_display: med.frequency_display,
                                             notes: med.notes,
-                                            hour: med.hour
+                                            hour: med.hour ?? '00:00',
+                                            ...(isMulti ? { ids, times } : {})
                                           })
                                           setInsertPosition(null) // Clear insert position
                                           setShowAddMedModal(true) // Use same modal as add
@@ -2851,6 +2961,7 @@ export default function ViewMARForm() {
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Time</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Initials</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Medication</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Dosage</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Reason/Indication</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Result</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Staff Signature</th>
@@ -2950,6 +3061,34 @@ export default function ViewMARForm() {
                           </td>
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
                             {prn.medication || '—'}
+                          </td>
+                          <td 
+                            className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                            onClick={() => handlePRNFieldEdit(prn.id, 'dosage', prn.dosage)}
+                          >
+                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'dosage' ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editingPRNValue}
+                                  onChange={(e) => setEditingPRNValue(e.target.value)}
+                                  onBlur={() => handlePRNFieldSave(prn.id, 'dosage')}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handlePRNFieldSave(prn.id, 'dosage')
+                                    } else if (e.key === 'Escape') {
+                                      handlePRNFieldCancel()
+                                    }
+                                  }}
+                                  autoFocus
+                                  placeholder="e.g., 500 mg"
+                                  className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            ) : (
+                              <span>{prn.dosage || '—'}</span>
+                            )}
                           </td>
                           <td 
                             className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
@@ -3102,19 +3241,23 @@ export default function ViewMARForm() {
               onSubmit={async (data) => {
                 try {
                   if (editingEntry) {
-                    // Edit mode - update existing entry
+                    // Edit mode - update existing entry (or all rows in group when multiple times)
+                    const md = data.type === 'medication' ? data.medicationData! : null
+                    const timesArray = md && md.frequency > 1 && md.times?.length
+                      ? md.times
+                      : md ? [md.hour] : []
                     const updateData = {
-                      id: editingEntry.id,
+                      ids: editingEntry.ids && editingEntry.ids.length > 0 ? editingEntry.ids : [editingEntry.id],
                       isVitals: editingEntry.isVitals,
-                      medication_name: data.type === 'medication' ? data.medicationData!.medicationName : 'VITALS',
-                      dosage: data.type === 'medication' ? data.medicationData!.dosage : data.vitalsData!.notes,
-                      route: data.type === 'medication' ? data.medicationData!.route : null,
-                      start_date: data.type === 'medication' ? data.medicationData!.startDate : data.vitalsData!.startDate,
-                      stop_date: data.type === 'medication' ? data.medicationData!.stopDate : data.vitalsData!.stopDate,
-                      frequency: data.type === 'medication' ? data.medicationData!.frequency : null,
-                      frequency_display: data.type === 'medication' ? data.medicationData!.frequencyDisplay : null,
-                      notes: data.type === 'medication' ? data.medicationData!.notes : 'Vital Signs Entry',
-                      hour: data.type === 'medication' ? data.medicationData!.hour : null
+                      medication_name: data.type === 'medication' ? md!.medicationName : 'VITALS',
+                      dosage: data.type === 'medication' ? md!.dosage : data.vitalsData!.notes,
+                      route: data.type === 'medication' ? md!.route : null,
+                      start_date: data.type === 'medication' ? md!.startDate : data.vitalsData!.startDate,
+                      stop_date: data.type === 'medication' ? md!.stopDate : data.vitalsData!.stopDate,
+                      frequency: data.type === 'medication' ? md!.frequency : null,
+                      frequency_display: data.type === 'medication' ? md!.frequencyDisplay : null,
+                      notes: data.type === 'medication' ? md!.notes : 'Vital Signs Entry',
+                      times: data.type === 'medication' ? timesArray : [null]
                     }
                     await updateMedicationEntry(updateData)
                     setShowAddMedModal(false)
@@ -3142,7 +3285,7 @@ export default function ViewMARForm() {
                 setEditingEntry(null)
               }}
               defaultStartDate={new Date().toISOString().split('T')[0]}
-              defaultHour={new Date().toTimeString().slice(0, 5)}
+              defaultHour=""
               defaultInitials={(() => {
                 // Generate initials from full_name if staff_initials not set
                 if (userProfile?.staff_initials) {
@@ -3190,8 +3333,8 @@ export default function ViewMARForm() {
                   allergies: formData.get('allergies') as string || 'None',
                   diet: formData.get('diet') as string || null,
                   physician_name: formData.get('physician_name') as string || null,
-                  physician_phone: formData.get('physician_phone') as string || null,
-                  facility_name: formData.get('facility_name') as string || null
+                  physician_phone: formData.get('physician_phone') as string || null
+                  // facility_name is determined by the logged-in user's profile (assigned facility), not edited here
                 }
                 
                 // Update mar_forms table
@@ -3260,15 +3403,6 @@ export default function ViewMARForm() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Facility Name:</label>
-                <input
-                  type="text"
-                  name="facility_name"
-                  defaultValue={marForm.facility_name || ''}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                />
-              </div>
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
@@ -3320,7 +3454,7 @@ export default function ViewMARForm() {
               }}
               onCancel={() => setShowVitalSignsModal(false)}
               defaultStartDate={new Date().toISOString().split('T')[0]}
-              defaultHour={new Date().toTimeString().slice(0, 5)}
+              defaultHour=""
               defaultInitials={(() => {
                 // Generate initials from full_name if staff_initials not set
                 if (userProfile?.staff_initials) {
@@ -3868,12 +4002,24 @@ function AddMedicationOrVitalsForm({
     frequency_display: string | null
     notes: string | null
     hour: string | null
+    /** All administration times for this medication group (when frequency > 1). */
+    times?: string[]
   } | null
   isEditMode?: boolean
 }) {
   const [entryType, setEntryType] = useState<'medication' | 'vitals'>(
     isEditMode && editData ? (editData.isVitals ? 'vitals' : 'medication') : defaultType
   )
+  // In edit mode: load times from editData and pad to frequency so all slots show (e.g. 3x/day with only 2 DB rows)
+  const initialTimes = (() => {
+    if (!isEditMode || !editData || editData.isVitals) return []
+    const fromData = editData.times?.length ? editData.times : (editData.hour ? [editData.hour] : [])
+    const freq = editData.frequency || 1
+    if (freq <= 1) return fromData
+    const padded = [...fromData]
+    while (padded.length < freq) padded.push('')
+    return padded
+  })()
   const [medicationData, setMedicationData] = useState({
     medicationName: isEditMode && editData && !editData.isVitals ? editData.medication_name : '',
     dosage: isEditMode && editData && !editData.isVitals ? editData.dosage : '',
@@ -3883,7 +4029,7 @@ function AddMedicationOrVitalsForm({
     notes: isEditMode && editData && !editData.isVitals ? (editData.notes || '') : '',
     initials: '', // No longer collected from form, will be empty
     frequency: isEditMode && editData && !editData.isVitals ? (editData.frequency || 1) : 1, // Number of times per day
-    times: [] as string[], // Array of times for each frequency
+    times: initialTimes as string[], // Array of times for each frequency; from editData when editing
     route: isEditMode && editData && !editData.isVitals ? (editData.route || '') : '', // Route of administration
     frequencyDisplay: isEditMode && editData && !editData.isVitals ? (editData.frequency_display || '') : '' // Custom frequency display text
   })
@@ -4335,6 +4481,7 @@ function AddPRNRecordForm({
     hour: string | null
     initials: string | null
     medication: string
+    dosage: string | null
     reason: string
     result: string | null
     staffSignature: string | null
@@ -4345,6 +4492,7 @@ function AddPRNRecordForm({
   const [formData, setFormData] = useState({
     date: defaultDate,
     medication: '',
+    dosage: '',
     reason: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -4362,6 +4510,7 @@ function AddPRNRecordForm({
         date: formData.date,
         hour: null,
         medication: formData.medication,
+        dosage: formData.dosage.trim() || null,
         reason: formData.reason,
         result: null,
         initials: null,
@@ -4371,6 +4520,7 @@ function AddPRNRecordForm({
       setFormData({
         date: defaultDate,
         medication: '',
+        dosage: '',
         reason: ''
       })
     } catch (err) {
@@ -4404,7 +4554,20 @@ function AddPRNRecordForm({
           value={formData.medication}
           onChange={(e) => setFormData({ ...formData, medication: e.target.value })}
           required
-          placeholder="e.g., Tylenol 500 mg"
+          placeholder="e.g., Tylenol"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Dosage
+        </label>
+        <input
+          type="text"
+          value={formData.dosage}
+          onChange={(e) => setFormData({ ...formData, dosage: e.target.value })}
+          placeholder="e.g., 500 mg"
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
       </div>

@@ -58,6 +58,7 @@ export interface MARPRNRecord {
   hour: string
   initials: string
   medication: string
+  dosage: string | null
   reason: string
   result: string | null
   staff_signature: string

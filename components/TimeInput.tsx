@@ -11,9 +11,10 @@ interface TimeInputProps {
 }
 
 // Helper to parse various time formats into { hour12, minute, period }
-const parseTimeValue = (value: string): { hour12: number; minute: number; period: 'AM' | 'PM' } => {
+// When value is empty, period is null so we show neutral AM/PM (user must click one)
+const parseTimeValue = (value: string): { hour12: number; minute: number; period: 'AM' | 'PM' | null } => {
   if (!value || value.trim() === '') {
-    return { hour12: 12, minute: 0, period: 'AM' }
+    return { hour12: 12, minute: 0, period: null }
   }
 
   // Clean up the value - trim whitespace and remove timezone suffix
@@ -122,7 +123,7 @@ const parseTimeValue = (value: string): { hour12: number; minute: number; period
     return { hour12, minute, period }
   }
 
-  // Default fallback
+  // Default fallback (has content but couldn't parse period)
   return { hour12: 12, minute: 0, period: 'AM' }
 }
 
@@ -144,7 +145,7 @@ export default function TimeInput({
   const parsed = parseTimeValue(value)
   const [hour, setHour] = useState(parsed.hour12.toString())
   const [minute, setMinute] = useState(parsed.minute.toString().padStart(2, '0'))
-  const [period, setPeriod] = useState<'AM' | 'PM'>(parsed.period)
+  const [period, setPeriod] = useState<'AM' | 'PM' | null>(parsed.period)
 
   // Update internal state when value prop changes
   useEffect(() => {
@@ -200,10 +201,10 @@ export default function TimeInput({
     if (h < 1) h = 1
     if (h > 12) h = 12
     setHour(h.toString())
-    
-    // Emit the formatted time
     const m = parseInt(minute, 10) || 0
-    onChange(formatTime12(h, m < 0 ? 0 : m > 59 ? 59 : m, period))
+    const normM = m < 0 ? 0 : m > 59 ? 59 : m
+    // Only emit if user has selected AM/PM so we don't pretend a selection was made
+    if (period !== null) onChange(formatTime12(h, normM, period))
   }
 
   const handleMinuteBlur = () => {
@@ -212,10 +213,9 @@ export default function TimeInput({
     if (m < 0) m = 0
     if (m > 59) m = 59
     setMinute(m.toString().padStart(2, '0'))
-    
-    // Emit the formatted time
     const h = parseInt(hour, 10) || 12
-    onChange(formatTime12(h < 1 ? 1 : h > 12 ? 12 : h, m, period))
+    const normH = h < 1 ? 1 : h > 12 ? 12 : h
+    if (period !== null) onChange(formatTime12(normH, m, period))
   }
 
   const togglePeriod = () => {
@@ -225,6 +225,11 @@ export default function TimeInput({
     const m = parseInt(minute, 10) || 0
     onChange(formatTime12(h, m, newPeriod))
   }
+
+  const neutralBtn = 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-500'
+  const selectedAM = 'bg-lasso-blue text-white'
+  const selectedPM = 'bg-lasso-navy text-white'
+  const unselectedBtn = 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-500'
 
   if (compact) {
     return (
@@ -258,15 +263,26 @@ export default function TimeInput({
         />
         <button
           type="button"
-          onClick={togglePeriod}
+          onClick={() => {
+            if (period === null) {
+              setPeriod('AM')
+              const h = parseInt(hour, 10) || 12
+              const m = parseInt(minute, 10) || 0
+              onChange(formatTime12(h, m, 'AM'))
+            } else {
+              togglePeriod()
+            }
+          }}
           disabled={disabled}
           className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-            period === 'AM'
-              ? 'bg-lasso-blue text-white'
-              : 'bg-lasso-navy text-white'
+            period === null
+              ? 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-400'
+              : period === 'AM'
+                ? 'bg-lasso-blue text-white'
+                : 'bg-lasso-navy text-white'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
         >
-          {period}
+          {period ?? 'AM/PM'}
         </button>
       </div>
     )
@@ -317,9 +333,7 @@ export default function TimeInput({
           }}
           disabled={disabled}
           className={`px-3 py-2 text-sm font-medium transition-colors ${
-            period === 'AM'
-              ? 'bg-lasso-blue text-white'
-              : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-500'
+            period === 'AM' ? selectedAM : (period === null ? neutralBtn : unselectedBtn)
           } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           AM
@@ -336,9 +350,7 @@ export default function TimeInput({
           }}
           disabled={disabled}
           className={`px-3 py-2 text-sm font-medium transition-colors ${
-            period === 'PM'
-              ? 'bg-lasso-navy text-white'
-              : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-500'
+            period === 'PM' ? selectedPM : (period === null ? neutralBtn : unselectedBtn)
           } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           PM
@@ -352,5 +364,9 @@ export default function TimeInput({
 export const formatTimeDisplay = (timeString: string): string => {
   if (!timeString) return ''
   const parsed = parseTimeValue(timeString)
+  if (parsed.period === null) {
+    const m = parsed.minute.toString().padStart(2, '0')
+    return `${parsed.hour12}:${m}`
+  }
   return formatTime12(parsed.hour12, parsed.minute, parsed.period)
 }
