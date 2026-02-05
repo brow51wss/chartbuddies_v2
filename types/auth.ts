@@ -10,7 +10,10 @@ export interface UserProfile {
   role: Role
   hospital_id: string | null
   staff_initials: string | null
+  staff_initials_text: string | null
   staff_signature: string | null
+  staff_signature_font: string | null
+  staff_signature_text: string | null
   designation: string | null
   is_active: boolean
   created_at: string

@@ -4,8 +4,63 @@ import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
 import TimeInput, { formatTimeDisplay } from '../../../../components/TimeInput'
+
+const SIGNATURE_FONTS_LINK_ID = 'mar-signature-fonts-link'
+function ensureSignatureFontsLoaded(font: string) {
+  if (typeof document === 'undefined' || !font) return
+  if (document.getElementById(SIGNATURE_FONTS_LINK_ID)) return
+  const link = document.createElement('link')
+  link.id = SIGNATURE_FONTS_LINK_ID
+  link.href = 'https://fonts.googleapis.com/css2?family=Allura&family=Caveat:wght@400;700&family=Dancing+Script:wght@400;700&family=Great+Vibes&family=Sacramento&display=swap'
+  link.rel = 'stylesheet'
+  document.head.appendChild(link)
+}
+
+/** Renders initials or signature: text with chosen font when available, else image or plain text. Used on MAR. */
+function InitialsOrSignatureDisplay({
+  value,
+  variant = 'initials',
+  userProfile = null
+}: {
+  value: string | null
+  variant?: 'initials' | 'signature'
+  userProfile?: UserProfile | null
+}) {
+  if (!value) return <span>—</span>
+  const font = userProfile?.staff_signature_font || 'Dancing Script'
+  const showAsTextWithFont =
+    variant === 'initials'
+      ? !!userProfile?.staff_initials_text && value === userProfile?.staff_initials
+      : !!userProfile?.staff_signature_text && value === userProfile?.staff_signature
+  const displayText = variant === 'initials' ? userProfile?.staff_initials_text : userProfile?.staff_signature_text
+  if (showAsTextWithFont && displayText) {
+    ensureSignatureFontsLoaded(font)
+    return (
+      <span
+        style={{
+          fontFamily: `"${font}", cursive`,
+          fontSize: variant === 'initials' ? '1.1em' : '1.4em',
+          verticalAlign: 'middle'
+        }}
+      >
+        {displayText}
+      </span>
+    )
+  }
+  if (value.startsWith('data:image')) {
+    return (
+      <img
+        src={value}
+        alt={variant === 'initials' ? 'Initials' : 'Signature'}
+        style={{ maxHeight: variant === 'initials' ? '1.25em' : '1.75em', maxWidth: variant === 'initials' ? '3em' : '8em', verticalAlign: 'middle', display: 'inline-block' }}
+      />
+    )
+  }
+  return <span>{value}</span>
+}
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../../../../lib/auth'
+import type { UserProfile } from '../../../../types/auth'
 import type { MARForm, MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns, MARCustomLegend } from '../../../../types/mar'
 import {
   DndContext,
@@ -881,8 +936,13 @@ export default function ViewMARForm() {
     
     // Auto-populate initials from user profile if editing initials field
     if (field === 'initials') {
+      const isDrawn = currentValue?.startsWith('data:image')
+      if (isDrawn) {
+        setEditingPRNValue('') // Don't put data URL in text input; show placeholder
+        return
+      }
       let userInitials = ''
-      if (userProfile?.staff_initials) {
+      if (userProfile?.staff_initials && !userProfile.staff_initials.startsWith('data:image')) {
         userInitials = userProfile.staff_initials.toUpperCase()
       } else if (userProfile?.full_name) {
         const names = userProfile.full_name.trim().split(/\s+/)
@@ -893,6 +953,8 @@ export default function ViewMARForm() {
         }
       }
       setEditingPRNValue(currentValue || userInitials)
+    } else if (field === 'staff_signature' && currentValue?.startsWith('data:image')) {
+      setEditingPRNValue('') // Don't put data URL in text input
     } else {
       setEditingPRNValue(currentValue || '')
     }
@@ -913,7 +975,12 @@ export default function ViewMARForm() {
     }
     
     const dbField = field === 'hour' ? 'hour' : field === 'result' ? 'result' : field === 'initials' ? 'initials' : field === 'reason' ? 'reason' : field === 'dosage' ? 'dosage' : 'staff_signature'
-    await updatePRNRecord(recordId, dbField as 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'dosage', editingPRNValue.trim() || null)
+    let valueToSave = editingPRNValue.trim() || null
+    if ((field === 'initials' || field === 'staff_signature') && !valueToSave && record) {
+      const existing = field === 'initials' ? record.initials : record.staff_signature
+      if (existing?.startsWith('data:image')) valueToSave = existing
+    }
+    await updatePRNRecord(recordId, dbField as 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'dosage', valueToSave)
     setEditingPRNField(null)
     setEditingPRNValue('')
   }
@@ -2349,14 +2416,16 @@ export default function ViewMARForm() {
                             {days.map(day => {
                               const admin = medAdmin[day]
                               const status = admin?.status || 'Not Given'
-                              const initials = (admin?.initials || '').trim().toUpperCase()
+                              const rawInitials = admin?.initials ?? ''
+                              const initialsForLogic = rawInitials.startsWith('data:image') ? '' : rawInitials.trim().toUpperCase()
+                              const initials = rawInitials
                               const notes = admin?.notes || null
                               const isNotGiven = status === 'Not Given'
                               const isGiven = status === 'Given'
                               const isPRN = status === 'PRN'
-                              const isDC = initials === 'DC'
-                              const isRefused = initials === 'R'
-                              const isHeld = initials === 'H'
+                              const isDC = initialsForLogic === 'DC'
+                              const isRefused = initialsForLogic === 'R'
+                              const isHeld = initialsForLogic === 'H'
                               const hasParameter = !!med.parameter
 
                               // Check if this day is after a DC (Discontinued) day
@@ -2366,7 +2435,8 @@ export default function ViewMARForm() {
                                 // Find the earliest day with DC for this medication
                                 for (let checkDay = 1; checkDay < day; checkDay++) {
                                   const checkAdmin = medAdmin[checkDay]
-                                  if (checkAdmin?.initials === 'DC') {
+                                  const checkRaw = checkAdmin?.initials ?? ''
+                                  if (!checkRaw.startsWith('data:image') && checkRaw.trim().toUpperCase() === 'DC') {
                                     dcDay = checkDay
                                     isDiscontinued = true
                                     break
@@ -2473,16 +2543,21 @@ export default function ViewMARForm() {
                                         />
                                       ) : (
                                           (() => {
-                                            const getUserInitials = () => {
+                                            const getUserInitials = (): { value: string; label: string } | null => {
                                               if (userProfile?.staff_initials) {
-                                                return userProfile.staff_initials.toUpperCase()
+                                                if (userProfile.staff_initials.startsWith('data:image')) {
+                                                  return { value: userProfile.staff_initials, label: 'Your Initials' }
+                                                }
+                                                return { value: userProfile.staff_initials.toUpperCase(), label: `${userProfile.staff_initials.toUpperCase()} (${userProfile?.full_name || 'Your Initials'})` }
                                               }
                                               if (userProfile?.full_name) {
                                                 const names = userProfile.full_name.trim().split(/\s+/)
                                                 if (names.length >= 2) {
-                                                  return (names[0][0] + names[names.length - 1][0]).toUpperCase()
+                                                  const val = (names[0][0] + names[names.length - 1][0]).toUpperCase()
+                                                  return { value: val, label: `${val} (${userProfile.full_name})` }
                                                 } else if (names.length === 1) {
-                                                  return names[0][0].toUpperCase()
+                                                  const val = names[0][0].toUpperCase()
+                                                  return { value: val, label: val }
                                                 }
                                               }
                                               return null
@@ -2511,7 +2586,7 @@ export default function ViewMARForm() {
                                               >
                                                 <option value="">Select...</option>
                                                 {userInitials && (
-                                                  <option value={userInitials}>{userInitials} ({userProfile?.full_name || 'Your Initials'})</option>
+                                                  <option value={userInitials.value}>{userInitials.label}</option>
                                                 )}
                                                 <option value="DC">DC (Discontinued)</option>
                                                 <option value="NG">NG (Not Given)</option>
@@ -2609,7 +2684,7 @@ export default function ViewMARForm() {
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
-                                                      {initials}
+                                                      <InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} />
                                                     </div>
                                                     <button
                                                       onClick={(e) => {
@@ -2626,7 +2701,7 @@ export default function ViewMARForm() {
                                                 </div>
                                               ) : (
                                                 <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
-                                                  {initials || '—'}
+                                                  <InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} />
                                                 </div>
                                               )
                                           )}
@@ -2635,7 +2710,7 @@ export default function ViewMARForm() {
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <div className="text-red-600 dark:text-red-400 font-bold">
-                                                      ○{initials}
+                                                      ○<InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} />
                                                     </div>
                                                     <button
                                                       onClick={(e) => {
@@ -2652,7 +2727,7 @@ export default function ViewMARForm() {
                                                 </div>
                                               ) : (
                                                 <div className="text-red-600 dark:text-red-400 font-bold">
-                                                  ○{initials}
+                                                  ○<InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} />
                                                 </div>
                                               )
                                           )}
@@ -2675,12 +2750,12 @@ export default function ViewMARForm() {
                                                       {notes ? '📝' : '+'} note
                                                     </button>
                                                   </div>
-                                                  {initials && <div className="text-xs text-lasso-blue">{initials}</div>}
+                                                  {initials && <div className="text-xs text-lasso-blue"><InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} /></div>}
                                                 </div>
                                               ) : (
                                                 <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
                                                   PRN
-                                                  {initials && <div className="text-xs">{initials}</div>}
+                                                  {initials && <div className="text-xs"><InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} /></div>}
                                                 </div>
                                               )
                                           )}
@@ -2860,27 +2935,14 @@ export default function ViewMARForm() {
                 <div><strong className="font-bold uppercase">Legend:</strong></div>
                 <div className="mt-1 space-y-0.5">
                   {(() => {
-                    // Generate user initials from full_name if staff_initials not set
-                    const getUserInitials = () => {
-                      if (userProfile?.staff_initials) {
-                        return userProfile.staff_initials.toUpperCase()
-                      }
-                      if (userProfile?.full_name) {
-                        const names = userProfile.full_name.trim().split(/\s+/)
-                        if (names.length >= 2) {
-                          return (names[0][0] + names[names.length - 1][0]).toUpperCase()
-                        } else if (names.length === 1) {
-                          return names[0][0].toUpperCase()
-                        }
-                      }
-                      return null
-                    }
-                    const userInitials = getUserInitials()
-                    
+                    const hasUserInitials = !!(userProfile?.staff_initials || userProfile?.staff_initials_text)
                     return (
                       <>
-                        {userInitials && (
-                          <div className="font-semibold">{userInitials} = {userProfile?.full_name || 'Your Initials'}</div>
+                        {hasUserInitials && (
+                          <div className="font-semibold flex items-center gap-1">
+                            <InitialsOrSignatureDisplay value={userProfile?.staff_initials ?? null} variant="initials" userProfile={userProfile} />
+                            <span>= {userProfile?.full_name || 'Your Initials'}</span>
+                          </div>
                         )}
                         <div>DC = Discontinued</div>
                         <div>NG = Not Given</div>
@@ -3049,14 +3111,14 @@ export default function ViewMARForm() {
                                     }
                                   }}
                                   autoFocus
-                                  placeholder="e.g., JD"
+                                  placeholder={prn.initials?.startsWith('data:image') ? 'Drawn initials (type to replace)' : 'e.g., JD'}
                                   maxLength={4}
                                   className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
                                   onClick={(e) => e.stopPropagation()}
                                 />
                               </div>
                             ) : (
-                              <span>{prn.initials || '—'}</span>
+                              <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} />
                             )}
                           </td>
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
@@ -3200,7 +3262,7 @@ export default function ViewMARForm() {
                                 />
                               </div>
                             ) : (
-                              <span>{prn.staff_signature || '—'}</span>
+                              <InitialsOrSignatureDisplay value={prn.staff_signature} variant="signature" userProfile={userProfile} />
                             )}
                           </td>
                         </tr>

@@ -1,14 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../components/ProtectedRoute'
+import SignatureOrInitialsInput, { type SignatureOrInitialsInputHandle } from '../components/SignatureOrInitialsInput'
 import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile } from '../lib/auth'
 import type { UserProfile } from '../types/auth'
 
 export default function Profile() {
   const router = useRouter()
+  const signatureInputRef = useRef<SignatureOrInitialsInputHandle>(null)
+  const initialsInputRef = useRef<SignatureOrInitialsInputHandle>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [facilityName, setFacilityName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -16,12 +19,16 @@ export default function Profile() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   
+  const [signatureFont, setSignatureFont] = useState<string>('Dancing Script')
+  const [signatureInputMode, setSignatureInputMode] = useState<'type' | 'draw'>('type')
   const [formData, setFormData] = useState({
     first_name: '',
     middle_name: '',
     last_name: '',
     staff_initials: '',
+    staff_initials_text: '',
     staff_signature: '',
+    staff_signature_text: '',
     designation: ''
   })
 
@@ -33,6 +40,12 @@ export default function Profile() {
         return
       }
       setUserProfile(profile)
+      const initialsVal = profile.staff_initials ?? ''
+      const initialsTextVal = profile.staff_initials_text ?? ''
+      const signatureVal = profile.staff_signature ?? ''
+      const signatureTextVal = profile.staff_signature_text ?? ''
+      const signatureFontVal = profile.staff_signature_font ?? 'Dancing Script'
+      setSignatureFont(signatureFontVal)
       
       // Parse full_name into separate fields if they don't exist
       let firstName = (profile as any).first_name || ''
@@ -57,8 +70,10 @@ export default function Profile() {
         first_name: firstName,
         middle_name: middleName,
         last_name: lastName,
-        staff_initials: profile.staff_initials || '',
-        staff_signature: profile.staff_signature || '',
+        staff_initials: initialsVal,
+        staff_initials_text: initialsTextVal,
+        staff_signature: signatureVal,
+        staff_signature_text: signatureTextVal,
         designation: profile.designation || ''
       })
       if (profile.hospital_id) {
@@ -79,30 +94,53 @@ export default function Profile() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!userProfile) return
+    const hasInitials = formData.staff_initials.trim().length > 0 || formData.staff_initials.startsWith('data:image')
+    if (!hasInitials) {
+      setError('Please draw your staff initials in the box above.')
+      setTimeout(() => setError(''), 5000)
+      return
+    }
 
     setSaving(true)
     setError('')
     setMessage('')
 
     try {
+      const signatureText = signatureInputRef.current?.getText()?.trim() ?? formData.staff_signature_text.trim()
+      const initialsText = initialsInputRef.current?.getText()?.trim() ?? formData.staff_initials_text.trim()
       const { error: updateError } = await supabase
         .from('user_profiles')
         .update({
           first_name: formData.first_name.trim(),
           middle_name: formData.middle_name.trim() || null,
           last_name: formData.last_name.trim(),
-          staff_initials: formData.staff_initials.toUpperCase().trim(),
+          staff_initials: formData.staff_initials.startsWith('data:image') ? formData.staff_initials : (formData.staff_initials.trim().toUpperCase() || null),
+          staff_initials_text: initialsText || null,
           staff_signature: formData.staff_signature.trim() || null,
+          staff_signature_font: signatureFont || null,
+          staff_signature_text: signatureText || null,
           designation: formData.designation.trim() || null
         })
         .eq('id', userProfile.id)
 
       if (updateError) throw updateError
 
-      // Reload profile to get updated data
+      // Reload profile and refresh form so signature/initials show correctly
       const updatedProfile = await getCurrentUserProfile()
       if (updatedProfile) {
         setUserProfile(updatedProfile)
+        if (updatedProfile.staff_signature_font) setSignatureFont(updatedProfile.staff_signature_font)
+        setFormData((prev) => ({
+          ...prev,
+          staff_initials: updatedProfile.staff_initials ?? prev.staff_initials,
+          staff_initials_text: updatedProfile.staff_initials_text ?? prev.staff_initials_text,
+          staff_signature: updatedProfile.staff_signature ?? prev.staff_signature,
+          staff_signature_text: updatedProfile.staff_signature_text ?? prev.staff_signature_text,
+          first_name: updatedProfile.first_name ?? prev.first_name,
+          middle_name: updatedProfile.middle_name ?? prev.middle_name,
+          last_name: updatedProfile.last_name ?? prev.last_name,
+          designation: updatedProfile.designation ?? prev.designation
+        }))
       }
 
       setMessage('Profile updated successfully!')
@@ -114,18 +152,6 @@ export default function Profile() {
     } finally {
       setSaving(false)
     }
-  }
-
-  // Generate initials suggestion from first and last name
-  const generateInitials = () => {
-    const first = formData.first_name.trim()
-    const last = formData.last_name.trim()
-    if (first && last) {
-      return (first[0] + last[0]).toUpperCase()
-    } else if (first) {
-      return first[0].toUpperCase()
-    }
-    return ''
   }
 
   if (loading) {
@@ -243,55 +269,53 @@ export default function Profile() {
                 </div>
               </div>
 
-              {/* Staff Initials */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Staff Initials *
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={formData.staff_initials}
-                    onChange={(e) => setFormData({ ...formData, staff_initials: e.target.value.toUpperCase() })}
-                    maxLength={4}
-                    required
-                    placeholder="e.g., JS"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  />
-                  {(formData.first_name || formData.last_name) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const suggested = generateInitials()
-                        if (suggested) {
-                          setFormData({ ...formData, staff_initials: suggested })
-                        }
-                      }}
-                      className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 text-sm font-medium transition-colors"
-                    >
-                      Auto-fill
-                    </button>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Your initials will be used in MAR forms. Click "Auto-fill" to generate from your name.
-                </p>
-              </div>
-
-              {/* Staff Signature */}
+              {/* Staff Signature - type (with font) or draw, like DocuSign */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Staff Signature
                 </label>
-                <input
-                  type="text"
+                <SignatureOrInitialsInput
+                  ref={signatureInputRef}
                   value={formData.staff_signature}
-                  onChange={(e) => setFormData({ ...formData, staff_signature: e.target.value })}
-                  placeholder="Your full signature"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  savedText={formData.staff_signature_text}
+                  onChange={(dataUrl) => setFormData({ ...formData, staff_signature: dataUrl })}
+                  variant="signature"
+                  width={320}
+                  height={120}
+                  onFontChange={setSignatureFont}
+                  onModeChange={setSignatureInputMode}
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Optional: Your full signature for PRN records</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  Optional: Type your signature and pick a font, or draw it. Used on the MAR for PRN records.
+                </p>
               </div>
+
+              {/* Staff Initials - hidden until Staff Signature is filled; same font as signature, no font picker */}
+              {(() => {
+                const hasSignature = (formData.staff_signature || '').trim().length > 0 || (formData.staff_signature || '').startsWith('data:image')
+                if (!hasSignature) return null
+                return (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Staff Initials *
+                    </label>
+                    <SignatureOrInitialsInput
+                      ref={initialsInputRef}
+                      value={formData.staff_initials}
+                      savedText={formData.staff_initials_text}
+                      onChange={(dataUrl) => setFormData({ ...formData, staff_initials: dataUrl })}
+                      variant="initials"
+                      width={180}
+                      height={60}
+                      fixedFont={signatureFont || 'Dancing Script'}
+                      modeLock={signatureInputMode}
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                      Type your initials or draw them. Uses the same style as your signature. Used on the MAR whenever you initial.
+                    </p>
+                  </div>
+                )
+              })()}
 
               {/* Designation */}
               <div>
