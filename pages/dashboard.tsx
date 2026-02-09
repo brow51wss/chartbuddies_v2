@@ -166,9 +166,10 @@ export default function Dashboard() {
       name: 'Progress Notes',
       description: 'Document patient progress, observations, and clinical notes',
       icon: '📝',
-      status: 'coming_soon',
+      status: 'available',
       color: 'purple',
-      gradient: 'from-purple-500 to-purple-600'
+      gradient: 'from-purple-500 to-purple-600',
+      route: '/dashboard?module=progress'
     },
     {
       id: 'admissions',
@@ -215,6 +216,8 @@ export default function Dashboard() {
       const { module } = router.query
       if (module === 'mar') {
         setSelectedModule('mar')
+      } else if (module === 'progress') {
+        setSelectedModule('progress')
       }
       
       setLoading(false)
@@ -305,6 +308,8 @@ export default function Dashboard() {
 
     if (module.id === 'mar') {
       setSelectedModule('mar')
+    } else if (module.id === 'progress') {
+      setSelectedModule('progress')
     }
   }
 
@@ -684,6 +689,194 @@ export default function Dashboard() {
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                       </svg>
                                       
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : selectedModule === 'progress' ? (
+            // Progress Notes Module - Patient List View
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <button
+                    onClick={handleBackToModules}
+                    className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-2 inline-flex items-center gap-2 text-sm font-medium transition-colors"
+                  >
+                    <span>←</span>
+                    <span>Back to Modules</span>
+                  </button>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    Progress Notes
+                  </h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Select a patient to view or add progress notes
+                  </p>
+                </div>
+              </div>
+
+              {patients.length === 0 ? (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-12 text-center border border-gray-200 dark:border-gray-700">
+                  <div className="text-6xl mb-4">📝</div>
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                    No Patients Found
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-6">
+                    Add your first patient to start adding progress notes
+                  </p>
+                  <Link
+                    href="/admissions"
+                    className="inline-block px-6 py-3 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue font-medium shadow-md hover:shadow-lg transition-all duration-200"
+                  >
+                    Add Patient
+                  </Link>
+                </div>
+              ) : (
+                <div className="max-w-7xl mx-auto">
+                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <colgroup>
+                          <col className="w-48" />
+                          <col className="w-36" />
+                          <col className="w-36" />
+                        </colgroup>
+                        <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
+                          <tr>
+                            <th
+                              ref={nameSortRef}
+                              className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-0 z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600 relative"
+                            >
+                              <div
+                                className="flex items-center cursor-pointer hover:text-lasso-blue transition-colors select-none"
+                                onClick={() => setShowNameSortMenu(!showNameSortMenu)}
+                              >
+                                Patient Name
+                                <NameSortIcon />
+                                <svg className="w-3 h-3 ml-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </div>
+                              {(sortColumn === 'first_name' || sortColumn === 'last_name') && (
+                                <div className="text-[10px] text-lasso-blue font-normal normal-case mt-0.5">
+                                  by {sortColumn === 'first_name' ? 'First Name' : 'Last Name'}
+                                </div>
+                              )}
+                              {showNameSortMenu && (
+                                <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50 min-w-[160px]">
+                                  <div className="py-1">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleSort('first_name'); }}
+                                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between ${sortColumn === 'first_name' ? 'text-lasso-blue font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+                                    >
+                                      <span>First Name</span>
+                                      {sortColumn === 'first_name' && (
+                                        <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                      )}
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleSort('last_name'); }}
+                                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between ${sortColumn === 'last_name' ? 'text-lasso-blue font-medium' : 'text-gray-700 dark:text-gray-300'}`}
+                                    >
+                                      <span>Last Name</span>
+                                      {sortColumn === 'last_name' && (
+                                        <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                                      )}
+                                    </button>
+                                    {(sortColumn === 'first_name' || sortColumn === 'last_name') && (
+                                      <>
+                                        <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setSortColumn(null); setShowNameSortMenu(false); }}
+                                          className="w-full px-4 py-2 text-left text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        >
+                                          Clear Sort
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </th>
+                            <th
+                              className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-[192px] z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors select-none"
+                              onClick={() => handleSort('date_of_birth')}
+                            >
+                              <div className="flex items-center">
+                                Date of Birth
+                                <SortIcon column="date_of_birth" />
+                              </div>
+                            </th>
+                            <th
+                              className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors select-none"
+                              onClick={() => handleSort('created_at')}
+                            >
+                              <div className="flex items-center">
+                                Date Added
+                                <SortIcon column="created_at" />
+                              </div>
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                              Diagnosis
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                          {sortedPatients.map((patient) => (
+                            <tr
+                              key={patient.id}
+                              className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-150"
+                            >
+                              <td className="px-6 py-4 whitespace-nowrap sticky left-0 z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
+                                <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                                  {patient.patient_name}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap sticky left-[192px] z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">
+                                  {new Date(patient.date_of_birth).toLocaleDateString()}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">
+                                  {new Date(patient.created_at).toLocaleDateString()}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">
+                                  {patient.diagnosis || (
+                                    <span className="text-gray-400 dark:text-gray-500 italic">N/A</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center gap-3">
+                                  <Link
+                                    href={`/patients/${patient.id}/progress-notes`}
+                                    className="inline-flex items-center gap-1 text-sm font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue dark:hover:text-lasso-blue/80 transition-colors"
+                                  >
+                                    <span>Open</span>
+                                  </Link>
+                                  {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && (
+                                    <button
+                                      onClick={() => handleDeletePatient(patient.id, patient.patient_name)}
+                                      className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                                      title="Delete patient"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
                                     </button>
                                   )}
                                 </div>

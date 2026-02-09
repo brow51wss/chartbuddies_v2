@@ -28,10 +28,16 @@ function InitialsOrSignatureDisplay({
 }) {
   if (!value) return <span>—</span>
   const font = userProfile?.staff_signature_font || 'Dancing Script'
+  const initialsMatchProfile =
+    !!userProfile?.staff_initials_text &&
+    (value === userProfile?.staff_initials ||
+      value?.trim().toUpperCase() === userProfile?.staff_initials_text?.trim().toUpperCase())
+  const signatureMatchProfile =
+    !!userProfile?.staff_signature_text &&
+    (value === userProfile?.staff_signature ||
+      value?.trim().toUpperCase() === userProfile?.staff_signature_text?.trim().toUpperCase())
   const showAsTextWithFont =
-    variant === 'initials'
-      ? !!userProfile?.staff_initials_text && value === userProfile?.staff_initials
-      : !!userProfile?.staff_signature_text && value === userProfile?.staff_signature
+    variant === 'initials' ? initialsMatchProfile : signatureMatchProfile
   const displayText = variant === 'initials' ? userProfile?.staff_initials_text : userProfile?.staff_signature_text
   if (showAsTextWithFont && displayText) {
     ensureSignatureFontsLoaded(font)
@@ -710,17 +716,22 @@ export default function ViewMARForm() {
     }
   }
 
-  const updatePRNRecord = async (recordId: string, field: 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'note' | 'dosage', value: string | null) => {
-    if (!marFormId) return
+  const updatePRNRecord = async (recordId: string, field: 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'note' | 'dosage', value: string | null): Promise<boolean> => {
+    if (!marFormId) return false
     
     try {
       setSaving(true)
       
       const updateData: any = { [field]: value }
       
+      // DB column is VARCHAR(10); never send data URL or >10 chars
+      if (field === 'initials' && typeof value === 'string') {
+        updateData.initials = value.startsWith('data:image') ? '' : value.slice(0, 10)
+      }
+      
       // If updating initials, also update staff_signature from legend if available
-      if (field === 'initials' && value) {
-        const initialsUpper = value.trim().toUpperCase()
+      if (field === 'initials' && updateData.initials) {
+        const initialsUpper = updateData.initials.trim().toUpperCase()
         if (staffInitials[initialsUpper]) {
           updateData.staff_signature = staffInitials[initialsUpper]
         }
@@ -733,12 +744,14 @@ export default function ViewMARForm() {
 
       if (error) throw error
 
-      await loadMARForm()
+      // Do not refetch MAR form here: it overwrites optimistic state with stale data and makes initials/signature disappear
       setMessage('PRN record updated successfully!')
       setTimeout(() => setMessage(''), 3000)
+      return true
     } catch (err: any) {
       setError(err.message || 'Failed to update PRN record')
       setTimeout(() => setError(''), 5000)
+      return false
     } finally {
       setSaving(false)
     }
@@ -3073,21 +3086,27 @@ export default function ViewMARForm() {
                             }`}
                             onClick={() => {
                               if (prn.hour && prn.result) {
-                                // If initials is empty, auto-populate and save immediately
                                 if (!prn.initials) {
-                                  let userInitials = ''
-                                  if (userProfile?.staff_initials) {
-                                    userInitials = userProfile.staff_initials.toUpperCase()
-                                  } else if (userProfile?.full_name) {
+                                  let userInitials: string | null = null
+                                  const si = userProfile?.staff_initials
+                                  // Never send data URL to DB (initials column is VARCHAR(10)); use text or derive from name
+                                  if (si && typeof si === 'string' && !si.startsWith('data:image') && si.trim().length > 0) {
+                                    userInitials = si.trim().toUpperCase()
+                                  }
+                                  if (!userInitials && userProfile?.full_name) {
                                     const names = userProfile.full_name.trim().split(/\s+/)
                                     if (names.length >= 2) {
                                       userInitials = (names[0][0] + names[names.length - 1][0]).toUpperCase()
-                                    } else if (names.length === 1) {
+                                    } else if (names.length === 1 && names[0].length > 0) {
                                       userInitials = names[0][0].toUpperCase()
                                     }
                                   }
-                                  if (userInitials) {
-                                    updatePRNRecord(prn.id, 'initials', userInitials)
+                                  const safeInitials = userInitials ? userInitials.slice(0, 10) : null
+                                  if (safeInitials) {
+                                    setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, initials: safeInitials } : r))
+                                    updatePRNRecord(prn.id, 'initials', safeInitials).then(ok => {
+                                      if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, initials: prn.initials } : r))
+                                    })
                                     return
                                   }
                                 }
@@ -3117,8 +3136,44 @@ export default function ViewMARForm() {
                                   onClick={(e) => e.stopPropagation()}
                                 />
                               </div>
-                            ) : (
+                            ) : prn.initials ? (
                               <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} />
+                            ) : prn.hour && prn.result && (userProfile?.staff_initials || userProfile?.full_name) ? (
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.stopPropagation()
+                                  let userInitials: string | null = null
+                                  const si = userProfile?.staff_initials
+                                  // Never send data URL to DB (initials column is VARCHAR(10)); use text or derive from name
+                                  if (si && typeof si === 'string' && !si.startsWith('data:image') && si.trim().length > 0) {
+                                    userInitials = si.trim().toUpperCase()
+                                  }
+                                  if (!userInitials && userProfile?.full_name) {
+                                    const names = userProfile.full_name.trim().split(/\s+/)
+                                    if (names.length >= 2) {
+                                      userInitials = (names[0][0] + names[names.length - 1][0]).toUpperCase()
+                                    } else if (names.length === 1 && names[0].length > 0) {
+                                      userInitials = names[0][0].toUpperCase()
+                                    }
+                                  }
+                                  const safeInitials = userInitials ? userInitials.slice(0, 10) : null
+                                  if (safeInitials) {
+                                    setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, initials: safeInitials } : r))
+                                    const ok = await updatePRNRecord(prn.id, 'initials', safeInitials)
+                                    if (!ok) {
+                                      setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, initials: prn.initials } : r))
+                                    }
+                                  }
+                                }}
+                                className="px-2 py-1 text-sm font-medium text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10 dark:hover:bg-lasso-teal/20"
+                              >
+                                Initial
+                              </button>
+                            ) : prn.hour && prn.result ? (
+                              <span className="text-xs text-amber-600 dark:text-amber-400">Set initials in Profile</span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
                             )}
                           </td>
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
@@ -3234,15 +3289,25 @@ export default function ViewMARForm() {
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
                               prn.initials ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50'
                             }`}
-                            onClick={() => {
-                              if (prn.initials) {
-                                handlePRNFieldEdit(prn.id, 'staff_signature', prn.staff_signature)
+                            onClick={async (e) => {
+                              if (!prn.initials) return
+                              e.stopPropagation()
+                              if (prn.staff_signature && editingPRNField?.recordId !== prn.id) return
+                              if (!prn.staff_signature && userProfile?.staff_signature) {
+                                const sig = userProfile.staff_signature
+                                const inits = prn.initials?.trim().toUpperCase()
+                                setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: sig } : r))
+                                if (inits) setStaffInitials(prev => ({ ...prev, [inits]: sig }))
+                                const ok = await updatePRNRecord(prn.id, 'staff_signature', sig)
+                                if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: prn.staff_signature } : r))
+                                return
                               }
+                              if (prn.staff_signature) handlePRNFieldEdit(prn.id, 'staff_signature', prn.staff_signature)
                             }}
-                            title={!prn.initials ? 'Initials must be set first' : ''}
+                            title={!prn.initials ? 'Initials must be set first' : !prn.staff_signature ? 'Click to sign (apply saved signature)' : ''}
                           >
                             {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'staff_signature' ? (
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
                                 <input
                                   type="text"
                                   value={editingPRNValue}
@@ -3258,11 +3323,43 @@ export default function ViewMARForm() {
                                   autoFocus
                                   placeholder="e.g., J. Smith, RN"
                                   className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
-                                  onClick={(e) => e.stopPropagation()}
                                 />
                               </div>
+                            ) : prn.staff_signature ? (
+                              <div className="flex flex-col gap-0.5">
+                                <InitialsOrSignatureDisplay value={prn.staff_signature} variant="signature" userProfile={userProfile} />
+                                <button
+                                  type="button"
+                                  onClick={async (ev) => {
+                                    ev.stopPropagation()
+                                    const prevSig = prn.staff_signature
+                                    setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: '' } : r))
+                                    const ok = await updatePRNRecord(prn.id, 'staff_signature', null)
+                                    if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: prevSig } : r))
+                                  }}
+                                  className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 underline w-fit"
+                                >
+                                  Clear signature
+                                </button>
+                              </div>
+                            ) : userProfile?.staff_signature && prn.initials ? (
+                              <button
+                                type="button"
+                                onClick={async (ev) => {
+                                  ev.stopPropagation()
+                                  const sig = userProfile!.staff_signature
+                                  const inits = prn.initials?.trim().toUpperCase()
+                                  setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: sig } : r))
+                                  if (inits) setStaffInitials(prev => ({ ...prev, [inits]: sig }))
+                                  const ok = await updatePRNRecord(prn.id, 'staff_signature', sig)
+                                  if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: prn.staff_signature } : r))
+                                }}
+                                className="px-2 py-1 text-sm font-medium text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10 dark:hover:bg-lasso-teal/20"
+                              >
+                                Sign
+                              </button>
                             ) : (
-                              <InitialsOrSignatureDisplay value={prn.staff_signature} variant="signature" userProfile={userProfile} />
+                              <span className="text-gray-400">—</span>
                             )}
                           </td>
                         </tr>
