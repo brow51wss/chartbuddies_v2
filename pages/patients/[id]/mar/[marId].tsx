@@ -4086,7 +4086,7 @@ export default function ViewMARForm() {
             </div>
             <div className="mb-6">
               <p className="text-gray-700 dark:text-gray-300">
-                Are you sure you want to leave this page? Any unsaved changes may be lost.
+                Are you sure you want to leave this page?
               </p>
             </div>
             <div className="flex justify-end space-x-3">
