@@ -2264,71 +2264,65 @@ export default function ViewMARForm() {
                                   </div>
                                 )}
                                 <div className="flex flex-col gap-1 group/medcell">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2">
-                                      {/* Drag Handle */}
-                                      <DragHandleButton medId={med.id} />
-                                      <div className={`font-medium text-sm ${isVitalsEntry ? 'text-lasso-teal dark:text-lasso-blue' : 'text-gray-800 dark:text-white'}`}>
-                                        {isVitalsEntry ? '📊 VITALS' : med.medication_name}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      {/* Edit button */}
+                                  {/* Action icons - above medication name, left-aligned */}
+                                  <div className="flex items-center gap-1">
+                                    {/* Add parameter - first (always showing) */}
+                                    {!isVitalsEntry && med.medication_name && (
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()
-                                          // For medications with multiple times, load full group so form shows all times
-                                          const isMulti = !isVitalsEntry && group.rowSpan > 1
-                                          const sortedMeds = isMulti
-                                            ? [...group.meds].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
-                                            : [med]
-                                          const ids = sortedMeds.map(m => m.id)
-                                          const times = sortedMeds.map(m => (m.hour != null && m.hour !== '') ? m.hour : '00:00')
-                                          setEditingEntry({
-                                            id: med.id,
-                                            isVitals: isVitalsEntry,
-                                            medication_name: med.medication_name,
-                                            dosage: med.dosage,
-                                            route: med.route,
-                                            start_date: med.start_date,
-                                            stop_date: med.stop_date,
-                                            frequency: med.frequency ?? (isMulti ? sortedMeds.length : 1),
-                                            frequency_display: med.frequency_display,
-                                            notes: med.notes,
-                                            hour: med.hour ?? '00:00',
-                                            ...(isMulti ? { ids, times } : {})
-                                          })
-                                          setInsertPosition(null) // Clear insert position
-                                          setShowAddMedModal(true) // Use same modal as add
+                                          setEditingMedicationParameter({ medicationId: med.id, parameter: med.parameter })
+                                          setShowMedicationParameterModal(true)
                                         }}
-                                        className="opacity-0 group-hover/medcell:opacity-100 text-xs px-2 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 transition-all flex items-center justify-center whitespace-nowrap group/edit relative"
-                                        aria-label="Edit entry"
+                                        className="text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-1 whitespace-nowrap group/param relative"
+                                        title={med.parameter ? 'Click to edit parameter' : 'Click to add parameter for this medication'}
                                       >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                          <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                        </svg>
+                                        {med.parameter ? '📝' : '+'}
                                         {/* Tooltip */}
-                                        <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/edit:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                                          Edit {isVitalsEntry ? 'vitals' : 'medication'}
+                                        <span className="absolute top-full left-0 mt-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/param:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                                          {med.parameter ? 'Edit parameter' : 'Add parameter'}
                                         </span>
                                       </button>
-                                      {!isVitalsEntry && med.medication_name && (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            setEditingMedicationParameter({ medicationId: med.id, parameter: med.parameter })
-                                            setShowMedicationParameterModal(true)
-                                          }}
-                                          className="text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-1 whitespace-nowrap group/param relative"
-                                          title={med.parameter ? 'Click to edit parameter' : 'Click to add parameter for this medication'}
-                                        >
-                                          {med.parameter ? '📝' : '+'}
-                                          {/* Tooltip */}
-                                          <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/param:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                                            {med.parameter ? 'Edit parameter' : 'Add parameter'}
-                                          </span>
-                                        </button>
-                                      )}
+                                    )}
+                                    {/* Edit medication - second */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        // For medications with multiple times, load full group so form shows all times
+                                        const isMulti = !isVitalsEntry && group.rowSpan > 1
+                                        const sortedMeds = isMulti
+                                          ? [...group.meds].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+                                          : [med]
+                                        const ids = sortedMeds.map(m => m.id)
+                                        const times = sortedMeds.map(m => (m.hour != null && m.hour !== '') ? m.hour : '00:00')
+                                        setEditingEntry({
+                                          id: med.id,
+                                          isVitals: isVitalsEntry,
+                                          medication_name: med.medication_name,
+                                          dosage: med.dosage,
+                                          route: med.route,
+                                          start_date: med.start_date,
+                                          stop_date: med.stop_date,
+                                          frequency: med.frequency ?? (isMulti ? sortedMeds.length : 1),
+                                          frequency_display: med.frequency_display,
+                                          notes: med.notes,
+                                          hour: med.hour ?? '00:00',
+                                          ...(isMulti ? { ids, times } : {})
+                                        })
+                                        setInsertPosition(null) // Clear insert position
+                                        setShowAddMedModal(true) // Use same modal as add
+                                      }}
+                                      className="opacity-0 group-hover/medcell:opacity-100 text-xs px-2 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 transition-all flex items-center justify-center whitespace-nowrap group/edit relative"
+                                      aria-label="Edit entry"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                      </svg>
+                                      {/* Tooltip */}
+                                      <span className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/edit:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                                        Edit {isVitalsEntry ? 'vitals' : 'medication'}
+                                      </span>
+                                    </button>
                                       {/* Delete button - shows on hover */}
                                       <button
                                         onClick={(e) => {
@@ -2348,10 +2342,16 @@ export default function ViewMARForm() {
                                           <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
                                         {/* Tooltip */}
-                                        <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/delete:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                                        <span className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/delete:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                                           Delete {isVitalsEntry ? 'vitals' : 'medication'}
                                         </span>
                                       </button>
+                                  </div>
+                                  {/* Medication name - below icons */}
+                                  <div className="flex items-center gap-2">
+                                    <DragHandleButton medId={med.id} />
+                                    <div className={`font-medium text-sm ${isVitalsEntry ? 'text-lasso-teal dark:text-lasso-blue' : 'text-gray-800 dark:text-white'}`}>
+                                      {isVitalsEntry ? '📊 VITALS' : med.medication_name}
                                     </div>
                                   </div>
                                   <div className={`text-xs mt-1 ${isVitalsEntry ? 'text-lasso-blue dark:text-lasso-blue italic' : 'text-gray-600 dark:text-gray-400'}`}>
