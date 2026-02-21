@@ -2224,7 +2224,7 @@ export default function ViewMARForm() {
                             {shouldMerge && !isFirstRow ? null : (
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
-                                className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500 relative"
+                                className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500 relative ${rowHover?.rowId === med.id ? 'z-20' : 'z-10'}`}
                                 style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}
                               >
                                 {/* Add Row Indicator - Top */}
