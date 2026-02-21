@@ -929,6 +929,103 @@ export default function ViewMARForm() {
     }
   }
 
+  /** Parse MAR month_year (e.g. "2026-02", "02/2026", or "February 2026") to { year, month }. */
+  const parseMARMonthYear = (monthYear: string): { y: number; m: number } | null => {
+    const raw = String(monthYear || '').trim()
+    const normalized = raw.replace(/\//g, '-')
+    const parts = normalized.split('-').map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n))
+    let y = parts[0]
+    let m = parts[1]
+    if (parts.length >= 2 && m > 12) {
+      [y, m] = [m, y]
+    }
+    if (y && m && m >= 1 && m <= 12) return { y, m }
+    const monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december']
+    const lower = raw.toLowerCase()
+    for (let i = 0; i < monthNames.length; i++) {
+      if (lower.includes(monthNames[i])) {
+        const match = raw.match(/\b(19|20)\d{2}\b/)
+        const year = match ? parseInt(match[0], 10) : new Date().getFullYear()
+        return { y: year, m: i + 1 }
+      }
+    }
+    return null
+  }
+
+  /** Sync MAR day note to Progress Notes Page 1. Includes time so each administration can be updated in place. */
+  const syncMARNoteToProgressNotes = async (
+    patientId: string,
+    monthYear: string,
+    day: number,
+    note: string | null,
+    timeLabel?: string
+  ) => {
+    if (!userProfile?.id) throw new Error('User profile not loaded; cannot sync to Progress Notes.')
+    const parsed = parseMARMonthYear(monthYear)
+    if (!parsed) throw new Error(`Invalid MAR month/year: ${monthYear}`)
+    const { y, m } = parsed
+    const lastDay = new Date(y, m, 0).getDate()
+    const safeDay = Math.min(Math.max(1, day), lastDay)
+    const noteDate = `${y}-${String(m).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`
+
+    const { data: existing, error: fetchError } = await supabase
+      .from('progress_note_entries')
+      .select('id, notes')
+      .eq('patient_id', patientId)
+      .eq('note_date', noteDate)
+      .limit(1)
+      .maybeSingle()
+
+    if (fetchError) throw new Error(`Progress note lookup failed: ${fetchError.message}`)
+
+    const prefixWithTime = timeLabel ? `(from MAR, ${timeLabel})` : '(from MAR)'
+
+    const removeLinesForTime = (text: string, label: string): string => {
+      const prefix = `(from MAR, ${label})`
+      const lines = text.split(/\n/)
+      const kept = lines.filter((line) => !line.trim().startsWith(prefix))
+      return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+    }
+
+    if (note?.trim()) {
+      const marBlock = `${prefixWithTime} ${note.trim()}`
+      if (existing) {
+        let prev = (existing.notes || '').trim()
+        if (timeLabel) prev = removeLinesForTime(prev, timeLabel)
+        const newNotes = prev ? `${prev}\n\n${marBlock}` : marBlock
+        const { error: updateError } = await supabase
+          .from('progress_note_entries')
+          .update({ notes: newNotes, updated_at: new Date().toISOString() })
+          .eq('id', existing.id)
+        if (updateError) throw new Error(`Progress note update failed: ${updateError.message}`)
+      } else {
+        const { error: insertError } = await supabase.from('progress_note_entries').insert({
+          patient_id: patientId,
+          note_date: noteDate,
+          notes: marBlock,
+          signature: null,
+          physician_name: marForm?.physician_name ?? null,
+          is_addendum: false,
+          created_by: userProfile.id
+        })
+        if (insertError) throw new Error(`Progress note insert failed: ${insertError.message}`)
+      }
+    } else if (existing?.notes?.includes('(from MAR)')) {
+      let prev = (existing.notes || '').trim()
+      if (timeLabel) {
+        prev = removeLinesForTime(prev, timeLabel)
+      } else {
+        prev = prev.split('(from MAR)')[0].trim()
+      }
+      const newNotes = prev || ''
+      const { error: updateError } = await supabase
+        .from('progress_note_entries')
+        .update({ notes: newNotes, updated_at: new Date().toISOString() })
+        .eq('id', existing.id)
+      if (updateError) throw new Error(`Progress note update failed: ${updateError.message}`)
+    }
+  }
+
   const updateAdministrationNote = async (medId: string, day: number, note: string | null) => {
     if (!marFormId) return
     
@@ -960,8 +1057,14 @@ export default function ViewMARForm() {
         if (error) throw error
       }
 
+      if (marForm?.patient_id && marForm?.month_year) {
+        const med = medications.find((m) => m.id === medId)
+        const timeLabel = med?.hour ? formatTimeDisplay(med.hour) : undefined
+        await syncMARNoteToProgressNotes(marForm.patient_id, marForm.month_year, day, note ?? null, timeLabel)
+      }
+
       await loadMARForm()
-      setMessage('Administration note updated successfully!')
+      setMessage(note?.trim() ? 'Administration note saved and synced to Progress Notes.' : 'Administration note updated successfully!')
       setTimeout(() => setMessage(''), 3000)
     } catch (err: any) {
       setError(err.message || 'Failed to update administration note')

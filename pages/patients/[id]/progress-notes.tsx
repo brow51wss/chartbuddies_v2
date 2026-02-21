@@ -254,6 +254,16 @@ export default function ProgressNotesPage() {
     load()
   }, [patientId, router])
 
+  const refetchEntries = async () => {
+    if (!patientId || typeof patientId !== 'string') return
+    const { data: entriesData, error: entriesError } = await supabase
+      .from('progress_note_entries')
+      .select('*')
+      .eq('patient_id', patientId)
+      .order('note_date', { ascending: false })
+    if (!entriesError) setEntries((entriesData || []).map((e: ProgressNoteEntry) => ({ ...e, is_addendum: e.is_addendum ?? false })))
+  }
+
   const handleAddEntry = async () => {
     if (!userProfile || !patientId || !newNotes.trim()) {
       setError('Please enter notes.')
@@ -296,14 +306,68 @@ export default function ProgressNotesPage() {
     setSaving(false)
   }
 
-  const handleUpdateEntry = async (entryId: string, notes: string) => {
+  /** Sync Progress Note Page 1 → MAR: set all MAR administration notes for this patient+date to the given notes. */
+  const syncProgressNoteToMAR = async (patientId: string, noteDate: string, notes: string) => {
+    const dateStr = noteDate.includes('T') ? noteDate.slice(0, 10) : noteDate
+    const monthYear = dateStr.slice(0, 7)
+    const day = parseInt(dateStr.slice(8, 10), 10)
+    if (!monthYear || Number.isNaN(day)) return
+    const { data: forms } = await supabase.from('mar_forms').select('id').eq('patient_id', patientId).eq('month_year', monthYear)
+    if (!forms?.length) return
+    const formIds = forms.map((f: { id: string }) => f.id)
+    const { data: meds } = await supabase.from('mar_medications').select('id').in('mar_form_id', formIds)
+    if (!meds?.length) return
+    const medIds = meds.map((m: { id: string }) => m.id)
+    const { data: admins } = await supabase.from('mar_administrations').select('id').in('mar_medication_id', medIds).eq('day_number', day)
+    if (!admins?.length) return
+    const adminIds = admins.map((a: { id: string }) => a.id)
+    await supabase.from('mar_administrations').update({ notes: notes || null, updated_at: new Date().toISOString() }).in('id', adminIds)
+  }
+
+  const PAGE1_ENTRY_DEBOUNCE_MS = 600
+  const page1SaveMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const entryNotesRef = useRef<Record<string, string>>({})
+  const entrySaveTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+
+  const handleUpdateEntry = async (entryId: string, notes: string, noteDate: string) => {
+    if (page1SaveMessageTimeoutRef.current) clearTimeout(page1SaveMessageTimeoutRef.current)
+    setMessage('Saving...')
     const { error: updateError } = await supabase
       .from('progress_note_entries')
       .update({ notes, updated_at: new Date().toISOString() })
       .eq('id', entryId)
     if (!updateError) {
       setEntries(prev => prev.map(e => e.id === entryId ? { ...e, notes } : e))
+      if (patientId && typeof patientId === 'string' && noteDate) {
+        await syncProgressNoteToMAR(patientId, noteDate, notes)
+      }
     }
+    setMessage('Saved')
+    page1SaveMessageTimeoutRef.current = setTimeout(() => { setMessage(''); page1SaveMessageTimeoutRef.current = null }, 3000)
+  }
+
+  const schedulePage1EntrySave = (entryId: string, noteDate: string) => {
+    if (entrySaveTimeoutsRef.current[entryId]) clearTimeout(entrySaveTimeoutsRef.current[entryId])
+    entrySaveTimeoutsRef.current[entryId] = setTimeout(() => {
+      const notes = entryNotesRef.current[entryId] ?? ''
+      delete entrySaveTimeoutsRef.current[entryId]
+      handleUpdateEntry(entryId, notes, noteDate)
+    }, PAGE1_ENTRY_DEBOUNCE_MS)
+  }
+
+  const handleSignEntry = async (entryId: string) => {
+    if (!userProfile?.staff_signature) return
+    if (page1SaveMessageTimeoutRef.current) clearTimeout(page1SaveMessageTimeoutRef.current)
+    setMessage('Saving...')
+    const { error } = await supabase
+      .from('progress_note_entries')
+      .update({ signature: userProfile.staff_signature, updated_at: new Date().toISOString() })
+      .eq('id', entryId)
+    if (!error) {
+      setEntries(prev => prev.map(e => e.id === entryId ? { ...e, signature: userProfile!.staff_signature } : e))
+    }
+    setMessage('Saved')
+    page1SaveMessageTimeoutRef.current = setTimeout(() => { setMessage(''); page1SaveMessageTimeoutRef.current = null }, 3000)
   }
 
   // Compute previous month (e.g. 2026-02 -> 2026-01)
@@ -623,6 +687,20 @@ export default function ProgressNotesPage() {
                       </button>
                     </td>
                   </tr>
+                  <tr className="border-t-2 border-gray-300 dark:border-gray-600">
+                    <td colSpan={3} className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Existing notes</h3>
+                        <button
+                          type="button"
+                          onClick={() => refetchEntries()}
+                          className="text-xs px-2 py-1 text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10"
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                   {mainEntries.map((entry) => (
                     <tr key={entry.id} className="border-t border-gray-200 dark:border-gray-600">
                       <td className="px-4 py-2 align-top text-sm text-gray-900 dark:text-white whitespace-nowrap">
@@ -630,10 +708,12 @@ export default function ProgressNotesPage() {
                       </td>
                       <td className="px-4 py-2 align-top">
                         <textarea
-                          defaultValue={entry.notes}
-                          onBlur={(e) => {
+                          value={entry.notes}
+                          onChange={(e) => {
                             const v = e.target.value
-                            if (v !== entry.notes) handleUpdateEntry(entry.id, v)
+                            entryNotesRef.current[entry.id] = v
+                            setEntries(prev => prev.map(ex => ex.id === entry.id ? { ...ex, notes: v } : ex))
+                            schedulePage1EntrySave(entry.id, entry.note_date)
                           }}
                           rows={Math.max(2, entry.notes.split('\n').length)}
                           className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
@@ -641,13 +721,23 @@ export default function ProgressNotesPage() {
                       </td>
                       <td className="px-4 py-2 align-top">
                         {entry.signature ? (
-                          <InitialsOrSignatureDisplay
-                            value={entry.signature}
-                            variant="signature"
-                            userProfile={userProfile}
-                          />
+                          <div className="flex flex-col gap-1">
+                            <InitialsOrSignatureDisplay
+                              value={entry.signature}
+                              variant="signature"
+                              userProfile={userProfile}
+                            />
+                          </div>
+                        ) : userProfile?.staff_signature ? (
+                          <button
+                            type="button"
+                            onClick={() => handleSignEntry(entry.id)}
+                            className="px-2 py-1 text-sm font-medium text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10 dark:hover:bg-lasso-teal/20"
+                          >
+                            Sign
+                          </button>
                         ) : (
-                          <span className="text-gray-400 text-sm">—</span>
+                          <span className="text-amber-600 dark:text-amber-400 text-sm">Set signature in Profile first</span>
                         )}
                       </td>
                     </tr>
