@@ -253,6 +253,7 @@ export default function ViewMARForm() {
   const [editingCustomLegend, setEditingCustomLegend] = useState<{ id: string | null; code: string; description: string } | null>(null)
   const allowNavigationRef = useRef(false)
   const marTableScrollRef = useRef<HTMLDivElement>(null)
+  const marHeaderScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     // Wait for router to be ready
@@ -473,18 +474,44 @@ export default function ViewMARForm() {
     const dayToScroll = lastFilledDay > 0
       ? Math.min(31, lastFilledDay)
       : Math.min(31, Math.max(1, new Date().getDate()))
-    const fixedColsWidth = 200 + 120 + 80
-    const dayColWidth = 40
+    const fixedColsWidth = MAR_COL.med + MAR_COL.startStop + MAR_COL.hour
+    const dayColWidth = MAR_COL.day
     const scrollLeft = Math.max(0, fixedColsWidth + (dayToScroll - 1) * dayColWidth - 80)
     const applyScroll = () => {
-      const el = marTableScrollRef.current
-      if (el) el.scrollLeft = scrollLeft
+      if (marTableScrollRef.current) marTableScrollRef.current.scrollLeft = scrollLeft
+      if (marHeaderScrollRef.current) marHeaderScrollRef.current.scrollLeft = scrollLeft
     }
     requestAnimationFrame(() => {
       applyScroll()
-      if (!marTableScrollRef.current) setTimeout(applyScroll, 50)
+      if (!marTableScrollRef.current || !marHeaderScrollRef.current) setTimeout(applyScroll, 50)
     })
   }, [loading, marForm])
+
+  // Sync horizontal scroll between sticky header and body so they stay aligned (header outside overflow so sticky works)
+  useEffect(() => {
+    const body = marTableScrollRef.current
+    const header = marHeaderScrollRef.current
+    if (!body || !header) return
+    let syncing = false
+    const syncHeader = () => {
+      if (syncing) return
+      syncing = true
+      header.scrollLeft = body.scrollLeft
+      requestAnimationFrame(() => { syncing = false })
+    }
+    const syncBody = () => {
+      if (syncing) return
+      syncing = true
+      body.scrollLeft = header.scrollLeft
+      requestAnimationFrame(() => { syncing = false })
+    }
+    body.addEventListener('scroll', syncHeader)
+    header.addEventListener('scroll', syncBody)
+    return () => {
+      body.removeEventListener('scroll', syncHeader)
+      header.removeEventListener('scroll', syncBody)
+    }
+  }, [loading])
 
   const saveCustomLegend = async (code: string, description: string, id: string | null = null) => {
     if (!userProfile?.id) return
@@ -1863,6 +1890,7 @@ export default function ViewMARForm() {
   }
 
   const days = Array.from({ length: 31 }, (_, i) => i + 1)
+  const MAR_COL = { med: 200, startStop: 120, hour: 150, day: 100 } as const
 
   // Header component (reusable)
   const Header = () => (
@@ -2107,37 +2135,49 @@ export default function ViewMARForm() {
                 </div>
               </div>
 
-              {/* Medication Administration Table */}
-              <div ref={marTableScrollRef} className="overflow-x-auto bg-white dark:bg-gray-800">
-                <table className="min-w-full border border-gray-300 dark:border-gray-600" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-                  <colgroup>
-                    <col style={{ width: '200px', minWidth: '200px' }} /> {/* Medication - fixed so it doesn't shrink on horizontal scroll */}
-                    <col className="w-[120px]" /> {/* Start/Stop Date */}
-                    <col className="w-[80px]" /> {/* Hour */}
-                  </colgroup>
-                  <thead>
-                    <tr className="bg-gray-100 dark:bg-gray-700">
-                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-0 z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}>
-                        Medication
-                      </th>
-                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-[200px] z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ minWidth: '120px' }}>
-                        Start/Stop Date
-                      </th>
-                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-[320px] z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ minWidth: '80px' }}>
-                        Hour
-                      </th>
-                      {/* Days 1-31 */}
-                      {days.map(day => (
-                        <th
-                          key={day}
-                          className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300"
-                          style={{ minWidth: '40px', width: '40px' }}
-                        >
-                          {day}
+              {/* Medication Administration Table - sticky header OUTSIDE overflow so it sticks to viewport; body has overflow-x for horizontal scroll */}
+              <div className="relative">
+                {/* Sticky header: outside overflow container so sticky works; syncs horizontal scroll with body via effect */}
+                <div ref={marHeaderScrollRef} className="sticky top-[73px] z-30 overflow-x-auto overflow-y-hidden bg-white dark:bg-gray-800 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ marginBottom: -1 }}>
+                  <table className="min-w-full border border-gray-300 dark:border-gray-600 border-b-0" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
+                    <colgroup>
+                      <col style={{ width: MAR_COL.med, minWidth: MAR_COL.med }} />
+                      <col style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop }} />
+                      <col style={{ width: MAR_COL.hour, minWidth: MAR_COL.hour }} />
+                      {days.map((_, i) => <col key={`sc-${i}`} style={{ width: MAR_COL.day, minWidth: MAR_COL.day }} />)}
+                    </colgroup>
+                    <thead>
+                      <tr className="bg-gray-100 dark:bg-gray-700">
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-0 z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}>
+                          Medication
                         </th>
-                      ))}
-                    </tr>
-                  </thead>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop, maxWidth: MAR_COL.startStop, left: MAR_COL.med }}>
+                          Start/Stop Date
+                        </th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: MAR_COL.hour, minWidth: MAR_COL.hour, maxWidth: MAR_COL.hour, left: MAR_COL.med + MAR_COL.startStop }}>
+                          Hour
+                        </th>
+                        {days.map(day => (
+                          <th
+                            key={day}
+                            className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300"
+                            style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day }}
+                          >
+                            {day}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                  </table>
+                </div>
+                <div ref={marTableScrollRef} className="overflow-x-auto bg-white dark:bg-gray-800">
+                <table className="min-w-full border border-gray-300 dark:border-gray-600" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: MAR_COL.med, minWidth: MAR_COL.med }} />
+                    <col style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop }} />
+                    <col style={{ width: MAR_COL.hour, minWidth: MAR_COL.hour }} />
+                    {days.map((_, i) => <col key={i} style={{ width: MAR_COL.day, minWidth: MAR_COL.day }} />)}
+                  </colgroup>
                   <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
@@ -2180,7 +2220,7 @@ export default function ViewMARForm() {
                         }
                       })
                       
-                      return medications.map((med) => {
+                      return medications.map((med, medIndex) => {
                         const medAdmin = administrations[med.id] || {}
                         const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
                         const groupKey = isVitalsEntry 
@@ -2189,6 +2229,7 @@ export default function ViewMARForm() {
                         const group = medicationGroups[groupKey]
                         const shouldMerge = !isVitalsEntry && group.rowSpan > 1
                         const isFirstRow = isFirstInGroup[med.id] || false
+                        const isFirstTableRow = medIndex === 0
                         
                         return (
                           <SortableTableRow 
@@ -2227,13 +2268,13 @@ export default function ViewMARForm() {
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
                                 data-medication-cell
-                                className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 bg-slate-200 dark:bg-slate-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155] relative ${rowHover?.rowId === med.id ? 'z-20' : 'z-10'}`}
-                                style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}
+                                className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 bg-slate-200 dark:bg-slate-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155] relative overflow-visible ${rowHover?.rowId === med.id ? 'z-20' : 'z-10'}`}
+                                style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}
                               >
-                                {/* Add Row Indicator - Top */}
+                                {/* Add Row Indicator - Top: for first row keep pill inside cell so it's not clipped by scroll container */}
                                 {rowHover?.rowId === med.id && rowHover?.position === 'top' && (
                                   <div 
-                                    className="absolute left-0 right-0 -top-1 h-2 bg-lasso-teal z-50 flex items-center cursor-pointer hover:bg-lasso-blue transition-colors"
+                                    className={`absolute left-0 right-0 min-h-[2rem] z-50 flex items-center cursor-pointer hover:bg-lasso-teal/20 transition-colors ${isFirstTableRow ? 'top-0' : '-top-7 pt-5 bg-transparent'}`}
                                     style={{ width: '5000px' }}
                                     onClick={(e) => {
                                       e.stopPropagation()
@@ -2243,7 +2284,7 @@ export default function ViewMARForm() {
                                     }}
                                     onMouseEnter={() => setRowHover({ rowId: med.id, position: 'top' })}
                                   >
-                                    <div className="ml-4 bg-lasso-teal text-white text-xs px-3 py-0.5 rounded-full shadow-lg flex items-center gap-1 whitespace-nowrap font-medium">
+                                    <div className="ml-4 bg-lasso-teal text-white text-xs px-3 py-1 rounded-full shadow-lg flex items-center gap-1 whitespace-nowrap font-medium">
                                       <span className="text-sm font-bold">+</span> Add above
                                     </div>
                                   </div>
@@ -2393,6 +2434,7 @@ export default function ViewMARForm() {
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
                                 className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[200px] z-10 bg-slate-200 dark:bg-slate-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]"
+                                style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop, maxWidth: MAR_COL.startStop }}
                               >
                               <div>Start: {new Date(med.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
                               {med.stop_date && (
@@ -2400,7 +2442,7 @@ export default function ViewMARForm() {
                               )}
                             </td>
                             )}
-                            <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 bg-slate-200 dark:bg-slate-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]">
+                            <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 bg-slate-200 dark:bg-slate-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]" style={{ width: MAR_COL.hour, minWidth: MAR_COL.hour, maxWidth: MAR_COL.hour }}>
                               {/* Vitals don't have administration time - show dash */}
                               {isVitalsEntry ? (
                                 <span className="text-gray-400">—</span>
@@ -2497,6 +2539,7 @@ export default function ViewMARForm() {
                               return (
                                 <td
                                   key={day}
+                                  style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day }}
                                   className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs relative ${
                                     isDiscontinued ? 'bg-red-50 dark:bg-red-900/20' : ''
                                   } ${
@@ -2824,6 +2867,7 @@ export default function ViewMARForm() {
                     </SortableContext>
                   </DndContext>
                 </table>
+                </div>
               </div>
           </div>
 

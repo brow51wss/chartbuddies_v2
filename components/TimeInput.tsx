@@ -233,7 +233,7 @@ export default function TimeInput({
 
   if (compact) {
     return (
-      <div className={`inline-flex items-center gap-1 ${className}`}>
+      <div className={`inline-flex items-center gap-1 shrink-0 ${className}`}>
         <input
           type="text"
           inputMode="numeric"
@@ -245,9 +245,9 @@ export default function TimeInput({
           disabled={disabled}
           placeholder="12"
           maxLength={2}
-          className="w-8 text-center text-xs border border-gray-300 rounded px-1 py-1 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal"
+          className="w-9 min-w-[2rem] text-center text-xs border border-gray-300 rounded px-1.5 py-1 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal"
         />
-        <span className="text-gray-500 dark:text-gray-400">:</span>
+        <span className="text-gray-500 dark:text-gray-400 text-xs">:</span>
         <input
           type="text"
           inputMode="numeric"
@@ -259,7 +259,7 @@ export default function TimeInput({
           disabled={disabled}
           placeholder="00"
           maxLength={2}
-          className="w-8 text-center text-xs border border-gray-300 rounded px-1 py-1 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal"
+          className="w-9 min-w-[2rem] text-center text-xs border border-gray-300 rounded px-1.5 py-1 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal"
         />
         <button
           type="button"
@@ -274,7 +274,7 @@ export default function TimeInput({
             }
           }}
           disabled={disabled}
-          className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+          className={`min-w-[2.25rem] px-2 py-1 text-xs font-medium rounded transition-colors ${
             period === null
               ? 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-400'
               : period === 'AM'
