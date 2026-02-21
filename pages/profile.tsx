@@ -3,9 +3,10 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../components/ProtectedRoute'
+import AppHeader from '../components/AppHeader'
 import SignatureOrInitialsInput, { type SignatureOrInitialsInputHandle } from '../components/SignatureOrInitialsInput'
 import { supabase } from '../lib/supabase'
-import { getCurrentUserProfile } from '../lib/auth'
+import { getCurrentUserProfile, signOut } from '../lib/auth'
 import type { UserProfile } from '../types/auth'
 
 export default function Profile() {
@@ -173,30 +174,7 @@ export default function Profile() {
         <title>Profile - Lasso</title>
       </Head>
       <div className="min-h-screen">
-        {/* Header */}
-        <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-[999]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                <Link href="/dashboard">
-                  <img 
-                    src="/images/icon-wordmark.webp" 
-                    alt="Lasso EHR" 
-                    className="h-10 w-auto cursor-pointer"
-                  />
-                </Link>
-              </div>
-              <div className="flex items-center space-x-3">
-                <Link
-                  href="/dashboard"
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
-                >
-                  Back to Dashboard
-                </Link>
-              </div>
-            </div>
-          </div>
-        </header>
+        <AppHeader userProfile={userProfile} onLogout={async () => { await signOut(); router.push('/auth/login') }} />
 
         {/* Main Content */}
         <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

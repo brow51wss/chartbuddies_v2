@@ -3,8 +3,9 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../components/ProtectedRoute'
+import AppHeader from '../components/AppHeader'
 import { supabase } from '../lib/supabase'
-import { getCurrentUserProfile } from '../lib/auth'
+import { getCurrentUserProfile, signOut } from '../lib/auth'
 import type { UserProfile } from '../types/auth'
 
 interface DeletedPatient {
@@ -96,10 +97,14 @@ export default function DeletedPatientsPage() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto" />
-            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+        <Head><title>Deleted patients - Lasso</title></Head>
+        <div className="min-h-screen">
+          <AppHeader userProfile={userProfile} onLogout={async () => { await signOut(); router.push('/auth/login') }} />
+          <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto" />
+              <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+            </div>
           </div>
         </div>
       </ProtectedRoute>
@@ -112,30 +117,7 @@ export default function DeletedPatientsPage() {
         <title>Deleted patients - Lasso</title>
       </Head>
       <div className="min-h-screen">
-        <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-[999]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                <img
-                  src="/images/icon-wordmark.webp"
-                  alt="Lasso EHR"
-                  className="h-10 w-auto"
-                />
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {userProfile?.full_name} • {userProfile?.role?.replace('_', ' ').toUpperCase()}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/dashboard"
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
-                >
-                  Back to Patients
-                </Link>
-              </div>
-            </div>
-          </div>
-        </header>
+        <AppHeader userProfile={userProfile} onLogout={async () => { await signOut(); router.push('/auth/login') }} />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {error && (

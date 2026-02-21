@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import AppHeader from '../../../components/AppHeader'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../lib/auth'
 import type { Patient } from '../../../types/auth'
@@ -133,25 +134,25 @@ export default function PatientHub() {
         <title>{patient.patient_name} - Lasso</title>
       </Head>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <Link
-              href="/dashboard"
-              className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-2 inline-flex items-center gap-2 text-sm font-medium transition-colors"
-            >
-              <span>←</span>
-              <span>Back to Patients</span>
-            </Link>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {patient.patient_name}
-            </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Select a module to access records and documentation for this patient
-            </p>
-          </div>
-        </header>
+        <AppHeader
+          patientId={typeof patientId === 'string' ? patientId : Array.isArray(patientId) ? patientId[0] : undefined}
+          patientName={patient.patient_name}
+        />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Link
+            href="/dashboard"
+            className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue mb-2 inline-flex items-center gap-2 text-sm font-medium transition-colors"
+          >
+            <span>←</span>
+            <span>Back to Patients</span>
+          </Link>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+            {patient.patient_name}
+          </h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-6">
+            Select a module to access records and documentation for this patient
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {MODULES.map((module) => {
               const isAvailable = module.status === 'available' && module.href

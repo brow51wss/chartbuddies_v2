@@ -326,10 +326,10 @@ export default function NewMARForm() {
           {/* Header */}
           <div className="mb-6">
             <button
-              onClick={() => router.push('/dashboard?module=mar')}
+              onClick={() => router.push(patient?.id ? `/patients/${patient.id}/forms` : '/dashboard')}
               className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm mb-4"
             >
-              ← Back to MAR Patients
+              ← Back to MAR Forms
             </button>
             <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
               New Medication Administration Record (MAR)

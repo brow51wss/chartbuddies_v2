@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import AppHeader from '../../../components/AppHeader'
 import TimeInput from '../../../components/TimeInput'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../lib/auth'
@@ -390,25 +391,21 @@ export default function PatientForms() {
         <title>Patient Forms - Lasso</title>
       </Head>
       <div className="min-h-screen">
-        <header className="bg-white dark:bg-gray-800 shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <Link href="/dashboard" className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm mb-2 inline-block">
-                  ← Back to Dashboard
-                </Link>
-                <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
-                  {patient?.patient_name || 'Patient Forms'}
-                </h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Record #: {patient?.record_number}
-                </p>
-              </div>
-            </div>
-          </div>
-        </header>
+        <AppHeader
+          patientId={typeof id === 'string' ? id : Array.isArray(id) ? id[0] : undefined}
+          patientName={patient?.patient_name}
+        />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Link href={typeof id === 'string' ? `/patients/${id}` : Array.isArray(id) && id[0] ? `/patients/${id[0]}` : '/dashboard'} className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm mb-2 inline-block">
+            ← Back to Patient Modules
+          </Link>
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-white mt-2">
+            {patient?.patient_name || 'Patient Forms'}
+          </h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-6">
+            Record #: {patient?.record_number}
+          </p>
           {error && (
             <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
               <p className="text-red-800 dark:text-red-200">{error}</p>

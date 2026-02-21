@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
+import AppHeader from '../../../../components/AppHeader'
 import { supabase } from '../../../../lib/supabase'
 import type { Patient } from '../../../../types/auth'
 
@@ -102,21 +103,19 @@ export default function ProgressNotesIndex() {
         <title>Progress Notes - {patient.patient_name}</title>
       </Head>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                href="/dashboard?module=progress"
-                className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm font-medium"
-              >
-                ← Back to Progress Notes
-              </Link>
-              <h1 className="text-lg font-bold text-gray-900 dark:text-white">Progress Notes</h1>
-            </div>
-          </div>
-        </header>
+        <AppHeader
+          patientId={typeof patientId === 'string' ? patientId : Array.isArray(patientId) ? patientId[0] : undefined}
+          patientName={patient.patient_name}
+        />
 
         <main className="max-w-5xl mx-auto px-4 py-6">
+          <Link
+            href={patientId ? `/patients/${patientId}` : '/dashboard'}
+            className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm font-medium inline-block mb-2"
+          >
+            ← Back to Patient Modules
+          </Link>
+          <h1 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Progress Notes</h1>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
             Select a month to view or add progress notes for <strong>{patient.patient_name}</strong>. Each month corresponds to a MAR period.
           </p>

@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
+import AppHeader from '../../../../components/AppHeader'
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../../lib/auth'
 import type { UserProfile, Patient } from '../../../../types/auth'
@@ -568,26 +569,24 @@ export default function ProgressNotesPage() {
         <title>Progress Notes - {patient.patient_name}</title>
       </Head>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                href={router.query.id ? `/patients/${router.query.id}/progress-notes` : '/dashboard?module=progress'}
-                className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm font-medium"
-              >
-                ← Back to Progress Notes
-              </Link>
-              <div>
-                <h1 className="text-lg font-bold text-gray-900 dark:text-white">Progress Notes</h1>
-                {monthFromQuery && (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Showing: {monthFromQuery}</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </header>
+        <AppHeader
+          patientId={typeof router.query.id === 'string' ? router.query.id : Array.isArray(router.query.id) ? router.query.id[0] : undefined}
+          patientName={patient?.patient_name}
+        />
 
         <main className="max-w-5xl mx-auto px-4 py-6">
+          <Link
+            href={router.query.id ? `/patients/${router.query.id}/progress-notes` : '/dashboard'}
+            className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm font-medium inline-block mb-2"
+          >
+            ← Back to Progress Notes
+          </Link>
+          <div className="mb-2">
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">Progress Notes</h1>
+            {monthFromQuery && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Showing: {monthFromQuery}</p>
+            )}
+          </div>
           {error && (
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-800 dark:text-red-200 text-sm">
               {error}
