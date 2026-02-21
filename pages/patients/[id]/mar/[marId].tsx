@@ -2108,8 +2108,8 @@ export default function ViewMARForm() {
               </div>
 
               {/* Medication Administration Table */}
-              <div ref={marTableScrollRef} className="overflow-x-auto">
-                <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
+              <div ref={marTableScrollRef} className="overflow-x-auto bg-white dark:bg-gray-800">
+                <table className="min-w-full border border-gray-300 dark:border-gray-600" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
                   <colgroup>
                     <col style={{ width: '200px', minWidth: '200px' }} /> {/* Medication - fixed so it doesn't shrink on horizontal scroll */}
                     <col className="w-[120px]" /> {/* Start/Stop Date */}
@@ -2117,13 +2117,13 @@ export default function ViewMARForm() {
                   </colgroup>
                   <thead>
                     <tr className="bg-gray-100 dark:bg-gray-700">
-                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-0 z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500" style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}>
+                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-0 z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}>
                         Medication
                       </th>
-                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-[200px] z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500" style={{ minWidth: '120px' }}>
+                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-[200px] z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ minWidth: '120px' }}>
                         Start/Stop Date
                       </th>
-                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-[320px] z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500" style={{ minWidth: '80px' }}>
+                      <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-[320px] z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ minWidth: '80px' }}>
                         Hour
                       </th>
                       {/* Days 1-31 */}
@@ -2196,16 +2196,18 @@ export default function ViewMARForm() {
                             id={med.id}
                             className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isVitalsEntry ? 'bg-lasso-blue/10 dark:bg-lasso-blue/20' : ''}`}
                             onMouseMove={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect()
+                              // Use medication cell rect when hovered (spans multiple rows) so Add below triggers only near actual bottom; else use row rect
+                              const medCell = (e.target as HTMLElement).closest?.('[data-medication-cell]') as HTMLElement | null
+                              const rect = medCell?.getBoundingClientRect() ?? e.currentTarget.getBoundingClientRect()
                               const mouseY = e.clientY - rect.top
-                              const rowHeight = rect.height
-                              const edgeZone = 10 // pixels from edge to trigger
+                              const height = rect.height
+                              const edgeZone = 8 // pixels from edge to trigger (same as Add above - must be near actual top/bottom of the box)
                               
-                              if (mouseY < edgeZone) {
+                              if (mouseY >= 0 && mouseY < edgeZone) {
                                 if (rowHover?.rowId !== med.id || rowHover?.position !== 'top') {
                                   setRowHover({ rowId: med.id, position: 'top' })
                                 }
-                              } else if (mouseY > rowHeight - edgeZone) {
+                              } else if (mouseY > height - edgeZone && mouseY <= height) {
                                 if (rowHover?.rowId !== med.id || rowHover?.position !== 'bottom') {
                                   setRowHover({ rowId: med.id, position: 'bottom' })
                                 }
@@ -2224,7 +2226,8 @@ export default function ViewMARForm() {
                             {shouldMerge && !isFirstRow ? null : (
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
-                                className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500 relative ${rowHover?.rowId === med.id ? 'z-20' : 'z-10'}`}
+                                data-medication-cell
+                                className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 bg-slate-200 dark:bg-slate-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155] relative ${rowHover?.rowId === med.id ? 'z-20' : 'z-10'}`}
                                 style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}
                               >
                                 {/* Add Row Indicator - Top */}
@@ -2389,7 +2392,7 @@ export default function ViewMARForm() {
                             {shouldMerge && !isFirstRow ? null : (
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
-                                className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[200px] z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500"
+                                className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[200px] z-10 bg-slate-200 dark:bg-slate-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]"
                               >
                               <div>Start: {new Date(med.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
                               {med.stop_date && (
@@ -2397,7 +2400,7 @@ export default function ViewMARForm() {
                               )}
                             </td>
                             )}
-                            <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 bg-white dark:bg-gray-800 border-r-2 border-gray-400 dark:border-gray-500">
+                            <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 bg-slate-200 dark:bg-slate-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]">
                               {/* Vitals don't have administration time - show dash */}
                               {isVitalsEntry ? (
                                 <span className="text-gray-400">—</span>
