@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -186,11 +186,6 @@ export default function ProgressNotesPage() {
   const [newNotes, setNewNotes] = useState('')
   // User must explicitly sign to confirm the note (saved signature is applied on "Sign")
   const [newNoteSigned, setNewNoteSigned] = useState(false)
-  // Addendum row (additional progress notes / reverse side)
-  const [newAddendumDate, setNewAddendumDate] = useState<string>(() => new Date().toISOString().slice(0, 10))
-  const [newAddendumNotes, setNewAddendumNotes] = useState('')
-  const [newAddendumSigned, setNewAddendumSigned] = useState(false)
-
   // Page 2: Monthly Summary
   const [activeTab, setActiveTab] = useState<'page1' | 'page2'>('page1')
   const [summaryMonthYear, setSummaryMonthYear] = useState<string>(() => {
@@ -202,6 +197,9 @@ export default function ProgressNotesPage() {
   const [summarySaving, setSummarySaving] = useState(false)
   const [summaryForm, setSummaryForm] = useState<Partial<ProgressNoteMonthlySummary>>({})
   const [previousSummary, setPreviousSummary] = useState<ProgressNoteMonthlySummary | null>(null)
+  const summaryFormRef = useRef<Partial<ProgressNoteMonthlySummary>>({})
+  const summaryRef = useRef<ProgressNoteMonthlySummary | null>(null)
+  const saveSummaryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!patientId || typeof patientId !== 'string') return
@@ -298,48 +296,6 @@ export default function ProgressNotesPage() {
     setSaving(false)
   }
 
-  const handleAddAddendumEntry = async () => {
-    if (!userProfile || !patientId || !newAddendumNotes.trim()) {
-      setError('Please enter addendum notes.')
-      return
-    }
-    if (!newAddendumSigned) {
-      setError('Please sign to confirm this addendum.')
-      return
-    }
-    setSaving(true)
-    setError('')
-    const physician = selectedPhysician || customPhysician.trim() || null
-    const { error: insertError } = await supabase
-      .from('progress_note_entries')
-      .insert({
-        patient_id: patientId,
-        note_date: newAddendumDate,
-        notes: newAddendumNotes.trim(),
-        signature: userProfile.staff_signature || null,
-        physician_name: physician,
-        is_addendum: true,
-        created_by: userProfile.id
-      })
-    if (insertError) {
-      setError(insertError.message)
-      setSaving(false)
-      return
-    }
-    setMessage('Addendum added.')
-    setTimeout(() => setMessage(''), 3000)
-    setNewAddendumNotes('')
-    setNewAddendumDate(new Date().toISOString().slice(0, 10))
-    setNewAddendumSigned(false)
-    const { data: entriesData } = await supabase
-      .from('progress_note_entries')
-      .select('*')
-      .eq('patient_id', patientId)
-      .order('note_date', { ascending: false })
-    setEntries((entriesData || []).map((e: ProgressNoteEntry) => ({ ...e, is_addendum: e.is_addendum ?? false })))
-    setSaving(false)
-  }
-
   const handleUpdateEntry = async (entryId: string, notes: string) => {
     const { error: updateError } = await supabase
       .from('progress_note_entries')
@@ -373,6 +329,7 @@ export default function ProgressNotesPage() {
       const latest = latestRes.data as { weight_unit?: string } | null
       const defaultWeightUnit = (latest?.weight_unit && (latest.weight_unit === 'kg' || latest.weight_unit === 'lbs')) ? latest.weight_unit : 'lbs'
       setSummary(data)
+      summaryRef.current = data
       setPreviousSummary(previous)
       if (data) {
         const form: Partial<ProgressNoteMonthlySummary> = { ...data }
@@ -382,8 +339,9 @@ export default function ProgressNotesPage() {
           form.wt_change_yn = 'Y'
         }
         setSummaryForm(form)
+        summaryFormRef.current = form
       } else {
-        setSummaryForm({
+        const initial = {
           month_year: summaryMonthYear,
           weight_unit: defaultWeightUnit,
           bp: '', pulse: '', resp: '', temp: '', wt: '', wt_change_yn: '',
@@ -397,34 +355,37 @@ export default function ProgressNotesPage() {
           mental_descriptors: '', impaired_communication_other: '',
           describe_changes: '', actions: '', changes_in_condition_yn: '', illness_yn: '', injury_yn: '', describe_type_actions_taken: '',
           plan_of_care: '', signature_title: ''
-        })
+        }
+        setSummaryForm(initial)
+        summaryFormRef.current = initial
       }
     })
   }, [activeTab, patientId, summaryMonthYear])
 
-  function updateSummaryField<K extends keyof ProgressNoteMonthlySummary>(key: K, value: ProgressNoteMonthlySummary[K]) {
-    setSummaryForm(prev => ({ ...prev, [key]: value }))
-  }
-
-  const handleSaveSummary = async () => {
+  const saveSummaryToBackend = async () => {
     if (!userProfile || !patientId) return
+    const form = summaryFormRef.current
+    const existing = summaryRef.current
     setSummarySaving(true)
     setError('')
-    const { id: _id, created_by: _cb, created_at: _ca, updated_at: _ua, ...rest } = summaryForm
+    const { id: _id, created_by: _cb, created_at: _ca, updated_at: _ua, ...rest } = form
     const payload = {
       patient_id: patientId,
       month_year: summaryMonthYear,
       ...rest,
       updated_at: new Date().toISOString()
     }
-    if (summary?.id) {
+    if (existing?.id) {
       const { data, error: updateError } = await supabase
         .from('progress_note_monthly_summaries')
         .update(payload)
-        .eq('id', summary.id)
+        .eq('id', existing.id)
         .select()
         .single()
-      if (!updateError && data) setSummary(data as ProgressNoteMonthlySummary)
+      if (!updateError && data) {
+        setSummary(data as ProgressNoteMonthlySummary)
+        summaryRef.current = data as ProgressNoteMonthlySummary
+      }
       if (updateError) setError(updateError.message)
     } else {
       const { data, error: insertError } = await supabase
@@ -432,12 +393,30 @@ export default function ProgressNotesPage() {
         .insert({ ...payload, created_by: userProfile.id })
         .select()
         .single()
-      if (!insertError && data) setSummary(data as ProgressNoteMonthlySummary)
+      if (!insertError && data) {
+        setSummary(data as ProgressNoteMonthlySummary)
+        summaryRef.current = data as ProgressNoteMonthlySummary
+      }
       if (insertError) setError(insertError.message)
     }
     setSummarySaving(false)
-    setMessage('Monthly summary saved.')
-    setTimeout(() => setMessage(''), 3000)
+    setMessage('Saved')
+    setTimeout(() => setMessage(''), 2000)
+  }
+
+  const SUMMARY_DEBOUNCE_MS = 600
+
+  function updateSummaryField<K extends keyof ProgressNoteMonthlySummary>(key: K, value: ProgressNoteMonthlySummary[K]) {
+    setSummaryForm(prev => {
+      const next = { ...prev, [key]: value }
+      summaryFormRef.current = next
+      return next
+    })
+    if (saveSummaryTimeoutRef.current) clearTimeout(saveSummaryTimeoutRef.current)
+    saveSummaryTimeoutRef.current = setTimeout(() => {
+      saveSummaryTimeoutRef.current = null
+      saveSummaryToBackend()
+    }, SUMMARY_DEBOUNCE_MS)
   }
 
   if (loading) {
@@ -463,7 +442,6 @@ export default function ProgressNotesPage() {
 
   const { firstName, lastName } = parsePatientName(patient.patient_name)
   const mainEntries = entries.filter(e => !e.is_addendum)
-  const addendumEntries = entries.filter(e => e.is_addendum)
 
   return (<ProtectedRoute>
       <Head>
@@ -490,9 +468,9 @@ export default function ProgressNotesPage() {
               {error}
             </div>
           )}
-          {message && (
-            <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-green-800 dark:text-green-200 text-sm">
-              {message}
+          {(message || (activeTab === 'page2' && summarySaving)) && (
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-800 dark:text-green-200 text-sm shadow-lg">
+              {activeTab === 'page2' && summarySaving ? 'Saving...' : message}
             </div>
           )}
 
@@ -678,117 +656,6 @@ export default function ProgressNotesPage() {
               </table>
             </div>
           </div>
-
-          {/* Additional Progress Notes / Addendum – own box below progress notes */}
-          <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="px-6 py-4">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">Additional Progress Notes / Addendum</h3>
-              <p className="text-sm italic text-gray-600 dark:text-gray-400 mb-4">
-                Additional Progress Notes and/or Addendum are charted on the reverse side of page.
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-gray-100 dark:bg-gray-700">
-                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-28">Date</th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Notes</th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-32">Signature</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-t border-gray-200 dark:border-gray-600 bg-lasso-teal/5">
-                      <td className="px-4 py-2 align-top">
-                        <input
-                          type="date"
-                          value={newAddendumDate}
-                          onChange={(e) => setNewAddendumDate(e.target.value)}
-                          className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 dark:bg-gray-700 text-gray-900 dark:text-white"
-                        />
-                      </td>
-                      <td className="px-4 py-2 align-top">
-                        <textarea
-                          value={newAddendumNotes}
-                          onChange={(e) => setNewAddendumNotes(e.target.value)}
-                          placeholder="Enter addendum or additional note..."
-                          rows={3}
-                          className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
-                        />
-                      </td>
-                      <td className="px-4 py-2 align-top">
-                        {newAddendumSigned && userProfile?.staff_signature ? (
-                          <div className="flex flex-col gap-1">
-                            <InitialsOrSignatureDisplay
-                              value={userProfile.staff_signature}
-                              variant="signature"
-                              userProfile={userProfile}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setNewAddendumSigned(false)}
-                              className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 underline"
-                            >
-                              Clear signature
-                            </button>
-                          </div>
-                        ) : userProfile?.staff_signature ? (
-                          <button
-                            type="button"
-                            onClick={() => { setNewAddendumSigned(true); setError(''); }}
-                            className="px-2 py-1 text-sm font-medium text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10 dark:hover:bg-lasso-teal/20"
-                          >
-                            Sign
-                          </button>
-                        ) : (
-                          <span className="text-amber-600 dark:text-amber-400 text-sm">Set signature in Profile first</span>
-                        )}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan={3} className="px-4 py-2">
-                        <button
-                          type="button"
-                          onClick={handleAddAddendumEntry}
-                          disabled={saving || !newAddendumNotes.trim() || !newAddendumSigned}
-                          className="px-4 py-2 bg-lasso-teal text-white rounded-lg text-sm font-medium hover:bg-lasso-blue disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {saving ? 'Saving...' : 'Add Addendum'}
-                        </button>
-                      </td>
-                    </tr>
-                    {addendumEntries.map((entry) => (
-                      <tr key={entry.id} className="border-t border-gray-200 dark:border-gray-600">
-                        <td className="px-4 py-2 align-top text-sm text-gray-900 dark:text-white whitespace-nowrap">
-                          {new Date(entry.note_date).toLocaleDateString('en-US')}
-                        </td>
-                        <td className="px-4 py-2 align-top">
-                          <textarea
-                            defaultValue={entry.notes}
-                            onBlur={(e) => {
-                              const v = e.target.value
-                              if (v !== entry.notes) handleUpdateEntry(entry.id, v)
-                            }}
-                            rows={Math.max(2, entry.notes.split('\n').length)}
-                            className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
-                          />
-                        </td>
-                        <td className="px-4 py-2 align-top">
-                          {entry.signature ? (
-                            <InitialsOrSignatureDisplay
-                              value={entry.signature}
-                              variant="signature"
-                              userProfile={userProfile}
-                            />
-                          ) : (
-                            <span className="text-gray-400 text-sm">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
           </>
           )}
 
@@ -807,14 +674,6 @@ export default function ProgressNotesPage() {
                   className="border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
                 {summaryLoading && <span className="text-sm text-gray-500">Loading...</span>}
-                <button
-                  type="button"
-                  onClick={handleSaveSummary}
-                  disabled={summaryLoading || summarySaving}
-                  className="ml-auto px-4 py-2 bg-lasso-teal text-white rounded-lg text-sm font-medium hover:bg-lasso-blue disabled:opacity-50"
-                >
-                  {summarySaving ? 'Saving...' : 'Save Summary'}
-                </button>
               </div>
 
               {/* Monthly Summary */}
