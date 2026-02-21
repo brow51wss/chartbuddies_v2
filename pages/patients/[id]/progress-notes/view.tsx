@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
-import ProtectedRoute from '../../../components/ProtectedRoute'
-import { supabase } from '../../../lib/supabase'
-import { getCurrentUserProfile } from '../../../lib/auth'
-import type { UserProfile, Patient } from '../../../types/auth'
-import type { ProgressNoteEntry, ProgressNoteMonthlySummary } from '../../../types/progress-notes'
+import ProtectedRoute from '../../../../components/ProtectedRoute'
+import { supabase } from '../../../../lib/supabase'
+import { getCurrentUserProfile } from '../../../../lib/auth'
+import type { UserProfile, Patient } from '../../../../types/auth'
+import type { ProgressNoteEntry, ProgressNoteMonthlySummary } from '../../../../types/progress-notes'
 
 const SIGNATURE_FONTS_LINK_ID = 'progress-notes-signature-fonts'
 function ensureSignatureFontsLoaded(font: string) {
@@ -505,7 +505,32 @@ export default function ProgressNotesPage() {
   }
 
   const { firstName, lastName } = parsePatientName(patient.patient_name)
-  const mainEntries = entries.filter(e => !e.is_addendum)
+  const allMainEntries = entries.filter(e => !e.is_addendum)
+  const monthFromQuery = typeof router.query.month === 'string' ? router.query.month.trim() : null
+  const monthFilterKey = (() => {
+    if (!monthFromQuery) return null
+    const raw = monthFromQuery.replace(/\//g, '-')
+    const parts = raw.split('-').map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n))
+    let y = parts[0], m = parts[1]
+    if (parts.length >= 2 && m > 12) [y, m] = [m, y]
+    if (y && m) return `${y}-${String(m).padStart(2, '0')}`
+    const months: Record<string, number> = { january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12 }
+    const lower = raw.toLowerCase()
+    for (const [name, num] of Object.entries(months)) {
+      if (lower.includes(name)) {
+        const match = raw.match(/\b(19|20)\d{2}\b/)
+        const year = match ? parseInt(match[0], 10) : new Date().getFullYear()
+        return `${year}-${String(num).padStart(2, '0')}`
+      }
+    }
+    return null
+  })()
+  const mainEntries = monthFilterKey
+    ? allMainEntries.filter((e) => {
+        const d = e.note_date != null ? String(e.note_date).slice(0, 10) : ''
+        return d.startsWith(monthFilterKey)
+      })
+    : allMainEntries
 
   return (<ProtectedRoute>
       <Head>
@@ -516,12 +541,17 @@ export default function ProgressNotesPage() {
           <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link
-                href="/dashboard?module=progress"
+                href={router.query.id ? `/patients/${router.query.id}/progress-notes` : '/dashboard?module=progress'}
                 className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm font-medium"
               >
                 ← Back to Progress Notes
               </Link>
-              <h1 className="text-lg font-bold text-gray-900 dark:text-white">Progress Notes</h1>
+              <div>
+                <h1 className="text-lg font-bold text-gray-900 dark:text-white">Progress Notes</h1>
+                {monthFromQuery && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Showing: {monthFromQuery}</p>
+                )}
+              </div>
             </div>
           </div>
         </header>

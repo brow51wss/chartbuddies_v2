@@ -6,6 +6,7 @@ import ProtectedRoute from '../../../components/ProtectedRoute'
 import TimeInput from '../../../components/TimeInput'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../lib/auth'
+import { ensureProgressNoteSummaryForMonth } from '../../../lib/progress-notes'
 import type { Patient } from '../../../types/auth'
 import type { MARForm, MARMedication } from '../../../types/mar'
 
@@ -34,6 +35,8 @@ export default function PatientForms() {
     isGrouped: boolean // Whether this represents a grouped medication
   }>>([])
   const [saving, setSaving] = useState(false)
+  const [deleteConfirmForm, setDeleteConfirmForm] = useState<{ id: string; month_year: string } | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -41,13 +44,16 @@ export default function PatientForms() {
     }
   }, [id])
 
-  // Handle ESC key to close duplicate modal
+  // Handle ESC key to close modals
   useEffect(() => {
     const handleEscKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showDuplicateModal) {
-        setShowDuplicateModal(false)
-        setMedicationsToDuplicate([])
-        setSourceFormId(null)
+      if (e.key === 'Escape') {
+        if (deleteConfirmForm) setDeleteConfirmForm(null)
+        else if (showDuplicateModal) {
+          setShowDuplicateModal(false)
+          setMedicationsToDuplicate([])
+          setSourceFormId(null)
+        }
       }
     }
 
@@ -55,7 +61,7 @@ export default function PatientForms() {
     return () => {
       window.removeEventListener('keydown', handleEscKey)
     }
-  }, [showDuplicateModal])
+  }, [showDuplicateModal, deleteConfirmForm])
 
   const loadPatientData = async (patientId: string) => {
     try {
@@ -69,15 +75,38 @@ export default function PatientForms() {
       if (patientError) throw patientError
       setPatient(patientData)
 
-      // Load MAR forms for this patient
+      // Load MAR forms for this patient (sort with most current on top: descending by month/year then created_at)
       const { data: formsData, error: formsError } = await supabase
         .from('mar_forms')
         .select('*')
         .eq('patient_id', patientId)
-        .order('month_year', { ascending: false })
+        .order('created_at', { ascending: false })
 
       if (formsError) throw formsError
-      setMarForms(formsData || [])
+      const sorted = (formsData || []).slice().sort((a, b) => {
+        const key = (my: string) => {
+          const raw = String(my || '').trim().replace(/\//g, '-')
+          const parts = raw.split('-').map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n))
+          let y = parts[0], m = parts[1]
+          if (parts.length >= 2 && m > 12) [y, m] = [m, y]
+          if (y && m) return (y * 12 + m) * 1e6
+          const months: Record<string, number> = { january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12 }
+          const lower = raw.toLowerCase()
+          for (const [name, num] of Object.entries(months)) {
+            if (lower.includes(name)) {
+              const match = raw.match(/\b(19|20)\d{2}\b/)
+              const year = match ? parseInt(match[0], 10) : new Date().getFullYear()
+              return (year * 12 + num) * 1e6
+            }
+          }
+          return 0
+        }
+        const ka = key(a.month_year)
+        const kb = key(b.month_year)
+        if (ka !== kb) return kb - ka
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      })
+      setMarForms(sorted)
 
       setLoading(false)
     } catch (err: any) {
@@ -199,6 +228,25 @@ export default function PatientForms() {
     setMedicationsToDuplicate(medicationsToDuplicate.filter((_, i) => i !== index))
   }
 
+  const handleDeleteMAR = async () => {
+    if (!deleteConfirmForm || !id) return
+    setDeleting(true)
+    setError('')
+    try {
+      const { error: deleteError } = await supabase
+        .from('mar_forms')
+        .delete()
+        .eq('id', deleteConfirmForm.id)
+      if (deleteError) throw deleteError
+      setMarForms(prev => prev.filter(f => f.id !== deleteConfirmForm.id))
+      setDeleteConfirmForm(null)
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete MAR form')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const createDuplicateMAR = async () => {
     if (!patient || !id || !sourceFormId) return
 
@@ -216,6 +264,19 @@ export default function PatientForms() {
       // Get current month/year
       const now = new Date()
       const monthYear = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+      // Hard rule: never allow two MARs for the same patient and same month/year
+      const { data: existingForMonth } = await supabase
+        .from('mar_forms')
+        .select('id')
+        .eq('patient_id', patient.id)
+        .eq('month_year', monthYear)
+        .limit(1)
+      if (existingForMonth && existingForMonth.length > 0) {
+        setError(`A MAR for ${monthYear} already exists. Only one MAR per month and year is allowed.`)
+        setSaving(false)
+        return
+      }
 
       // Get hospital name for facility name
       let facilityName = 'N/A'
@@ -264,6 +325,8 @@ export default function PatientForms() {
         .single()
 
       if (createError) throw createError
+
+      await ensureProgressNoteSummaryForMonth(supabase, patient.id, monthYear, profile.id)
 
       // Create medications from the duplicate list
       if (medicationsToDuplicate.length > 0) {
@@ -383,7 +446,28 @@ export default function PatientForms() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {marForms.map((form) => (
+                    {marForms.map((form) => {
+                      const now = new Date()
+                      const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+                      const formKey = (() => {
+                        const raw = String(form.month_year || '').trim().replace(/\//g, '-')
+                        const parts = raw.split('-').map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n))
+                        let y = parts[0], m = parts[1]
+                        if (parts.length >= 2 && m > 12) [y, m] = [m, y]
+                        if (y && m) return `${y}-${String(m).padStart(2, '0')}`
+                        const months: Record<string, number> = { january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12 }
+                        const lower = raw.toLowerCase()
+                        for (const [name, num] of Object.entries(months)) {
+                          if (lower.includes(name)) {
+                            const match = raw.match(/\b(19|20)\d{2}\b/)
+                            const year = match ? parseInt(match[0], 10) : now.getFullYear()
+                            return `${year}-${String(num).padStart(2, '0')}`
+                          }
+                        }
+                        return ''
+                      })()
+                      const isCurrentMonthYear = formKey && formKey === currentKey
+                      return (
                       <div
                         key={form.id}
                         className="flex justify-between items-center p-4 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
@@ -396,14 +480,17 @@ export default function PatientForms() {
                             Status: {form.status} • Created: {new Date(form.created_at).toLocaleDateString()}
                           </p>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-center">
                           <button
                             onClick={async () => {
+                              if (isCurrentMonthYear) return
                               await loadMedicationsForDuplicate(form.id)
                               setSourceFormId(form.id)
                               setShowDuplicateModal(true)
                             }}
-                            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
+                            disabled={isCurrentMonthYear}
+                            title={isCurrentMonthYear ? 'Duplicate is not allowed for the current month; a MAR for this month already exists.' : 'Duplicate this MAR'}
+                            className={`px-4 py-2 rounded-md text-sm font-medium ${isCurrentMonthYear ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}
                           >
                             Duplicate
                           </button>
@@ -413,9 +500,19 @@ export default function PatientForms() {
                           >
                             {form.status === 'draft' ? 'Continue Editing' : 'View'}
                           </Link>
+                          <button
+                            onClick={() => setDeleteConfirmForm({ id: form.id, month_year: form.month_year })}
+                            className="inline-flex items-center justify-center p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors rounded-md hover:bg-red-50 dark:hover:bg-red-900/20"
+                            title="Delete MAR"
+                            aria-label="Delete MAR"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
                         </div>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 )}
               </div>
@@ -430,6 +527,36 @@ export default function PatientForms() {
           </div>
         </main>
       </div>
+
+      {/* Delete MAR confirmation modal */}
+      {deleteConfirmForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-2">
+              Delete MAR Form
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Are you sure you want to delete <strong>MAR - {deleteConfirmForm.month_year}</strong>? This will permanently remove the form and all its medications, administrations, and notes. This cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setDeleteConfirmForm(null)}
+                disabled={deleting}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteMAR}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Duplicate MAR Modal */}
       {showDuplicateModal && (

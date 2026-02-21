@@ -1305,13 +1305,12 @@ export default function ViewMARForm() {
         const startMonth = parseInt(startDateParts[1], 10) - 1 // Month is 0-indexed in Date
         const startDay = parseInt(startDateParts[2], 10) // Day of month (1-31)
         
-        // Get the form's month/year
-        const formMonth = new Date(marForm.month_year + '-01')
-        const formYear = formMonth.getFullYear()
-        const formMonthIndex = formMonth.getMonth()
+        const formParsed = parseMARMonthYear(marForm.month_year)
+        const formYear = formParsed?.y
+        const formMonthIndex = formParsed != null ? formParsed.m - 1 : -1
         
         // Check if start date is in the same month/year as the form
-        if (startYear === formYear && startMonth === formMonthIndex) {
+        if (formYear != null && formMonthIndex >= 0 && startYear === formYear && startMonth === formMonthIndex) {
           // Validate that the day exists in this month (e.g., Feb doesn't have day 30)
           try {
             const testDate = new Date(formYear, formMonthIndex, startDay)
@@ -1457,12 +1456,11 @@ export default function ViewMARForm() {
         const startMonth = parseInt(startDateParts[1], 10) - 1
         const startDay = parseInt(startDateParts[2], 10)
         
-        const formMonth = new Date(marForm.month_year + '-01')
-        const formYear = formMonth.getFullYear()
-        const formMonthIndex = formMonth.getMonth()
+        const formParsed = parseMARMonthYear(marForm.month_year)
+        const formYear = formParsed?.y
+        const formMonthIndex = formParsed != null ? formParsed.m - 1 : -1
         
-        // Check if start date is in the same month as the form
-        if (startMonth === formMonthIndex && startYear === formYear) {
+        if (formYear != null && formMonthIndex >= 0 && startMonth === formMonthIndex && startYear === formYear) {
           // Create administration record for the start day
           await supabase
             .from('mar_administrations')
@@ -2626,20 +2624,24 @@ export default function ViewMARForm() {
                               } else {
                                 const medStartDate = new Date(med.start_date)
                                 const medStopDate = med.stop_date ? new Date(med.stop_date) : null
-                                const formMonth = new Date(marForm.month_year + '-01')
-                                const formYear = formMonth.getFullYear()
-                                const formMonthIndex = formMonth.getMonth()
-                                const startDayOfMonth = medStartDate.getDate()
-                                const isStartInFormMonth = medStartDate.getMonth() === formMonthIndex && medStartDate.getFullYear() === formYear
-                                
-                                if (isStartInFormMonth) {
+                                const parsed = parseMARMonthYear(marForm.month_year)
+                                if (parsed) {
+                                  const { y: formYear, m: formM } = parsed
+                                  const formMonthIndex = formM - 1
+                                  const startDayOfMonth = medStartDate.getDate()
+                                  const isStartInFormMonth = medStartDate.getMonth() === formMonthIndex && medStartDate.getFullYear() === formYear
+                                  const isStartBeforeFormMonth = medStartDate.getFullYear() < formYear || (medStartDate.getFullYear() === formYear && medStartDate.getMonth() < formMonthIndex)
                                   try {
                                     const currentDayDate = new Date(formYear, formMonthIndex, day)
-                                    if (currentDayDate.getDate() === day && currentDayDate.getMonth() === formMonthIndex) {
-                                      if (day >= startDayOfMonth) {
-                                        if (!medStopDate || currentDayDate <= medStopDate) {
-                                          isMedActive = true
-                                        }
+                                    if (currentDayDate.getDate() !== day || currentDayDate.getMonth() !== formMonthIndex) {
+                                      // skip invalid day
+                                    } else if (isStartInFormMonth) {
+                                      if (day >= startDayOfMonth && (!medStopDate || currentDayDate <= medStopDate)) {
+                                        isMedActive = true
+                                      }
+                                    } else if (isStartBeforeFormMonth) {
+                                      if (!medStopDate || currentDayDate <= medStopDate) {
+                                        isMedActive = true
                                       }
                                     }
                                   } catch (e) {

@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../../lib/auth'
+import { ensureProgressNoteSummaryForMonth } from '../../../../lib/progress-notes'
 
 export default function MARIndex() {
   const router = useRouter()
@@ -110,25 +111,14 @@ export default function MARIndex() {
 
       if (createError) throw createError
 
+      await ensureProgressNoteSummaryForMonth(supabase, patientId, monthYear, profile.id)
+
       // Redirect to the newly created MAR form
       router.push(`/patients/${patientId}/mar/${newForm.id}`)
     } catch (err: any) {
       console.error('Error creating MAR form:', err)
       router.push('/dashboard?module=mar')
     }
-  }
-
-  const handleCreateNewAnyway = async () => {
-    if (!patientId || typeof patientId !== 'string') return
-    
-    const profile = await getCurrentUserProfile()
-    if (!profile) {
-      router.push('/auth/login')
-      return
-    }
-
-    setShowConfirmModal(false)
-    await createNewMARForm(patientId, profile, monthYear)
   }
 
   const handleViewExisting = () => {
@@ -183,22 +173,16 @@ export default function MARIndex() {
                 </div>
                 
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  A MAR form already exists for <strong>{monthYear}</strong> for this patient. 
-                  Would you like to create a new MAR form anyway, or view the existing one?
+                  A MAR form already exists for <strong>{monthYear}</strong> for this patient.
+                  Only one MAR per month and year is allowed. View the existing form below.
                 </p>
 
                 <div className="flex gap-3 justify-end">
                   <button
                     onClick={handleViewExisting}
-                    className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                  >
-                    View Existing
-                  </button>
-                  <button
-                    onClick={handleCreateNewAnyway}
                     className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal transition-colors"
                   >
-                    Create New Anyway
+                    View Existing MAR
                   </button>
                 </div>
               </div>

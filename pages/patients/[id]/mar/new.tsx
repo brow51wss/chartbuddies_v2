@@ -5,6 +5,7 @@ import ProtectedRoute from '../../../../components/ProtectedRoute'
 import TimeInput from '../../../../components/TimeInput'
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../../lib/auth'
+import { ensureProgressNoteSummaryForMonth } from '../../../../lib/progress-notes'
 import type { Patient } from '../../../../types/auth'
 import type { MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns } from '../../../../types/mar'
 
@@ -198,6 +199,8 @@ export default function NewMARForm() {
         .single()
 
       if (formError) throw formError
+
+      await ensureProgressNoteSummaryForMonth(supabase, patient.id, patientInfo.monthYear, userProfile.id)
 
       // Save medications and administrations
       for (const med of medications) {
