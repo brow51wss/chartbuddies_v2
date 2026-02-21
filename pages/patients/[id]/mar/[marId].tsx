@@ -2016,7 +2016,7 @@ export default function ViewMARForm() {
               userProfile={userProfile}
               onLogout={handleLogout}
               patientId={typeof patientId === 'string' ? patientId : Array.isArray(patientId) ? patientId[0] : undefined}
-              patientName={marForm?.patient_name}
+              patientName={undefined}
             />
           <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
           <div className="text-center">
@@ -2041,7 +2041,7 @@ export default function ViewMARForm() {
               userProfile={userProfile}
               onLogout={handleLogout}
               patientId={typeof patientId === 'string' ? patientId : Array.isArray(patientId) ? patientId[0] : undefined}
-              patientName={marForm?.patient_name}
+              patientName={undefined}
             />
           <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
           <div className="text-center">
@@ -2071,7 +2071,7 @@ export default function ViewMARForm() {
               userProfile={userProfile}
               onLogout={handleLogout}
               patientId={typeof patientId === 'string' ? patientId : Array.isArray(patientId) ? patientId[0] : undefined}
-              patientName={marForm?.patient_name}
+              patientName={undefined}
             />
           <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
           <div className="text-center">
@@ -2100,7 +2100,7 @@ export default function ViewMARForm() {
               userProfile={userProfile}
               onLogout={handleLogout}
               patientId={typeof patientId === 'string' ? patientId : Array.isArray(patientId) ? patientId[0] : undefined}
-              patientName={marForm?.patient_name}
+              patientName={undefined}
             />
           <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
           <div className="text-center">
