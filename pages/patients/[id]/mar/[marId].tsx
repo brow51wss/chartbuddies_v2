@@ -743,7 +743,7 @@ export default function ViewMARForm() {
     }
   }
 
-  const updatePRNRecord = async (recordId: string, field: 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'note' | 'dosage', value: string | null): Promise<boolean> => {
+  const updatePRNRecord = async (recordId: string, field: 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'note' | 'dosage' | 'date' | 'medication', value: string | null): Promise<boolean> => {
     if (!marFormId) return false
     
     try {
@@ -974,6 +974,11 @@ export default function ViewMARForm() {
   const handlePRNFieldEdit = (recordId: string, field: string, currentValue: string | null) => {
     setEditingPRNField({ recordId, field })
     
+    // Date input expects YYYY-MM-DD
+    if (field === 'date' && currentValue) {
+      setEditingPRNValue(currentValue.includes('T') ? currentValue.slice(0, 10) : currentValue)
+      return
+    }
     // Auto-populate initials from user profile if editing initials field
     if (field === 'initials') {
       const isDrawn = currentValue?.startsWith('data:image')
@@ -1014,13 +1019,18 @@ export default function ViewMARForm() {
       }
     }
     
-    const dbField = field === 'hour' ? 'hour' : field === 'result' ? 'result' : field === 'initials' ? 'initials' : field === 'reason' ? 'reason' : field === 'dosage' ? 'dosage' : 'staff_signature'
+    const dbField = field === 'hour' ? 'hour' : field === 'result' ? 'result' : field === 'initials' ? 'initials' : field === 'reason' ? 'reason' : field === 'dosage' ? 'dosage' : field === 'date' ? 'date' : field === 'medication' ? 'medication' : 'staff_signature'
     let valueToSave = editingPRNValue.trim() || null
+    if (field === 'date' && !valueToSave && record) valueToSave = record.date
+    if (field === 'medication' && !valueToSave && record) valueToSave = record.medication || null
     if ((field === 'initials' || field === 'staff_signature') && !valueToSave && record) {
       const existing = field === 'initials' ? record.initials : record.staff_signature
       if (existing?.startsWith('data:image')) valueToSave = existing
     }
-    await updatePRNRecord(recordId, dbField as 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'dosage', valueToSave)
+    const ok = await updatePRNRecord(recordId, dbField as 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'dosage' | 'date' | 'medication', valueToSave)
+    if (ok) {
+      setPrnRecords(prev => prev.map(r => r.id === recordId ? { ...r, [dbField]: valueToSave } : r))
+    }
     setEditingPRNField(null)
     setEditingPRNValue('')
   }
@@ -2321,7 +2331,6 @@ export default function ViewMARForm() {
                                             setShowMedicationParameterModal(true)
                                           }}
                                           className="w-6 h-6 min-w-6 min-h-6 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-all cursor-pointer text-gray-400 flex items-center justify-center group/param relative"
-                                          title={med.parameter ? 'Click to edit parameter' : 'Click to add parameter for this medication'}
                                         >
                                           {med.parameter ? (
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -3100,8 +3109,29 @@ export default function ViewMARForm() {
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
                             {prn.entry_number || '—'}
                           </td>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
-                            {new Date(prn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          <td 
+                            className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                            onClick={() => handlePRNFieldEdit(prn.id, 'date', prn.date)}
+                          >
+                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'date' ? (
+                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="date"
+                                  value={editingPRNValue || prn.date}
+                                  onChange={(e) => setEditingPRNValue(e.target.value)}
+                                  onBlur={() => handlePRNFieldSave(prn.id, 'date')}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handlePRNFieldSave(prn.id, 'date')
+                                    else if (e.key === 'Escape') handlePRNFieldCancel()
+                                  }}
+                                  autoFocus
+                                  className="px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
+                                />
+                                <button type="button" onClick={() => handlePRNFieldCancel()} className="text-xs text-gray-500 hover:text-gray-700">✕</button>
+                              </div>
+                            ) : (
+                              new Date(prn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            )}
                           </td>
                           <td 
                             className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
@@ -3113,8 +3143,11 @@ export default function ViewMARForm() {
                                   value={editingPRNValue}
                                   onChange={async (newTime) => {
                                     setEditingPRNValue(newTime)
-                                    // Save directly with the new value (don't rely on state)
-                                    await updatePRNRecord(prn.id, 'hour', newTime.trim() || null)
+                                    const valueToSave = newTime.trim() || null
+                                    const ok = await updatePRNRecord(prn.id, 'hour', valueToSave)
+                                    if (ok) {
+                                      setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, hour: valueToSave } as MARPRNRecord : r))
+                                    }
                                     setEditingPRNField(null)
                                     setEditingPRNValue('')
                                   }}
@@ -3228,8 +3261,30 @@ export default function ViewMARForm() {
                               <span className="text-gray-400">—</span>
                             )}
                           </td>
-                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
-                            {prn.medication || '—'}
+                          <td 
+                            className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                            onClick={() => handlePRNFieldEdit(prn.id, 'medication', prn.medication)}
+                          >
+                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'medication' ? (
+                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="text"
+                                  value={editingPRNValue}
+                                  onChange={(e) => setEditingPRNValue(e.target.value)}
+                                  onBlur={() => handlePRNFieldSave(prn.id, 'medication')}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handlePRNFieldSave(prn.id, 'medication')
+                                    else if (e.key === 'Escape') handlePRNFieldCancel()
+                                  }}
+                                  autoFocus
+                                  placeholder="Medication name"
+                                  className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
+                                />
+                                <button type="button" onClick={() => handlePRNFieldCancel()} className="text-xs text-gray-500 hover:text-gray-700">✕</button>
+                              </div>
+                            ) : (
+                              prn.medication || '—'
+                            )}
                           </td>
                           <td 
                             className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
@@ -3727,7 +3782,7 @@ export default function ViewMARForm() {
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Add Note</h2>
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">{editingPRNNote.note?.trim() ? 'Edit Note' : 'Add Note'}</h2>
               <button
                 onClick={() => {
                   setShowPRNNoteModal(false)
@@ -3765,7 +3820,11 @@ export default function ViewMARForm() {
               <button
                 onClick={async () => {
                   if (editingPRNNote) {
-                    await updatePRNRecord(editingPRNNote.recordId, 'note', editingPRNNote.note?.trim() || null)
+                    const valueToSave = editingPRNNote.note?.trim() || null
+                    const ok = await updatePRNRecord(editingPRNNote.recordId, 'note', valueToSave)
+                    if (ok) {
+                      setPrnRecords(prev => prev.map(r => r.id === editingPRNNote.recordId ? { ...r, note: valueToSave } : r))
+                    }
                     setShowPRNNoteModal(false)
                     setEditingPRNNote(null)
                   }

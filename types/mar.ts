@@ -55,13 +55,13 @@ export interface MARPRNRecord {
   id: string
   mar_form_id: string
   date: string
-  hour: string
-  initials: string
+  hour: string | null
+  initials: string | null
   medication: string
   dosage: string | null
   reason: string
   result: string | null
-  staff_signature: string
+  staff_signature: string | null
   entry_number: number | null
   note: string | null
   created_at: string
