@@ -485,7 +485,7 @@ export default function PatientForms() {
                               setSourceFormId(form.id)
                               setShowDuplicateModal(true)
                             }}
-                            disabled={isCurrentMonthYear}
+                            disabled={!!isCurrentMonthYear}
                             title={isCurrentMonthYear ? 'Duplicate is not allowed for the current month; a MAR for this month already exists.' : 'Duplicate this MAR'}
                             className={`px-4 py-2 rounded-md text-sm font-medium ${isCurrentMonthYear ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}
                           >
