@@ -77,6 +77,37 @@ function parsePatientName(fullName: string): { firstName: string; lastName: stri
   }
 }
 
+/** Parse query month string (e.g. "November 2025", "2025-11") to YYYY-MM. */
+function parseMonthQuery(monthFromQuery: string | null): string | null {
+  if (!monthFromQuery || !monthFromQuery.trim()) return null
+  const raw = monthFromQuery.trim().replace(/\//g, '-')
+  const parts = raw.split('-').map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n))
+  let y = parts[0], m = parts[1]
+  if (parts.length >= 2 && m > 12) [y, m] = [m, y]
+  if (y && m) return `${y}-${String(m).padStart(2, '0')}`
+  const months: Record<string, number> = { january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12 }
+  const lower = raw.toLowerCase()
+  for (const [name, num] of Object.entries(months)) {
+    if (lower.includes(name)) {
+      const match = raw.match(/\b(19|20)\d{2}\b/)
+      const year = match ? parseInt(match[0], 10) : new Date().getFullYear()
+      return `${year}-${String(num).padStart(2, '0')}`
+    }
+  }
+  return null
+}
+
+function getLastDayOfMonth(monthKey: string): number {
+  const [y, m] = monthKey.split('-').map(Number)
+  return new Date(y, m, 0).getDate()
+}
+
+function formatMonthYearDisplay(monthKey: string): string {
+  const [y, m] = monthKey.split('-').map(Number)
+  const d = new Date(y, m - 1, 1)
+  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+
 /** Y/N radio group styled as a switch (pill with two segments) */
 function YnSwitch({
   value,
@@ -201,6 +232,19 @@ export default function ProgressNotesPage() {
   const summaryRef = useRef<ProgressNoteMonthlySummary | null>(null)
   const saveSummaryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const monthFromQuery = typeof router.query.month === 'string' ? router.query.month.trim() : null
+  const monthFilterKey = parseMonthQuery(monthFromQuery)
+
+  useEffect(() => {
+    if (!router.isReady || !monthFilterKey) return
+    setSummaryMonthYear(monthFilterKey)
+    const today = new Date()
+    const [y, m] = monthFilterKey.split('-').map(Number)
+    const todayInMonth = today.getFullYear() === y && today.getMonth() + 1 === m
+    const day = todayInMonth ? today.getDate() : 1
+    setNewDate(`${monthFilterKey}-${String(day).padStart(2, '0')}`)
+  }, [router.isReady, monthFilterKey])
+
   useEffect(() => {
     if (!patientId || typeof patientId !== 'string') return
     const load = async () => {
@@ -295,7 +339,13 @@ export default function ProgressNotesPage() {
     setMessage('Note added.')
     setTimeout(() => setMessage(''), 3000)
     setNewNotes('')
-    setNewDate(new Date().toISOString().slice(0, 10))
+    setNewDate(
+      (() => {
+        const q = typeof router.query.month === 'string' ? router.query.month.trim() : null
+        const key = parseMonthQuery(q)
+        return key ? `${key}-01` : new Date().toISOString().slice(0, 10)
+      })()
+    )
     setNewNoteSigned(false)
     const { data: entriesData } = await supabase
       .from('progress_note_entries')
@@ -506,25 +556,6 @@ export default function ProgressNotesPage() {
 
   const { firstName, lastName } = parsePatientName(patient.patient_name)
   const allMainEntries = entries.filter(e => !e.is_addendum)
-  const monthFromQuery = typeof router.query.month === 'string' ? router.query.month.trim() : null
-  const monthFilterKey = (() => {
-    if (!monthFromQuery) return null
-    const raw = monthFromQuery.replace(/\//g, '-')
-    const parts = raw.split('-').map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n))
-    let y = parts[0], m = parts[1]
-    if (parts.length >= 2 && m > 12) [y, m] = [m, y]
-    if (y && m) return `${y}-${String(m).padStart(2, '0')}`
-    const months: Record<string, number> = { january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12 }
-    const lower = raw.toLowerCase()
-    for (const [name, num] of Object.entries(months)) {
-      if (lower.includes(name)) {
-        const match = raw.match(/\b(19|20)\d{2}\b/)
-        const year = match ? parseInt(match[0], 10) : new Date().getFullYear()
-        return `${year}-${String(num).padStart(2, '0')}`
-      }
-    }
-    return null
-  })()
   const mainEntries = monthFilterKey
     ? allMainEntries.filter((e) => {
         const d = e.note_date != null ? String(e.note_date).slice(0, 10) : ''
@@ -662,7 +693,12 @@ export default function ProgressNotesPage() {
                     <td className="px-4 py-2 align-top">
                       <input
                         type="date"
-                        value={newDate}
+                        min={monthFilterKey ? `${monthFilterKey}-01` : undefined}
+                        max={monthFilterKey ? `${monthFilterKey}-${String(getLastDayOfMonth(monthFilterKey)).padStart(2, '0')}` : undefined}
+                        value={monthFilterKey && newDate && !newDate.startsWith(monthFilterKey)
+                          ? `${monthFilterKey}-01`
+                          : newDate
+                        }
                         onChange={(e) => setNewDate(e.target.value)}
                         className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
@@ -784,15 +820,21 @@ export default function ProgressNotesPage() {
             <div className="px-6 py-4 space-y-6">
               <h2 className="text-center font-bold text-gray-900 dark:text-white">PROGRESS NOTES – Page 2 (Monthly Summary)</h2>
 
-              {/* Month/Year selector */}
+              {/* Month/Year: when viewing a specific month (progress note selected), show read-only; otherwise editable */}
               <div className="flex flex-wrap items-center gap-4">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Month / Year:</label>
-                <input
-                  type="month"
-                  value={summaryMonthYear}
-                  onChange={(e) => setSummaryMonthYear(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
+                {monthFilterKey ? (
+                  <span className="text-sm font-medium text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 bg-gray-50 dark:bg-gray-700">
+                    {formatMonthYearDisplay(monthFilterKey)}
+                  </span>
+                ) : (
+                  <input
+                    type="month"
+                    value={summaryMonthYear}
+                    onChange={(e) => setSummaryMonthYear(e.target.value)}
+                    className="border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                )}
                 {summaryLoading && <span className="text-sm text-gray-500">Loading...</span>}
               </div>
 

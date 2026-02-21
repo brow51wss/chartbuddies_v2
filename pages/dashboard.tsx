@@ -7,17 +7,6 @@ import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
 import type { UserProfile, Patient } from '../types/auth'
 
-interface EHRModule {
-  id: string
-  name: string
-  description: string
-  icon: string
-  status: 'available' | 'coming_soon'
-  color: string
-  gradient: string
-  route?: string
-}
-
 type SortColumn = 'date_of_birth' | 'created_at' | 'first_name' | 'last_name' | null
 type SortDirection = 'asc' | 'desc'
 
@@ -36,7 +25,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  const [selectedModule, setSelectedModule] = useState<string | null>(null)
   const [sortColumn, setSortColumn] = useState<SortColumn>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [showNameSortMenu, setShowNameSortMenu] = useState(false)
@@ -140,66 +128,6 @@ export default function Dashboard() {
     )
   }
 
-  // Define EHR modules
-  const modules: EHRModule[] = [
-    {
-      id: 'mar',
-      name: 'Medication Administration Record',
-      description: 'Track and manage medication administration for patients',
-      icon: '💊',
-      status: 'available',
-      color: 'blue',
-      gradient: 'from-lasso-navy to-lasso-teal',
-      route: '/dashboard/mar'
-    },
-    {
-      id: 'vitals',
-      name: 'Vital Signs',
-      description: 'Record and monitor patient vital signs (BP, temperature, pulse, etc.)',
-      icon: '📊',
-      status: 'coming_soon',
-      color: 'green',
-      gradient: 'from-green-500 to-green-600'
-    },
-    {
-      id: 'progress',
-      name: 'Progress Notes',
-      description: 'Document patient progress, observations, and clinical notes',
-      icon: '📝',
-      status: 'available',
-      color: 'purple',
-      gradient: 'from-purple-500 to-purple-600',
-      route: '/dashboard?module=progress'
-    },
-    {
-      id: 'admissions',
-      name: 'Admissions',
-      description: 'Manage patient admissions, discharges, and transfers',
-      icon: '🏥',
-      status: 'coming_soon',
-      color: 'indigo',
-      gradient: 'from-lasso-teal to-lasso-blue'
-    },
-    {
-      id: 'lab',
-      name: 'Laboratory Results',
-      description: 'View and manage laboratory test results and reports',
-      icon: '🔬',
-      status: 'coming_soon',
-      color: 'orange',
-      gradient: 'from-orange-500 to-orange-600'
-    },
-    {
-      id: 'imaging',
-      name: 'Imaging & Radiology',
-      description: 'Access diagnostic imaging studies and radiology reports',
-      icon: '🩻',
-      status: 'coming_soon',
-      color: 'teal',
-      gradient: 'from-teal-500 to-teal-600'
-    }
-  ]
-
   useEffect(() => {
     const loadData = async () => {
       const profile = await getCurrentUserProfile()
@@ -211,15 +139,6 @@ export default function Dashboard() {
 
       // Load patients based on role
       await loadPatients(profile)
-      
-      // Check for module query parameter
-      const { module } = router.query
-      if (module === 'mar') {
-        setSelectedModule('mar')
-      } else if (module === 'progress') {
-        setSelectedModule('progress')
-      }
-      
       setLoading(false)
     }
     loadData()
@@ -254,42 +173,51 @@ export default function Dashboard() {
       }
       // Superadmins see all patients (no filter)
 
-      const { data, error: queryError } = await query
-
+      // Exclude soft-deleted patients (requires migration 051)
+      let build = query.is('deleted_at', null)
+      let { data, error: queryError } = await build
+      if (queryError?.message?.includes('deleted_at')) {
+        // Column not added yet; load all (no soft-delete filter)
+        const fallback = query
+        const res = await fallback
+        data = res.data
+        queryError = res.error
+      }
       if (queryError) throw queryError
-      
+
+      // Client-side filter if DB has no deleted_at (e.g. old data)
+      const activeData = Array.isArray(data)
+        ? data.filter((p: { deleted_at?: string | null }) => p.deleted_at == null)
+        : []
+
       // Get the most recent MAR form diagnosis for each patient
-      if (data && data.length > 0) {
-        const patientIds = data.map(p => p.id)
-        
-        // Get most recent MAR form for each patient
+      if (activeData.length > 0) {
+        const patientIds = activeData.map((p: { id: string }) => p.id)
+
         const { data: marForms, error: marError } = await supabase
           .from('mar_forms')
           .select('patient_id, diagnosis')
           .in('patient_id', patientIds)
           .order('created_at', { ascending: false })
-        
+
         if (!marError && marForms) {
-          // Create a map of patient_id to most recent diagnosis
           const diagnosisMap = new Map<string, string | null>()
-          marForms.forEach(form => {
+          marForms.forEach((form: { patient_id: string; diagnosis: string | null }) => {
             if (!diagnosisMap.has(form.patient_id) && form.diagnosis) {
               diagnosisMap.set(form.patient_id, form.diagnosis)
             }
           })
-          
-          // Update patients with diagnosis from most recent MAR form
-          const patientsWithMarDiagnosis = data.map(patient => ({
-            ...patient,
-            diagnosis: diagnosisMap.get(patient.id) || patient.diagnosis
-          }))
-          
-          setPatients(patientsWithMarDiagnosis)
+          setPatients(
+            activeData.map((patient: Patient) => ({
+              ...patient,
+              diagnosis: diagnosisMap.get(patient.id) || patient.diagnosis
+            }))
+          )
         } else {
-          setPatients(data || [])
+          setPatients(activeData)
         }
       } else {
-        setPatients(data || [])
+        setPatients(activeData)
       }
     } catch (err: any) {
       setError(err.message)
@@ -299,22 +227,6 @@ export default function Dashboard() {
   const handleLogout = async () => {
     await signOut()
     router.push('/auth/login')
-  }
-
-  const handleModuleClick = (module: EHRModule) => {
-    if (module.status === 'coming_soon') {
-      return
-    }
-
-    if (module.id === 'mar') {
-      setSelectedModule('mar')
-    } else if (module.id === 'progress') {
-      setSelectedModule('progress')
-    }
-  }
-
-  const handleBackToModules = () => {
-    setSelectedModule(null)
   }
 
   const handleDeletePatient = async (patientId: string, patientName: string) => {
@@ -329,25 +241,55 @@ export default function Dashboard() {
 
     // Confirm deletion
     const confirmed = window.confirm(
-      `Are you sure you want to delete patient "${patientName}"?\n\nThis will permanently delete the patient and all associated records (MAR forms, medications, etc.). This action cannot be undone.`
+      `Are you sure you want to delete patient "${patientName}"?\n\nThe patient will be moved to the deleted list. You can restore them (with all MAR and progress note data) from the "Deleted patients" page.`
     )
 
     if (!confirmed) return
 
     try {
-      const { error: deleteError } = await supabase
+      const { data: updatedRows, error: updateError } = await supabase
         .from('patients')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', patientId)
+        .select('id')
 
-      if (deleteError) throw deleteError
+      const softDeleteWorked = !updateError && updatedRows != null && updatedRows.length > 0
+      let removed = softDeleteWorked
 
-      // Reload patients list
-      if (userProfile) {
-        await loadPatients(userProfile)
+      if (updateError) {
+        if (updateError.message?.includes('deleted_at')) {
+          const { data: deletedRows, error: deleteError } = await supabase
+            .from('patients')
+            .delete()
+            .eq('id', patientId)
+            .select('id')
+          if (deleteError) throw deleteError
+          removed = (deletedRows?.length ?? 0) > 0
+        } else {
+          throw updateError
+        }
+      } else if (!softDeleteWorked) {
+        const { data: deletedRows, error: deleteError } = await supabase
+          .from('patients')
+          .delete()
+          .eq('id', patientId)
+          .select('id')
+        if (deleteError) throw deleteError
+        removed = (deletedRows?.length ?? 0) > 0
       }
-      
-      setMessage(`Patient "${patientName}" has been deleted successfully`)
+
+      if (!removed) {
+        setError('Could not delete patient. The patient may not exist or you may not have permission. If you added the deleted_at column, check that RLS allows UPDATE on patients.')
+        setTimeout(() => setError(''), 8000)
+        return
+      }
+
+      if (userProfile) await loadPatients(userProfile)
+      setMessage(
+        softDeleteWorked
+          ? `Patient "${patientName}" has been deleted. You can restore them from Deleted patients.`
+          : `Patient "${patientName}" has been deleted.`
+      )
       setTimeout(() => setMessage(''), 3000)
     } catch (err: any) {
       console.error('Error deleting patient:', err)
@@ -428,111 +370,28 @@ export default function Dashboard() {
             </div>
           )}
 
-          {!selectedModule ? (
-            // Module Selection View
-            <>
-              <div className="mb-8">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                  EHR Modules
+          {/* Patient list (default dashboard view) */}
+          <div>
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Patients
                 </h2>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Select a module to access patient records and documentation
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  Select a patient to view their records and modules
                 </p>
               </div>
+              {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && (
+                <Link
+                  href="/deleted-patients"
+                  className="text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-lasso-teal dark:hover:text-lasso-teal"
+                >
+                  View deleted patients
+                </Link>
+              )}
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {modules.map((module) => (
-                  <div
-                    key={module.id}
-                    onClick={() => handleModuleClick(module)}
-                    className={`group relative bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200 dark:border-gray-700 ${
-                      module.status === 'available'
-                        ? 'cursor-pointer hover:scale-105 hover:border-lasso-blue dark:hover:border-lasso-blue'
-                        : 'cursor-not-allowed opacity-75'
-                    }`}
-                  >
-                    {/* Gradient Background */}
-                    <div
-                      className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${
-                        module.status === 'coming_soon' 
-                          ? 'from-gray-400 to-gray-500' 
-                          : module.gradient
-                      } transition-all duration-300`}
-                    />
-                    {/* Hover color overlay for coming soon modules */}
-                    {module.status === 'coming_soon' && (
-                      <div
-                        className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${module.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}
-                      />
-                    )}
-
-                    <div className="p-6">
-                      {/* Icon and Status */}
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="text-4xl">{module.icon}</div>
-                        {module.status === 'coming_soon' && (
-                          <span className="px-2 py-1 text-xs font-semibold text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-full">
-                            Coming Soon
-                          </span>
-                        )}
-                        {module.status === 'available' && (
-                          <span className="px-2 py-1 text-xs font-semibold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 rounded-full">
-                            Available
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Module Name */}
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                        {module.name}
-                      </h3>
-
-                      {/* Description */}
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
-                        {module.description}
-                      </p>
-
-                      {/* Action Button */}
-                      {module.status === 'available' && (
-                        <div className="flex items-center text-lasso-blue dark:text-lasso-blue font-medium text-sm group-hover:gap-2 transition-all duration-200">
-                          <span>Open Module</span>
-                          <span className="ml-1 group-hover:translate-x-1 transition-transform duration-200">
-                            →
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Hover Effect Overlay */}
-                    {module.status === 'available' && (
-                      <div className="absolute inset-0 bg-gradient-to-br from-lasso-navy/5 to-lasso-teal/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : selectedModule === 'mar' ? (
-            // MAR Module - Patient List View
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <button
-                    onClick={handleBackToModules}
-                    className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-2 inline-flex items-center gap-2 text-sm font-medium transition-colors"
-                  >
-                    <span>←</span>
-                    <span>Back to Modules</span>
-                  </button>
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Medication Administration Record
-                  </h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Select a patient to view or create MAR forms
-                  </p>
-                </div>
-              </div>
-
-              {patients.length === 0 ? (
+            {patients.length === 0 ? (
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-12 text-center border border-gray-200 dark:border-gray-700">
                   <div className="text-6xl mb-4">💊</div>
                   <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
@@ -673,197 +532,7 @@ export default function Dashboard() {
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center gap-3">
                                   <Link
-                                    href={`/patients/${patient.id}/forms`}
-                                    className="inline-flex items-center gap-1 text-sm font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue dark:hover:text-lasso-blue/80 transition-colors"
-                                  >
-                                    <span>Open</span>
-                                    
-                                  </Link>
-                                  {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && (
-                                    <button
-                                      onClick={() => handleDeletePatient(patient.id, patient.patient_name)}
-                                      className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-                                      title="Delete patient"
-                                    >
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                      </svg>
-                                      
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : selectedModule === 'progress' ? (
-            // Progress Notes Module - Patient List View
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <button
-                    onClick={handleBackToModules}
-                    className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-2 inline-flex items-center gap-2 text-sm font-medium transition-colors"
-                  >
-                    <span>←</span>
-                    <span>Back to Modules</span>
-                  </button>
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Progress Notes
-                  </h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Select a patient to view or add progress notes
-                  </p>
-                </div>
-              </div>
-
-              {patients.length === 0 ? (
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-12 text-center border border-gray-200 dark:border-gray-700">
-                  <div className="text-6xl mb-4">📝</div>
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                    No Patients Found
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400 mb-6">
-                    Add your first patient to start adding progress notes
-                  </p>
-                  <Link
-                    href="/admissions"
-                    className="inline-block px-6 py-3 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue font-medium shadow-md hover:shadow-lg transition-all duration-200"
-                  >
-                    Add Patient
-                  </Link>
-                </div>
-              ) : (
-                <div className="max-w-7xl mx-auto">
-                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                        <colgroup>
-                          <col className="w-48" />
-                          <col className="w-36" />
-                          <col className="w-36" />
-                        </colgroup>
-                        <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
-                          <tr>
-                            <th
-                              ref={nameSortRef}
-                              className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-0 z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600 relative"
-                            >
-                              <div
-                                className="flex items-center cursor-pointer hover:text-lasso-blue transition-colors select-none"
-                                onClick={() => setShowNameSortMenu(!showNameSortMenu)}
-                              >
-                                Patient Name
-                                <NameSortIcon />
-                                <svg className="w-3 h-3 ml-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </div>
-                              {(sortColumn === 'first_name' || sortColumn === 'last_name') && (
-                                <div className="text-[10px] text-lasso-blue font-normal normal-case mt-0.5">
-                                  by {sortColumn === 'first_name' ? 'First Name' : 'Last Name'}
-                                </div>
-                              )}
-                              {showNameSortMenu && (
-                                <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50 min-w-[160px]">
-                                  <div className="py-1">
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleSort('first_name'); }}
-                                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between ${sortColumn === 'first_name' ? 'text-lasso-blue font-medium' : 'text-gray-700 dark:text-gray-300'}`}
-                                    >
-                                      <span>First Name</span>
-                                      {sortColumn === 'first_name' && (
-                                        <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                                      )}
-                                    </button>
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleSort('last_name'); }}
-                                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between ${sortColumn === 'last_name' ? 'text-lasso-blue font-medium' : 'text-gray-700 dark:text-gray-300'}`}
-                                    >
-                                      <span>Last Name</span>
-                                      {sortColumn === 'last_name' && (
-                                        <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                                      )}
-                                    </button>
-                                    {(sortColumn === 'first_name' || sortColumn === 'last_name') && (
-                                      <>
-                                        <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); setSortColumn(null); setShowNameSortMenu(false); }}
-                                          className="w-full px-4 py-2 text-left text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                        >
-                                          Clear Sort
-                                        </button>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </th>
-                            <th
-                              className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-[192px] z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors select-none"
-                              onClick={() => handleSort('date_of_birth')}
-                            >
-                              <div className="flex items-center">
-                                Date of Birth
-                                <SortIcon column="date_of_birth" />
-                              </div>
-                            </th>
-                            <th
-                              className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors select-none"
-                              onClick={() => handleSort('created_at')}
-                            >
-                              <div className="flex items-center">
-                                Date Added
-                                <SortIcon column="created_at" />
-                              </div>
-                            </th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                              Diagnosis
-                            </th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                              Actions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                          {sortedPatients.map((patient) => (
-                            <tr
-                              key={patient.id}
-                              className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-150"
-                            >
-                              <td className="px-6 py-4 whitespace-nowrap sticky left-0 z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
-                                <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                                  {patient.patient_name}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap sticky left-[192px] z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
-                                <div className="text-sm text-gray-600 dark:text-gray-400">
-                                  {new Date(patient.date_of_birth).toLocaleDateString()}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-600 dark:text-gray-400">
-                                  {new Date(patient.created_at).toLocaleDateString()}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="text-sm text-gray-600 dark:text-gray-400">
-                                  {patient.diagnosis || (
-                                    <span className="text-gray-400 dark:text-gray-500 italic">N/A</span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="flex items-center gap-3">
-                                  <Link
-                                    href={`/patients/${patient.id}/progress-notes`}
+                                    href={`/patients/${patient.id}`}
                                     className="inline-flex items-center gap-1 text-sm font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue dark:hover:text-lasso-blue/80 transition-colors"
                                   >
                                     <span>Open</span>
@@ -890,7 +559,6 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
-          ) : null}
         </main>
       </div>
     </ProtectedRoute>
