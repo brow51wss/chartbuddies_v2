@@ -392,20 +392,20 @@ export default function PatientForms() {
       <Head>
         <title>Patient Forms - Lasso</title>
       </Head>
-      <div className="min-h-screen">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <AppHeader
           patientId={typeof id === 'string' ? id : Array.isArray(id) ? id[0] : undefined}
           patientName={patient?.patient_name}
         />
 
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Link href={typeof id === 'string' ? `/patients/${id}` : Array.isArray(id) && id[0] ? `/patients/${id[0]}` : '/dashboard'} className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm mb-2 inline-block">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Link href={typeof id === 'string' ? `/patients/${id}` : Array.isArray(id) && id[0] ? `/patients/${id[0]}` : '/dashboard'} className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm font-medium inline-block mb-2">
             ← Back to Patient's Binder
           </Link>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-white mt-2">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2 mb-2">
             {patient?.patient_name || 'Patient Forms'}
           </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-6">
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
             Record #: {patient?.record_number}
           </p>
           {error && (
@@ -415,17 +415,12 @@ export default function PatientForms() {
           )}
 
           <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">
-              Available Forms
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+              Available MAR Forms
             </h2>
 
             {/* MAR Forms Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
-              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-medium text-gray-800 dark:text-white">
-                  Medication Administration Record (MAR)
-                </h3>
-              </div>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
               <div className="p-6">
                 <div className="flex justify-between items-center mb-4">
                   <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -434,7 +429,7 @@ export default function PatientForms() {
                   {!isReadOnly && (
                     <Link
                       href={`/patients/${id}/mar`}
-                      className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium"
+                      className="px-4 py-2 bg-lasso-navy text-white rounded-lg hover:bg-lasso-teal text-sm font-medium"
                     >
                       + New MAR Form
                     </Link>
@@ -471,7 +466,7 @@ export default function PatientForms() {
                       return (
                       <div
                         key={form.id}
-                        className="flex justify-between items-center p-4 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+                        className="flex justify-between items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
                       >
                         <div>
                           <p className="font-medium text-gray-800 dark:text-white">
@@ -482,6 +477,12 @@ export default function PatientForms() {
                           </p>
                         </div>
                         <div className="flex gap-2 items-center">
+                          <Link
+                            href={`/patients/${id}/mar/${form.id}`}
+                            className="px-4 py-2 bg-lasso-teal text-white rounded-lg text-sm font-medium hover:bg-lasso-blue"
+                          >
+                            {form.status === 'draft' ? 'Continue Editing' : 'View'}
+                          </Link>
                           {!isReadOnly && (
                             <button
                               onClick={async () => {
@@ -492,21 +493,18 @@ export default function PatientForms() {
                               }}
                               disabled={!!isCurrentMonthYear}
                               title={isCurrentMonthYear ? 'Duplicate is not allowed for the current month; a MAR for this month already exists.' : 'Duplicate this MAR'}
-                              className={`px-4 py-2 rounded-md text-sm font-medium ${isCurrentMonthYear ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}
+                              className="inline-flex items-center justify-center p-2 text-lasso-teal hover:text-lasso-blue dark:text-lasso-teal dark:hover:text-lasso-blue transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent"
+                              aria-label="Duplicate MAR"
                             >
-                              Duplicate
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
                             </button>
                           )}
-                          <Link
-                            href={`/patients/${id}/mar/${form.id}`}
-                            className="px-4 py-2 text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm font-medium"
-                          >
-                            {form.status === 'draft' ? 'Continue Editing' : 'View'}
-                          </Link>
                           {!isReadOnly && (
                             <button
                               onClick={() => setDeleteConfirmForm({ id: form.id, month_year: form.month_year })}
-                              className="inline-flex items-center justify-center p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors rounded-md hover:bg-red-50 dark:hover:bg-red-900/20"
+                              className="inline-flex items-center justify-center p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
                               title="Delete MAR"
                               aria-label="Delete MAR"
                             >
@@ -524,7 +522,7 @@ export default function PatientForms() {
             </div>
 
             {/* Placeholder for future forms */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-6">
               <p className="text-sm text-gray-500 dark:text-gray-400 italic">
                 Additional form types will be available here (custom forms, vital signs, etc.)
               </p>

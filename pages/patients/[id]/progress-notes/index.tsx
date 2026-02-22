@@ -110,22 +110,25 @@ export default function ProgressNotesIndex() {
           patientName={patient.patient_name}
         />
 
-        <main className="max-w-5xl mx-auto px-4 py-6">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Link
             href={patientId ? `/patients/${patientId}` : '/dashboard'}
             className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm font-medium inline-block mb-2"
           >
             ← Back to Patient's Binder
           </Link>
-          <h1 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Progress Notes</h1>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
-            Select a month to view or add progress notes for <strong>{patient.patient_name}</strong>. Each month corresponds to a MAR period.
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2 mb-2">
+            {patient.patient_name}
+          </h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+            Record #: {patient.record_number}
           </p>
 
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+              Available Progress Notes
+            </h2>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Progress notes by month</h2>
-            </div>
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
               {monthYears.length === 0 ? (
                 <div className="px-6 py-8">
@@ -166,6 +169,7 @@ export default function ProgressNotesIndex() {
                 </Link>
               </div>
             )}
+          </div>
           </div>
         </main>
       </div>
