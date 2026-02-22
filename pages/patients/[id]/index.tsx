@@ -157,15 +157,13 @@ export default function PatientHub() {
             {MODULES.map((module) => {
               const isAvailable = module.status === 'available' && module.href
               const href = module.href ? `/patients/${patientId}/${module.href}` : '#'
-              return (
-                <div
-                  key={module.id}
-                  className={`group relative bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border transition-all duration-300 ${
-                    isAvailable
-                      ? 'cursor-pointer hover:shadow-xl hover:scale-[1.02] border-gray-200 dark:border-gray-700 hover:border-lasso-blue dark:hover:border-lasso-blue'
-                      : 'cursor-not-allowed opacity-75 border-gray-200 dark:border-gray-700'
-                  }`}
-                >
+              const cardClasses = `group relative block bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border transition-all duration-300 ${
+                isAvailable
+                  ? 'cursor-pointer hover:shadow-xl hover:scale-[1.02] border-gray-200 dark:border-gray-700 hover:border-lasso-blue dark:hover:border-lasso-blue'
+                  : 'cursor-not-allowed opacity-75 border-gray-200 dark:border-gray-700'
+              }`
+              const content = (
+                <>
                   <div
                     className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${
                       module.status === 'coming_soon' ? 'from-gray-400 to-gray-500' : module.gradient
@@ -192,15 +190,21 @@ export default function PatientHub() {
                       {module.description}
                     </p>
                     {isAvailable && (
-                      <Link
-                        href={href}
-                        className="inline-flex items-center text-lasso-blue dark:text-lasso-blue font-medium text-sm group-hover:gap-2 transition-all duration-200"
-                      >
+                      <span className="inline-flex items-center text-lasso-blue dark:text-lasso-blue font-medium text-sm group-hover:gap-2 transition-all duration-200">
                         <span>Open</span>
                         <span className="ml-1 group-hover:translate-x-1 transition-transform">→</span>
-                      </Link>
+                      </span>
                     )}
                   </div>
+                </>
+              )
+              return isAvailable ? (
+                <Link key={module.id} href={href} className={cardClasses}>
+                  {content}
+                </Link>
+              ) : (
+                <div key={module.id} className={cardClasses}>
+                  {content}
                 </div>
               )
             })}
