@@ -180,22 +180,26 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
                     </Link>
                   )}
                   {canUseReadOnly && !isReadOnly && (
-                    <button
-                      type="button"
-                      onClick={() => { enterReadOnly(); setUserMenuOpen(false); }}
-                      className="w-full text-left mx-2 my-1 px-3 py-2 text-sm font-medium border border-amber-500 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                    >
-                      Read-Only View
-                    </button>
+                    <div className="flex justify-center my-1">
+                      <button
+                        type="button"
+                        onClick={() => { enterReadOnly(); setUserMenuOpen(false); }}
+                        className="w-[85%] text-left px-3 py-2 text-sm font-medium border border-amber-500 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                      >
+                        Read-Only View
+                      </button>
+                    </div>
                   )}
                   {canUseReadOnly && isReadOnly && (
-                    <button
-                      type="button"
-                      onClick={() => { setShowExitReadOnlyModal(true); setUserMenuOpen(false); }}
-                      className="w-full text-left mx-2 my-1 px-3 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600"
-                    >
-                      Exit Read-Only
-                    </button>
+                    <div className="flex justify-center my-1">
+                      <button
+                        type="button"
+                        onClick={() => { setShowExitReadOnlyModal(true); setUserMenuOpen(false); }}
+                        className="w-[85%] text-left px-3 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600"
+                      >
+                        Exit Read-Only
+                      </button>
+                    </div>
                   )}
                   {!isReadOnly && (
                     <Link
