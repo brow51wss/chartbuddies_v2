@@ -6,6 +6,7 @@ import ProtectedRoute from '../components/ProtectedRoute'
 import AppHeader from '../components/AppHeader'
 import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
+import { useReadOnly } from '../contexts/ReadOnlyContext'
 import type { UserProfile, Patient } from '../types/auth'
 
 type SortColumn = 'date_of_birth' | 'created_at' | 'first_name' | 'last_name' | null
@@ -30,6 +31,7 @@ export default function Dashboard() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [showNameSortMenu, setShowNameSortMenu] = useState(false)
   const nameSortRef = useRef<HTMLTableCellElement>(null)
+  const { isReadOnly } = useReadOnly()
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -345,7 +347,7 @@ export default function Dashboard() {
                   Select a patient to view their records and modules
                 </p>
               </div>
-              {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && (
+              {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && !isReadOnly && (
                 <Link
                   href="/deleted-patients"
                   className="text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-lasso-teal dark:hover:text-lasso-teal"
@@ -501,7 +503,7 @@ export default function Dashboard() {
                                   >
                                     <span>Open</span>
                                   </Link>
-                                  {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && (
+                                  {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && !isReadOnly && (
                                     <button
                                       onClick={() => handleDeletePatient(patient.id, patient.patient_name)}
                                       className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"

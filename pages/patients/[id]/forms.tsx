@@ -7,6 +7,7 @@ import AppHeader from '../../../components/AppHeader'
 import TimeInput from '../../../components/TimeInput'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../lib/auth'
+import { useReadOnly } from '../../../contexts/ReadOnlyContext'
 import { ensureProgressNoteSummaryForMonth } from '../../../lib/progress-notes'
 import type { Patient } from '../../../types/auth'
 import type { MARForm, MARMedication } from '../../../types/mar'
@@ -38,6 +39,7 @@ export default function PatientForms() {
   const [saving, setSaving] = useState(false)
   const [deleteConfirmForm, setDeleteConfirmForm] = useState<{ id: string; month_year: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const { isReadOnly } = useReadOnly()
 
   useEffect(() => {
     if (id) {
@@ -429,12 +431,14 @@ export default function PatientForms() {
                   <p className="text-sm text-gray-600 dark:text-gray-400">
                     Create and manage MAR forms for this patient
                   </p>
-                  <Link
-                    href={`/patients/${id}/mar`}
-                    className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium"
-                  >
-                    + New MAR Form
-                  </Link>
+                  {!isReadOnly && (
+                    <Link
+                      href={`/patients/${id}/mar`}
+                      className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium"
+                    >
+                      + New MAR Form
+                    </Link>
+                  )}
                 </div>
 
                 {marForms.length === 0 ? (
@@ -478,35 +482,39 @@ export default function PatientForms() {
                           </p>
                         </div>
                         <div className="flex gap-2 items-center">
-                          <button
-                            onClick={async () => {
-                              if (isCurrentMonthYear) return
-                              await loadMedicationsForDuplicate(form.id)
-                              setSourceFormId(form.id)
-                              setShowDuplicateModal(true)
-                            }}
-                            disabled={!!isCurrentMonthYear}
-                            title={isCurrentMonthYear ? 'Duplicate is not allowed for the current month; a MAR for this month already exists.' : 'Duplicate this MAR'}
-                            className={`px-4 py-2 rounded-md text-sm font-medium ${isCurrentMonthYear ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}
-                          >
-                            Duplicate
-                          </button>
+                          {!isReadOnly && (
+                            <button
+                              onClick={async () => {
+                                if (isCurrentMonthYear) return
+                                await loadMedicationsForDuplicate(form.id)
+                                setSourceFormId(form.id)
+                                setShowDuplicateModal(true)
+                              }}
+                              disabled={!!isCurrentMonthYear}
+                              title={isCurrentMonthYear ? 'Duplicate is not allowed for the current month; a MAR for this month already exists.' : 'Duplicate this MAR'}
+                              className={`px-4 py-2 rounded-md text-sm font-medium ${isCurrentMonthYear ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}
+                            >
+                              Duplicate
+                            </button>
+                          )}
                           <Link
                             href={`/patients/${id}/mar/${form.id}`}
                             className="px-4 py-2 text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm font-medium"
                           >
                             {form.status === 'draft' ? 'Continue Editing' : 'View'}
                           </Link>
-                          <button
-                            onClick={() => setDeleteConfirmForm({ id: form.id, month_year: form.month_year })}
-                            className="inline-flex items-center justify-center p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors rounded-md hover:bg-red-50 dark:hover:bg-red-900/20"
-                            title="Delete MAR"
-                            aria-label="Delete MAR"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                          {!isReadOnly && (
+                            <button
+                              onClick={() => setDeleteConfirmForm({ id: form.id, month_year: form.month_year })}
+                              className="inline-flex items-center justify-center p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors rounded-md hover:bg-red-50 dark:hover:bg-red-900/20"
+                              title="Delete MAR"
+                              aria-label="Delete MAR"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                       </div>
                     )})}

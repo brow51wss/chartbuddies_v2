@@ -6,6 +6,7 @@ import ProtectedRoute from '../components/ProtectedRoute'
 import AppHeader from '../components/AppHeader'
 import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
+import { useReadOnly } from '../contexts/ReadOnlyContext'
 import type { UserProfile } from '../types/auth'
 
 interface DeletedPatient {
@@ -27,8 +28,17 @@ export default function DeletedPatientsPage() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [restoringId, setRestoringId] = useState<string | null>(null)
+  const { isReadOnly } = useReadOnly()
 
   useEffect(() => {
+    if (isReadOnly) {
+      router.replace('/dashboard')
+      return
+    }
+  }, [isReadOnly, router])
+
+  useEffect(() => {
+    if (isReadOnly) return
     const load = async () => {
       const profile = await getCurrentUserProfile()
       if (!profile) {
@@ -68,7 +78,7 @@ export default function DeletedPatientsPage() {
       }
     }
     load()
-  }, [router])
+  }, [router, isReadOnly])
 
   const handleUndelete = async (patientId: string, patientName: string) => {
     if (!userProfile) return

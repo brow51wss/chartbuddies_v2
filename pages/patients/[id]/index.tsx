@@ -29,14 +29,6 @@ const MODULES: EHRModule[] = [
     href: 'forms'
   },
   {
-    id: 'vitals',
-    name: 'Vital Signs',
-    description: 'Record and monitor vital signs (BP, temperature, pulse, etc.)',
-    icon: '📊',
-    status: 'coming_soon',
-    gradient: 'from-green-500 to-green-600'
-  },
-  {
     id: 'progress',
     name: 'Progress Notes',
     description: 'Document progress, observations, and clinical notes',
@@ -44,6 +36,14 @@ const MODULES: EHRModule[] = [
     status: 'available',
     gradient: 'from-purple-500 to-purple-600',
     href: 'progress-notes'
+  },
+  {
+    id: 'vitals',
+    name: 'Vital Signs',
+    description: 'Record and monitor vital signs (BP, temperature, pulse, etc.)',
+    icon: '📊',
+    status: 'coming_soon',
+    gradient: 'from-green-500 to-green-600'
   },
   {
     id: 'admissions',

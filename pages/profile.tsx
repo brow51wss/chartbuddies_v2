@@ -109,19 +109,23 @@ export default function Profile() {
     try {
       const signatureText = signatureInputRef.current?.getText()?.trim() ?? formData.staff_signature_text.trim()
       const initialsText = initialsInputRef.current?.getText()?.trim() ?? formData.staff_initials_text.trim()
+      const updatePayload: Record<string, unknown> = {
+        first_name: formData.first_name.trim(),
+        middle_name: formData.middle_name.trim() || null,
+        last_name: formData.last_name.trim(),
+        staff_initials: formData.staff_initials.startsWith('data:image') ? formData.staff_initials : (formData.staff_initials.trim().toUpperCase() || null),
+        staff_initials_text: initialsText || null,
+        staff_signature: formData.staff_signature.trim() || null,
+        staff_signature_font: signatureFont || null,
+        staff_signature_text: signatureText || null
+      }
+      // Only update designation if not locked (set via invite code)
+      if (!userProfile.designation_locked) {
+        updatePayload.designation = formData.designation.trim() || null
+      }
       const { error: updateError } = await supabase
         .from('user_profiles')
-        .update({
-          first_name: formData.first_name.trim(),
-          middle_name: formData.middle_name.trim() || null,
-          last_name: formData.last_name.trim(),
-          staff_initials: formData.staff_initials.startsWith('data:image') ? formData.staff_initials : (formData.staff_initials.trim().toUpperCase() || null),
-          staff_initials_text: initialsText || null,
-          staff_signature: formData.staff_signature.trim() || null,
-          staff_signature_font: signatureFont || null,
-          staff_signature_text: signatureText || null,
-          designation: formData.designation.trim() || null
-        })
+        .update(updatePayload)
         .eq('id', userProfile.id)
 
       if (updateError) throw updateError
@@ -300,16 +304,28 @@ export default function Profile() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Designation
                 </label>
-                <select
-                  value={formData.designation}
-                  onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                >
-                  <option value="">Select designation</option>
-                  <option value="PCG">PCG</option>
-                  <option value="SCG">SCG</option>
-                  <option value="RN">RN</option>
-                </select>
+                {userProfile?.designation_locked ? (
+                  <input
+                    type="text"
+                    value={formData.designation || '—'}
+                    readOnly
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 dark:bg-gray-700 dark:border-gray-600 dark:text-white cursor-not-allowed"
+                  />
+                ) : (
+                  <select
+                    value={formData.designation}
+                    onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  >
+                    <option value="">Select designation</option>
+                    <option value="PCG">PCG</option>
+                    <option value="SCG">SCG</option>
+                  </select>
+                )}
+                {userProfile?.designation_locked && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Assigned via invite code and cannot be changed</p>
+                )}
               </div>
 
               {/* Role (Read-only) */}

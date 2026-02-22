@@ -67,6 +67,7 @@ function InitialsOrSignatureDisplay({
 }
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../../../../lib/auth'
+import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import type { UserProfile } from '../../../../types/auth'
 import type { MARForm, MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns, MARCustomLegend } from '../../../../types/mar'
 import {
@@ -150,9 +151,9 @@ function useDragHandle() {
 }
 
 // Drag handle button component that uses context
-function DragHandleButton({ medId }: { medId: string }) {
+function DragHandleButton({ medId, readOnly }: { medId: string; readOnly?: boolean }) {
   const dragContext = useDragHandle()
-  
+  if (readOnly) return null
   if (!dragContext) return null
   
   const { listeners, attributes, setActivatorNodeRef, isDragging } = dragContext
@@ -207,8 +208,11 @@ export default function ViewMARForm() {
   const [showVitalSignsModal, setShowVitalSignsModal] = useState(false)
   const [editingCell, setEditingCell] = useState<{ medId: string; day: number } | null>(null)
   const [editingCellValue, setEditingCellValue] = useState<string>('') // Store the value being edited
-  // Always allow editing of day cells
-  const [isEditing] = useState(true)
+  const { isReadOnly } = useReadOnly()
+  const readOnly = isReadOnly
+  // Always allow editing of day cells (unless read-only view)
+  const [isEditingBase] = useState(true)
+  const isEditing = isEditingBase && !readOnly
   const [editingComments, setEditingComments] = useState(false)
   const [commentsValue, setCommentsValue] = useState<string>('')
   const [editingPRNField, setEditingPRNField] = useState<{ recordId: string; field: string } | null>(null)
@@ -277,6 +281,7 @@ export default function ViewMARForm() {
   // Handle browser back button and navigation
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (readOnly) return // No unsaved changes in read-only
       e.preventDefault()
       e.returnValue = '' // Chrome requires returnValue to be set
       return '' // Some browsers require return value
@@ -284,6 +289,7 @@ export default function ViewMARForm() {
 
     // Handle browser back/forward button
     const handlePopState = (e: PopStateEvent) => {
+      if (readOnly) return // Allow leaving without confirmation in read-only
       // If navigation is allowed (user confirmed), don't block
       if (allowNavigationRef.current) {
         allowNavigationRef.current = false // Reset after allowing navigation
@@ -307,13 +313,15 @@ export default function ViewMARForm() {
       window.removeEventListener('beforeunload', handleBeforeUnload)
       window.removeEventListener('popstate', handlePopState)
     }
-  }, [])
+  }, [readOnly])
 
   // Handle Next.js router navigation
   useEffect(() => {
     const handleRouteChangeStart = (url: string) => {
       // Don't show modal if navigating to the same page
       if (url === router.asPath) return
+      // In read-only, allow navigation without confirmation
+      if (readOnly) return
       
       // If navigation is allowed (user confirmed), don't block
       if (allowNavigationRef.current) {
@@ -335,7 +343,7 @@ export default function ViewMARForm() {
     return () => {
       router.events.off('routeChangeStart', handleRouteChangeStart)
     }
-  }, [router, router.asPath])
+  }, [router, router.asPath, readOnly])
 
   const handleConfirmLeave = async () => {
     setShowLeaveConfirmModal(false)
@@ -2141,36 +2149,40 @@ export default function ViewMARForm() {
                 Medication Administration Record (MAR)
               </h1>
               <div className="flex space-x-3">
-                <button
-                  onClick={() => {
-                    setInsertPosition(null) // Clear position when using regular add button
-                    setEditingEntry(null) // Clear editing entry to ensure add mode
-                    setShowAddMedModal(true)
-                  }}
-                  className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium"
-                >
-                  + Medication
-                </button>
-                <button
-                  onClick={() => setShowVitalSignsModal(true)}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium"
-                >
-                  + Vital Signs
-                </button>
-                <button
-                  onClick={() => setShowAddPRNModal(true)}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
-                >
-                  + PRN
-                </button>
-                <button
-                  onClick={repairDisplayOrder}
-                  disabled={saving}
-                  className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 text-sm font-medium disabled:opacity-50"
-                  title="Fix row order if medications with multiple times got separated"
-                >
-                  🔧 Repair Order
-                </button>
+                {!readOnly && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setInsertPosition(null) // Clear position when using regular add button
+                        setEditingEntry(null) // Clear editing entry to ensure add mode
+                        setShowAddMedModal(true)
+                      }}
+                      className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium"
+                    >
+                      + Medication
+                    </button>
+                    <button
+                      onClick={() => setShowVitalSignsModal(true)}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium"
+                    >
+                      + Vital Signs
+                    </button>
+                    <button
+                      onClick={() => setShowAddPRNModal(true)}
+                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
+                    >
+                      + PRN
+                    </button>
+                    <button
+                      onClick={repairDisplayOrder}
+                      disabled={saving}
+                      className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 text-sm font-medium disabled:opacity-50"
+                      title="Fix row order if medications with multiple times got separated"
+                    >
+                      🔧 Repair Order
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -2361,7 +2373,7 @@ export default function ViewMARForm() {
                                 style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}
                               >
                                 {/* Add Row Indicator - Top: for first row keep pill inside cell so it's not clipped by scroll container */}
-                                {rowHover?.rowId === med.id && rowHover?.position === 'top' && (
+                                {!readOnly && rowHover?.rowId === med.id && rowHover?.position === 'top' && (
                                   <div 
                                     className={`absolute left-0 right-0 min-h-[2rem] z-50 flex items-center cursor-pointer hover:bg-lasso-teal/20 transition-colors ${isFirstTableRow ? 'top-0' : '-top-7 pt-5 bg-transparent'}`}
                                     style={{ width: '5000px' }}
@@ -2379,7 +2391,7 @@ export default function ViewMARForm() {
                                   </div>
                                 )}
                                 {/* Add Row Indicator - Bottom */}
-                                {rowHover?.rowId === med.id && rowHover?.position === 'bottom' && (
+                                {!readOnly && rowHover?.rowId === med.id && rowHover?.position === 'bottom' && (
                                   <div 
                                     className="absolute left-0 right-0 -bottom-1 h-2 bg-lasso-teal z-50 flex items-center cursor-pointer hover:bg-lasso-blue transition-colors"
                                     style={{ width: '5000px' }}
@@ -2399,7 +2411,8 @@ export default function ViewMARForm() {
                                 <div className="flex gap-2 group/medcell">
                                   {/* Left column: drag handle + action icons (vertically stacked, aligned) */}
                                   <div className="flex flex-col items-start gap-1 shrink-0">
-                                    <DragHandleButton medId={med.id} />
+                                    <DragHandleButton medId={med.id} readOnly={readOnly} />
+                                    {!readOnly && (
                                     <div className="flex flex-col items-start gap-1">
                                       {/* Add parameter - first (always showing) */}
                                       {!isVitalsEntry && med.medication_name && (
@@ -2485,6 +2498,7 @@ export default function ViewMARForm() {
                                         </span>
                                       </button>
                                     </div>
+                                    )}
                                   </div>
                                   {/* Right column: medication name + details (vertically aligned) */}
                                   <div className="flex flex-col gap-0.5 min-w-0 flex-1">
@@ -2534,6 +2548,8 @@ export default function ViewMARForm() {
                               {/* Vitals don't have administration time - show dash */}
                               {isVitalsEntry ? (
                                 <span className="text-gray-400">—</span>
+                              ) : readOnly ? (
+                                <span className="text-gray-800 dark:text-white">{med.hour ? formatTimeDisplay(med.hour) : '—'}</span>
                               ) : (
                                 <EditableHourField
                                   medication={med}
@@ -2770,7 +2786,7 @@ export default function ViewMARForm() {
                                             }`}
                                           >
                                             {isDC && !isDiscontinued && (
-                                              hasParameter ? (
+                                              hasParameter && !readOnly ? (
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <div className="text-red-600 dark:text-red-400 font-bold text-xs">
@@ -2796,6 +2812,9 @@ export default function ViewMARForm() {
                                               )
                                             )}
                                             {isRefused && !isDC && (
+                                              readOnly ? (
+                                                <div className="font-bold text-red-600 dark:text-red-400">R</div>
+                                              ) : (
                                               <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                 <div className="flex items-center justify-center gap-1">
                                                   <div className="font-bold text-red-600 dark:text-red-400">
@@ -2814,8 +2833,12 @@ export default function ViewMARForm() {
                                                   </button>
                                                 </div>
                                               </div>
+                                              )
                                             )}
                                             {isHeld && !isDC && (
+                                              readOnly ? (
+                                                <div className="font-bold text-orange-600 dark:text-orange-400">H</div>
+                                              ) : (
                                               <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                 <div className="flex items-center justify-center gap-1">
                                                   <div className="font-bold text-orange-600 dark:text-orange-400">
@@ -2834,9 +2857,10 @@ export default function ViewMARForm() {
                                                   </button>
                                                 </div>
                                               </div>
+                                              )
                                             )}
                                             {isGiven && !isDC && !isRefused && !isHeld && (
-                                              hasParameter && initials ? (
+                                              hasParameter && initials && !readOnly ? (
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
@@ -2862,7 +2886,7 @@ export default function ViewMARForm() {
                                               )
                                           )}
                                             {isNotGiven && initials && !isDC && !isRefused && !isHeld && (
-                                              hasParameter ? (
+                                              hasParameter && !readOnly ? (
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <div className="text-red-600 dark:text-red-400 font-bold">
@@ -2888,7 +2912,7 @@ export default function ViewMARForm() {
                                               )
                                           )}
                                           {isPRN && (
-                                              hasParameter ? (
+                                              hasParameter && !readOnly ? (
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
@@ -2971,21 +2995,33 @@ export default function ViewMARForm() {
               <div className="space-y-3 p-4 rounded-lg bg-lasso-navy/5 dark:bg-lasso-navy/10">
                 <div>
                   <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Diagnosis:</label>
-                  <button
-                    onClick={() => setShowEditPatientInfoModal(true)}
-                    className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-                  >
-                    {marForm.diagnosis || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
-                  </button>
+                  {readOnly ? (
+                    <div className="w-full text-left text-sm text-gray-800 dark:text-white p-2 rounded border border-transparent">
+                      {marForm.diagnosis || 'N/A'}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowEditPatientInfoModal(true)}
+                      className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+                    >
+                      {marForm.diagnosis || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
+                    </button>
+                  )}
               </div>
                   <div>
                   <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Allergies:</label>
-                  <button
-                    onClick={() => setShowEditPatientInfoModal(true)}
-                    className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-                  >
-                    {marForm.allergies || 'None'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
-                  </button>
+                  {readOnly ? (
+                    <div className="w-full text-left text-sm text-gray-800 dark:text-white p-2 rounded border border-transparent">
+                      {marForm.allergies || 'None'}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowEditPatientInfoModal(true)}
+                      className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+                    >
+                      {marForm.allergies || 'None'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
+                    </button>
+                  )}
                   </div>
                   <div>
                   <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Name:</label>
@@ -2999,30 +3035,48 @@ export default function ViewMARForm() {
                   <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">
                       DIET (Special Instructions, e.g. Texture, Bite Size, Position, etc.):
                     </label>
-                  <button
-                    onClick={() => setShowEditPatientInfoModal(true)}
-                    className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors min-h-[60px]"
-                  >
-                    {marForm.diet || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
-                  </button>
+                  {readOnly ? (
+                    <div className="w-full text-left text-sm text-gray-800 dark:text-white p-2 rounded border border-transparent min-h-[60px]">
+                      {marForm.diet || 'N/A'}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowEditPatientInfoModal(true)}
+                      className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors min-h-[60px]"
+                    >
+                      {marForm.diet || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
+                    </button>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Physician Name:</label>
-                  <button
-                    onClick={() => setShowEditPatientInfoModal(true)}
-                    className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-                  >
-                    {marForm.physician_name || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
-                  </button>
+                  {readOnly ? (
+                    <div className="w-full text-left text-sm text-gray-800 dark:text-white p-2 rounded border border-transparent">
+                      {marForm.physician_name || 'N/A'}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowEditPatientInfoModal(true)}
+                      className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+                    >
+                      {marForm.physician_name || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
+                    </button>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Phone Number:</label>
-                  <button
-                    onClick={() => setShowEditPatientInfoModal(true)}
-                    className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-                  >
-                    {marForm.physician_phone || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
-                  </button>
+                  {readOnly ? (
+                    <div className="w-full text-left text-sm text-gray-800 dark:text-white p-2 rounded border border-transparent">
+                      {marForm.physician_phone || 'N/A'}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowEditPatientInfoModal(true)}
+                      className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+                    >
+                      {marForm.physician_phone || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -3063,16 +3117,16 @@ export default function ViewMARForm() {
                   </div>
                 ) : (
                   <div
-                    onClick={() => {
+                    onClick={readOnly ? undefined : () => {
                       setEditingComments(true)
                       setCommentsValue(marForm?.comments || '')
                     }}
-                    className="text-sm text-gray-800 dark:text-white min-h-[60px] p-2 border border-gray-200 dark:border-gray-600 rounded cursor-pointer hover:border-lasso-blue dark:hover:border-lasso-blue transition-colors"
+                    className={`text-sm text-gray-800 dark:text-white min-h-[60px] p-2 border border-gray-200 dark:border-gray-600 rounded ${readOnly ? '' : 'cursor-pointer hover:border-lasso-blue dark:hover:border-lasso-blue transition-colors'}`}
                   >
                     {marForm?.comments ? (
                       <div className="whitespace-pre-wrap">{marForm.comments}</div>
                     ) : (
-                      <span className="text-gray-400 italic">Click to add comments...</span>
+                      <span className="text-gray-400 italic">{readOnly ? 'No comments' : 'Click to add comments...'}</span>
                     )}
                   </div>
                 )}
@@ -3111,27 +3165,31 @@ export default function ViewMARForm() {
                             <span className="text-gray-700 dark:text-gray-300">
                               {legend.code} = {legend.description}
                             </span>
-                            <button
-                              onClick={() => {
-                                setEditingCustomLegend({ id: legend.id, code: legend.code, description: legend.description })
-                                setShowCustomLegendModal(true)
-                              }}
-                              className="opacity-0 group-hover:opacity-100 text-xs px-2 py-0.5 text-lasso-blue hover:text-lasso-teal transition-opacity"
-                              title="Edit"
-                            >
-                              ✏️
-                            </button>
+                            {!readOnly && (
+                              <button
+                                onClick={() => {
+                                  setEditingCustomLegend({ id: legend.id, code: legend.code, description: legend.description })
+                                  setShowCustomLegendModal(true)
+                                }}
+                                className="opacity-0 group-hover:opacity-100 text-xs px-2 py-0.5 text-lasso-blue hover:text-lasso-teal transition-opacity"
+                                title="Edit"
+                              >
+                                ✏️
+                              </button>
+                            )}
                           </div>
                         ))}
-                        <button
-                          onClick={() => {
-                            setEditingCustomLegend({ id: null, code: '', description: '' })
-                            setShowCustomLegendModal(true)
-                          }}
-                          className="mt-2 text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors"
-                        >
-                          + Add Custom Legend
-                        </button>
+                        {!readOnly && (
+                          <button
+                            onClick={() => {
+                              setEditingCustomLegend({ id: null, code: '', description: '' })
+                              setShowCustomLegendModal(true)
+                            }}
+                            className="mt-2 text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors"
+                          >
+                            + Add Custom Legend
+                          </button>
+                        )}
                       </>
                     )
                   })()}
@@ -3158,12 +3216,14 @@ export default function ViewMARForm() {
                 <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
                   PRN Records
                 </h2>
-                <button
-                  onClick={() => setShowAddPRNModal(true)}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
-                >
-                  + Add PRN Record
-                </button>
+                {!readOnly && (
+                  <button
+                    onClick={() => setShowAddPRNModal(true)}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
+                  >
+                    + Add PRN Record
+                  </button>
+                )}
             </div>
 
               {prnRecords.length === 0 ? (
@@ -3193,10 +3253,10 @@ export default function ViewMARForm() {
                             {prn.entry_number || '—'}
                           </td>
                           <td 
-                            className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
-                            onClick={() => handlePRNFieldEdit(prn.id, 'date', prn.date)}
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
+                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'date', prn.date) : undefined}
                           >
-                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'date' ? (
+                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'date' ? (
                               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 <input
                                   type="date"
@@ -3217,10 +3277,10 @@ export default function ViewMARForm() {
                             )}
                           </td>
                           <td 
-                            className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
-                            onClick={() => handlePRNFieldEdit(prn.id, 'hour', prn.hour)}
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
+                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'hour', prn.hour) : undefined}
                           >
-                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'hour' ? (
+                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'hour' ? (
                               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 <TimeInput
                                   value={editingPRNValue}
@@ -3250,9 +3310,9 @@ export default function ViewMARForm() {
                           </td>
                           <td 
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
-                              prn.hour && prn.result ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
+                              readOnly ? '' : prn.hour && prn.result ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
                             }`}
-                            onClick={() => {
+                            onClick={readOnly ? undefined : () => {
                               if (prn.hour && prn.result) {
                                 if (!prn.initials) {
                                   let userInitials: string | null = null
@@ -3281,9 +3341,9 @@ export default function ViewMARForm() {
                                 handlePRNFieldEdit(prn.id, 'initials', prn.initials)
                               }
                             }}
-                            title={!prn.hour || !prn.result ? 'Time and Result must be filled first' : ''}
+                            title={readOnly ? '' : !prn.hour || !prn.result ? 'Time and Result must be filled first' : ''}
                           >
-                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'initials' ? (
+                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'initials' ? (
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
@@ -3306,7 +3366,7 @@ export default function ViewMARForm() {
                               </div>
                             ) : prn.initials ? (
                               <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} />
-                            ) : prn.hour && prn.result && (userProfile?.staff_initials || userProfile?.full_name) ? (
+                            ) : !readOnly && prn.hour && prn.result && (userProfile?.staff_initials || userProfile?.full_name) ? (
                               <button
                                 type="button"
                                 onClick={async (e) => {
@@ -3345,10 +3405,10 @@ export default function ViewMARForm() {
                             )}
                           </td>
                           <td 
-                            className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
-                            onClick={() => handlePRNFieldEdit(prn.id, 'medication', prn.medication)}
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
+                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'medication', prn.medication) : undefined}
                           >
-                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'medication' ? (
+                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'medication' ? (
                               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 <input
                                   type="text"
@@ -3370,10 +3430,10 @@ export default function ViewMARForm() {
                             )}
                           </td>
                           <td 
-                            className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
-                            onClick={() => handlePRNFieldEdit(prn.id, 'dosage', prn.dosage)}
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
+                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'dosage', prn.dosage) : undefined}
                           >
-                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'dosage' ? (
+                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'dosage' ? (
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
@@ -3398,10 +3458,10 @@ export default function ViewMARForm() {
                             )}
                           </td>
                           <td 
-                            className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
-                            onClick={() => handlePRNFieldEdit(prn.id, 'reason', prn.reason)}
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
+                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'reason', prn.reason) : undefined}
                           >
-                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'reason' ? (
+                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'reason' ? (
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
@@ -3425,7 +3485,7 @@ export default function ViewMARForm() {
                               <div className="flex flex-col gap-1">
                                 <div className="flex items-center justify-between gap-2">
                                   <span>{prn.reason || '—'}</span>
-                                  {prn.reason && (
+                                  {!readOnly && prn.reason && (
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation()
@@ -3448,10 +3508,10 @@ export default function ViewMARForm() {
                             )}
                           </td>
                           <td 
-                            className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
-                            onClick={() => handlePRNFieldEdit(prn.id, 'result', prn.result)}
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
+                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'result', prn.result) : undefined}
                           >
-                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'result' ? (
+                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'result' ? (
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
@@ -3477,9 +3537,9 @@ export default function ViewMARForm() {
                           </td>
                           <td 
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
-                              prn.initials ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50'
+                              readOnly ? '' : prn.initials ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50'
                             }`}
-                            onClick={async (e) => {
+                            onClick={readOnly ? undefined : async (e) => {
                               if (!prn.initials) return
                               e.stopPropagation()
                               if (prn.staff_signature && editingPRNField?.recordId !== prn.id) return
@@ -3494,9 +3554,9 @@ export default function ViewMARForm() {
                               }
                               if (prn.staff_signature) handlePRNFieldEdit(prn.id, 'staff_signature', prn.staff_signature)
                             }}
-                            title={!prn.initials ? 'Initials must be set first' : !prn.staff_signature ? 'Click to sign (apply saved signature)' : ''}
+                            title={readOnly ? '' : !prn.initials ? 'Initials must be set first' : !prn.staff_signature ? 'Click to sign (apply saved signature)' : ''}
                           >
-                            {editingPRNField?.recordId === prn.id && editingPRNField?.field === 'staff_signature' ? (
+                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'staff_signature' ? (
                               <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
                                 <input
                                   type="text"
@@ -3518,21 +3578,23 @@ export default function ViewMARForm() {
                             ) : prn.staff_signature ? (
                               <div className="flex flex-col gap-0.5">
                                 <InitialsOrSignatureDisplay value={prn.staff_signature} variant="signature" userProfile={userProfile} />
-                                <button
-                                  type="button"
-                                  onClick={async (ev) => {
-                                    ev.stopPropagation()
-                                    const prevSig = prn.staff_signature
-                                    setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: '' } : r))
-                                    const ok = await updatePRNRecord(prn.id, 'staff_signature', null)
-                                    if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: prevSig } : r))
-                                  }}
-                                  className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 underline w-fit"
-                                >
-                                  Clear signature
-                                </button>
+                                {!readOnly && (
+                                  <button
+                                    type="button"
+                                    onClick={async (ev) => {
+                                      ev.stopPropagation()
+                                      const prevSig = prn.staff_signature
+                                      setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: '' } : r))
+                                      const ok = await updatePRNRecord(prn.id, 'staff_signature', null)
+                                      if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: prevSig } : r))
+                                    }}
+                                    className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 underline w-fit"
+                                  >
+                                    Clear signature
+                                  </button>
+                                )}
                               </div>
-                            ) : userProfile?.staff_signature && prn.initials ? (
+                            ) : !readOnly && userProfile?.staff_signature && prn.initials ? (
                               <button
                                 type="button"
                                 onClick={async (ev) => {

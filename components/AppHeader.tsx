@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
+import { useReadOnly } from '../contexts/ReadOnlyContext'
 import type { UserProfile } from '../types/auth'
 
 interface AppHeaderProps {
@@ -29,8 +30,32 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
   const router = useRouter()
   const [fetchedProfile, setFetchedProfile] = useState<UserProfile | null>(null)
   const [modulesOpen, setModulesOpen] = useState(false)
+  const [showExitReadOnlyModal, setShowExitReadOnlyModal] = useState(false)
+  const [exitPassword, setExitPassword] = useState('')
+  const [exitError, setExitError] = useState('')
+  const [exiting, setExiting] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const userProfile = userProfileProp ?? fetchedProfile
+  const { isReadOnly, enterReadOnly, exitReadOnly } = useReadOnly()
+  const canUseReadOnly = userProfile?.role === 'superadmin'
+
+  const handleExitReadOnly = async () => {
+    setExitError('')
+    if (!exitPassword.trim()) {
+      setExitError('Enter your password')
+      return
+    }
+    setExiting(true)
+    const ok = await exitReadOnly(exitPassword)
+    setExiting(false)
+    if (ok) {
+      setShowExitReadOnlyModal(false)
+      setExitPassword('')
+      setExitError('')
+    } else {
+      setExitError('Incorrect password')
+    }
+  }
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -68,6 +93,7 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
             </Link>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               {userProfile?.full_name ?? 'Loading...'} • {(userProfile?.role ?? '').replace('_', ' ').toUpperCase()}
+              {isReadOnly && <span className="ml-2 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 rounded text-xs font-medium">Read-Only View</span>}
             </p>
           </div>
           <div className="flex items-center space-x-3">
@@ -104,35 +130,105 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
                 )}
               </div>
             )}
-            <Link
-              href="/admissions"
-              className="px-4 py-2 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue text-sm font-medium shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
-            >
-              <span>+</span>
-              <span>Add Patient</span>
-            </Link>
+            {!isReadOnly && (
+              <Link
+                href="/admissions"
+                className="px-4 py-2 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue text-sm font-medium shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
+              >
+                <span>+</span>
+                <span>Add Patient</span>
+              </Link>
+            )}
+            {canUseReadOnly && !isReadOnly && (
+              <button
+                type="button"
+                onClick={enterReadOnly}
+                className="px-4 py-2 border border-amber-500 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 text-sm font-medium transition-colors duration-200"
+              >
+                Read-Only View
+              </button>
+            )}
+            {canUseReadOnly && isReadOnly && (
+              <button
+                type="button"
+                onClick={() => setShowExitReadOnlyModal(true)}
+                className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm font-medium transition-colors duration-200"
+              >
+                Exit Read-Only
+              </button>
+            )}
             <Link
               href="/dashboard"
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
             >
               Dashboard
             </Link>
-            <Link
-              href="/profile"
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
-            >
-              Profile
-            </Link>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
-            >
-              Logout
-            </button>
+            {!isReadOnly && userProfile?.role === 'superadmin' && (
+              <Link
+                href="/invites"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
+              >
+                Send Invite
+              </Link>
+            )}
+            {!isReadOnly && (
+              <Link
+                href="/profile"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
+              >
+                Profile
+              </Link>
+            )}
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
+              >
+                Logout
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Exit Read-Only Modal */}
+      {showExitReadOnlyModal && (
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="exit-readonly-title">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <h2 id="exit-readonly-title" className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Exit Read-Only View</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Enter your password to return to normal view.
+            </p>
+            <input
+              type="password"
+              value={exitPassword}
+              onChange={(e) => { setExitPassword(e.target.value); setExitError('') }}
+              placeholder="Password"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white mb-2"
+              onKeyDown={(e) => e.key === 'Enter' && handleExitReadOnly()}
+            />
+            {exitError && <p className="text-sm text-red-600 dark:text-red-400 mb-2">{exitError}</p>}
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => { setShowExitReadOnlyModal(false); setExitPassword(''); setExitError(''); }}
+                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExitReadOnly}
+                disabled={exiting}
+                className="flex-1 px-4 py-2 bg-lasso-teal text-white rounded-lg hover:bg-lasso-blue disabled:opacity-50"
+              >
+                {exiting ? 'Verifying...' : 'Exit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   )
 }

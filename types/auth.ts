@@ -15,6 +15,7 @@ export interface UserProfile {
   staff_signature_font: string | null
   staff_signature_text: string | null
   designation: string | null
+  designation_locked?: boolean
   is_active: boolean
   created_at: string
   updated_at: string

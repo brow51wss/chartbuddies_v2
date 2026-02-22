@@ -192,31 +192,47 @@ export default function Signup() {
 
       // Step 2: Create or join hospital
       if (formData.inviteCode) {
-        // Join existing hospital
-        const { data: hospitalData, error: hospitalError } = await supabase
-          .from('hospitals')
-          .select('id')
-          .eq('invite_code', formData.inviteCode.toUpperCase().trim())
-          .eq('is_active', true)
-          .single()
+        const code = formData.inviteCode.toUpperCase().trim()
 
-        if (hospitalError || !hospitalData) {
-          throw new Error('Invalid invite code. Please check and try again.')
+        // Try facility_invites first (designation pre-assigned, locked)
+        const { data: inviteJoined, error: inviteError } = await supabase
+          .rpc('join_facility_via_invite', {
+            p_code: code,
+            p_user_id: authData.user.id,
+            p_full_name: fullName
+          })
+
+        if (inviteError) {
+          console.error('Invite join error:', inviteError)
+          throw new Error(inviteError.message || 'Failed to apply invite. Please check and try again.')
         }
 
-        // Update user profile to join hospital as nurse
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .update({
-            hospital_id: hospitalData.id,
-            role: 'nurse',
-            full_name: fullName
-          })
-          .eq('id', authData.user.id)
+        if (!inviteJoined) {
+          // Fall back to legacy hospitals.invite_code (no designation, unlocked)
+          const { data: hospitalData, error: hospitalError } = await supabase
+            .from('hospitals')
+            .select('id')
+            .eq('invite_code', code)
+            .eq('is_active', true)
+            .single()
 
-        if (profileError) {
-          console.error('Profile update error:', profileError)
-          throw new Error('Failed to join facility. Please try again.')
+          if (hospitalError || !hospitalData) {
+            throw new Error('Invalid invite code. Please check and try again.')
+          }
+
+          const { error: profileError } = await supabase
+            .from('user_profiles')
+            .update({
+              hospital_id: hospitalData.id,
+              role: 'nurse',
+              full_name: fullName
+            })
+            .eq('id', authData.user.id)
+
+          if (profileError) {
+            console.error('Profile update error:', profileError)
+            throw new Error('Failed to join facility. Please try again.')
+          }
         }
       } else {
         // Create new hospital - user becomes superadmin
@@ -649,7 +665,6 @@ export default function Signup() {
                       <option value="">Select designation</option>
                       <option value="PCG">PCG</option>
                       <option value="SCG">SCG</option>
-                      <option value="RN">RN</option>
                     </select>
                   </div>
                 </>

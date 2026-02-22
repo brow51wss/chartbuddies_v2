@@ -5,6 +5,7 @@ import Link from 'next/link'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
 import AppHeader from '../../../../components/AppHeader'
 import { supabase } from '../../../../lib/supabase'
+import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import type { Patient } from '../../../../types/auth'
 
 /** Progress Notes landing: list months (from MARs) so user can open notes for a given month or add new. */
@@ -15,6 +16,7 @@ export default function ProgressNotesIndex() {
   const [monthYears, setMonthYears] = useState<{ month_year: string; id: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const { isReadOnly } = useReadOnly()
 
   useEffect(() => {
     if (!patientId || typeof patientId !== 'string') return
@@ -134,7 +136,7 @@ export default function ProgressNotesIndex() {
                     href={`/patients/${patientId}/progress-notes/view`}
                     className="inline-block px-4 py-2 bg-lasso-teal text-white rounded-lg text-sm font-medium hover:bg-lasso-blue"
                   >
-                    View all notes / Add note
+                    {isReadOnly ? 'View all notes' : 'View all notes / Add note'}
                   </Link>
                 </div>
               ) : (
@@ -148,7 +150,7 @@ export default function ProgressNotesIndex() {
                       href={`/patients/${patientId}/progress-notes/view?month=${encodeURIComponent(month_year)}`}
                       className="px-4 py-2 bg-lasso-teal text-white rounded-lg text-sm font-medium hover:bg-lasso-blue"
                     >
-                      View / Add notes
+                      {isReadOnly ? 'View notes' : 'View / Add notes'}
                     </Link>
                   </div>
                 ))

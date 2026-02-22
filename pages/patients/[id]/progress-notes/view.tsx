@@ -6,6 +6,7 @@ import ProtectedRoute from '../../../../components/ProtectedRoute'
 import AppHeader from '../../../../components/AppHeader'
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../../lib/auth'
+import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import type { UserProfile, Patient } from '../../../../types/auth'
 import type { ProgressNoteEntry, ProgressNoteMonthlySummary } from '../../../../types/progress-notes'
 
@@ -113,25 +114,28 @@ function formatMonthYearDisplay(monthKey: string): string {
 function YnSwitch({
   value,
   onChange,
-  className = ''
+  className = '',
+  disabled = false
 }: {
   value: string | null | undefined
   onChange: (v: string) => void
   className?: string
+  disabled?: boolean
 }) {
   const v = value ?? ''
   return (
     <div
       role="radiogroup"
       aria-label="Yes or No"
-      className={`inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden bg-gray-100 dark:bg-gray-700 ${className}`}
+      className={`inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden bg-gray-100 dark:bg-gray-700 ${disabled ? 'opacity-75 pointer-events-none' : ''} ${className}`}
     >
-      <label className="flex-1 cursor-pointer">
+      <label className={`flex-1 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
         <input
           type="radio"
           name={undefined}
           checked={v === 'N'}
           onChange={() => onChange('N')}
+          disabled={disabled}
           className="sr-only"
         />
         <span
@@ -144,12 +148,13 @@ function YnSwitch({
           N
         </span>
       </label>
-      <label className="flex-1 cursor-pointer border-l border-gray-300 dark:border-gray-600">
+      <label className={`flex-1 border-l border-gray-300 dark:border-gray-600 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
         <input
           type="radio"
           name={undefined}
           checked={v === 'Y'}
           onChange={() => onChange('Y')}
+          disabled={disabled}
           className="sr-only"
         />
         <span
@@ -170,25 +175,27 @@ function YnSwitch({
 function KgLbsSwitch({
   value,
   onChange,
-  className = ''
+  className = '',
+  disabled = false
 }: {
   value: string | null | undefined
   onChange: (v: string) => void
   className?: string
+  disabled?: boolean
 }) {
   const v = (value ?? 'lbs') === 'kg' ? 'kg' : 'lbs'
   return (
     <div
       role="radiogroup"
       aria-label="Weight unit"
-      className={`inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden bg-gray-100 dark:bg-gray-700 ${className}`}
+      className={`inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden bg-gray-100 dark:bg-gray-700 ${disabled ? 'opacity-75 pointer-events-none' : ''} ${className}`}
     >
-      <label className="flex-1 cursor-pointer">
-        <input type="radio" checked={v === 'lbs'} onChange={() => onChange('lbs')} className="sr-only" />
+      <label className={`flex-1 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+        <input type="radio" checked={v === 'lbs'} onChange={() => onChange('lbs')} disabled={disabled} className="sr-only" />
         <span className={`block px-2 py-1 text-center text-xs font-medium transition-colors ${v === 'lbs' ? 'bg-lasso-teal text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}>lbs</span>
       </label>
-      <label className="flex-1 cursor-pointer border-l border-gray-300 dark:border-gray-600">
-        <input type="radio" checked={v === 'kg'} onChange={() => onChange('kg')} className="sr-only" />
+      <label className={`flex-1 border-l border-gray-300 dark:border-gray-600 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+        <input type="radio" checked={v === 'kg'} onChange={() => onChange('kg')} disabled={disabled} className="sr-only" />
         <span className={`block px-2 py-1 text-center text-xs font-medium transition-colors ${v === 'kg' ? 'bg-lasso-teal text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}>kg</span>
       </label>
     </div>
@@ -233,6 +240,8 @@ export default function ProgressNotesPage() {
   const summaryRef = useRef<ProgressNoteMonthlySummary | null>(null)
   const saveSummaryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savePhysicianTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { isReadOnly } = useReadOnly()
+  const readOnly = isReadOnly
 
   const monthFromQuery = typeof router.query.month === 'string' ? router.query.month.trim() : null
   const monthFilterKey = parseMonthQuery(monthFromQuery)
@@ -701,23 +710,26 @@ export default function ProgressNotesPage() {
                         setSelectedPhysician(e.target.value)
                         if (e.target.value) setCustomPhysician('')
                       }}
-                      className="flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
+                      disabled={readOnly}
+                      className={`flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal ${readOnly ? 'cursor-not-allowed opacity-90' : ''}`}
                     >
                       <option value="">Select or type below</option>
                       {physicians.map(p => (
                         <option key={p} value={p}>{p}</option>
                       ))}
                     </select>
-                    <input
-                      type="text"
-                      placeholder="Or type custom"
-                      value={customPhysician}
-                      onChange={(e) => {
-                        setCustomPhysician(e.target.value)
-                        if (e.target.value) setSelectedPhysician('')
-                      }}
-                      className="flex-1 min-w-0 text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
-                    />
+                    {!readOnly && (
+                      <input
+                        type="text"
+                        placeholder="Or type custom"
+                        value={customPhysician}
+                        onChange={(e) => {
+                          setCustomPhysician(e.target.value)
+                          if (e.target.value) setSelectedPhysician('')
+                        }}
+                        className="flex-1 min-w-0 text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -733,6 +745,7 @@ export default function ProgressNotesPage() {
                   </tr>
                 </thead>
                 <tbody>
+                  {!readOnly && (
                   <tr className="border-t border-gray-200 dark:border-gray-600 bg-lasso-teal/5">
                     <td className="px-4 py-2 align-top">
                       <input
@@ -785,6 +798,8 @@ export default function ProgressNotesPage() {
                       )}
                     </td>
                   </tr>
+                  )}
+                  {!readOnly && (
                   <tr>
                     <td colSpan={3} className="px-4 py-2">
                       <button
@@ -797,6 +812,7 @@ export default function ProgressNotesPage() {
                       </button>
                     </td>
                   </tr>
+                  )}
                   <tr className="border-t-2 border-gray-300 dark:border-gray-600">
                     <td colSpan={3} className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
                       <div className="flex items-center justify-between">
@@ -817,17 +833,23 @@ export default function ProgressNotesPage() {
                         {new Date(entry.note_date).toLocaleDateString('en-US')}
                       </td>
                       <td className="px-4 py-2 align-top">
-                        <textarea
-                          value={entry.notes}
-                          onChange={(e) => {
-                            const v = e.target.value
-                            entryNotesRef.current[entry.id] = v
-                            setEntries(prev => prev.map(ex => ex.id === entry.id ? { ...ex, notes: v } : ex))
-                            schedulePage1EntrySave(entry.id, entry.note_date)
-                          }}
-                          rows={Math.max(2, entry.notes.split('\n').length)}
-                          className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
-                        />
+                        {readOnly ? (
+                          <div className="w-full text-sm text-gray-900 dark:text-white whitespace-pre-wrap py-2">
+                            {entry.notes}
+                          </div>
+                        ) : (
+                          <textarea
+                            value={entry.notes}
+                            onChange={(e) => {
+                              const v = e.target.value
+                              entryNotesRef.current[entry.id] = v
+                              setEntries(prev => prev.map(ex => ex.id === entry.id ? { ...ex, notes: v } : ex))
+                              schedulePage1EntrySave(entry.id, entry.note_date)
+                            }}
+                            rows={Math.max(2, entry.notes.split('\n').length)}
+                            className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
+                          />
+                        )}
                       </td>
                       <td className="px-4 py-2 align-top">
                         {entry.signature ? (
@@ -838,7 +860,7 @@ export default function ProgressNotesPage() {
                               userProfile={userProfile}
                             />
                           </div>
-                        ) : userProfile?.staff_signature ? (
+                        ) : userProfile?.staff_signature && !readOnly ? (
                           <button
                             type="button"
                             onClick={() => handleSignEntry(entry.id)}
@@ -846,9 +868,9 @@ export default function ProgressNotesPage() {
                           >
                             Sign
                           </button>
-                        ) : (
+                        ) : !userProfile?.staff_signature ? (
                           <span className="text-amber-600 dark:text-amber-400 text-sm">Set signature in Profile first</span>
-                        )}
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -876,6 +898,7 @@ export default function ProgressNotesPage() {
                     type="month"
                     value={summaryMonthYear}
                     onChange={(e) => setSummaryMonthYear(e.target.value)}
+                    disabled={readOnly}
                     className="border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 )}
@@ -896,19 +919,19 @@ export default function ProgressNotesPage() {
                   {(['bp', 'pulse', 'resp', 'temp'] as const).map(f => (
                     <div key={f}>
                       <label className="block text-xs text-gray-500 dark:text-gray-400">{f === 'bp' ? 'B.P.' : f === 'pulse' ? 'P.' : f === 'resp' ? 'R.' : 'Temp.'}</label>
-                      <input type="text" value={summaryForm[f] ?? ''} onChange={(e) => updateSummaryField(f, e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      <input type="text" value={summaryForm[f] ?? ''} onChange={(e) => updateSummaryField(f, e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                     </div>
                   ))}
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Wt.</label>
                     <div className="flex items-center gap-2">
-                      <input type="text" value={summaryForm.wt ?? ''} onChange={(e) => updateSummaryField('wt', e.target.value)} className="flex-1 min-w-0 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
-                      <KgLbsSwitch value={summaryForm.weight_unit ?? 'lbs'} onChange={(v) => updateSummaryField('weight_unit', v)} className="shrink-0" />
+                      <input type="text" value={summaryForm.wt ?? ''} onChange={(e) => updateSummaryField('wt', e.target.value)} disabled={readOnly} className="flex-1 min-w-0 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      <KgLbsSwitch value={summaryForm.weight_unit ?? 'lbs'} onChange={(v) => updateSummaryField('weight_unit', v)} disabled={readOnly} className="shrink-0" />
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Wt. Change Y/N</label>
-                    <YnSwitch value={summaryForm.wt_change_yn ?? ''} onChange={(v) => updateSummaryField('wt_change_yn', v)} className="w-full" />
+                    <YnSwitch value={summaryForm.wt_change_yn ?? ''} onChange={(v) => updateSummaryField('wt_change_yn', v)} disabled={readOnly} className="w-full" />
                     {weightDiff !== null && (
                       <p className="text-xs text-gray-700 dark:text-gray-300 mt-1 font-medium">
                         {weightDiff > 0 ? `+${weightDiff}` : weightDiff < 0 ? `${weightDiff}` : '+0'} {weightUnit}
@@ -918,7 +941,7 @@ export default function ProgressNotesPage() {
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 dark:text-gray-400">Response to Diet</label>
-                  <input type="text" value={summaryForm.response_to_diet ?? ''} onChange={(e) => updateSummaryField('response_to_diet', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                  <input type="text" value={summaryForm.response_to_diet ?? ''} onChange={(e) => updateSummaryField('response_to_diet', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                 </div>
               </section>
                 )
@@ -931,29 +954,29 @@ export default function ProgressNotesPage() {
                   {(['medication_available_yn', 'medication_secured_yn', 'taking_medications_yn'] as const).map(f => (
                     <div key={f}>
                       <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{f.replace(/_yn$/, '').replace(/_/g, ' ')} Y/N</label>
-                      <YnSwitch value={summaryForm[f] ?? ''} onChange={(v) => updateSummaryField(f, v)} className="w-full" />
+                      <YnSwitch value={summaryForm[f] ?? ''} onChange={(v) => updateSummaryField(f, v)} disabled={readOnly} className="w-full" />
                     </div>
                   ))}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Physician Notified Y/N</label>
-                    <YnSwitch value={summaryForm.physician_notified_yn ?? ''} onChange={(v) => updateSummaryField('physician_notified_yn', v)} className="w-full" />
+                    <YnSwitch value={summaryForm.physician_notified_yn ?? ''} onChange={(v) => updateSummaryField('physician_notified_yn', v)} disabled={readOnly} className="w-full" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Date</label>
-                    <input type="date" value={summaryForm.physician_notified_date ?? ''} onChange={(e) => updateSummaryField('physician_notified_date', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <input type="date" value={summaryForm.physician_notified_date ?? ''} onChange={(e) => updateSummaryField('physician_notified_date', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Medication Changes Y/N</label>
-                    <YnSwitch value={summaryForm.medication_changes_yn ?? ''} onChange={(v) => updateSummaryField('medication_changes_yn', v)} className="w-full" />
+                    <YnSwitch value={summaryForm.medication_changes_yn ?? ''} onChange={(v) => updateSummaryField('medication_changes_yn', v)} disabled={readOnly} className="w-full" />
                   </div>
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 dark:text-gray-400">Response to Medication</label>
-                  <input type="text" value={summaryForm.response_to_medication ?? ''} onChange={(e) => updateSummaryField('response_to_medication', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                  <input type="text" value={summaryForm.response_to_medication ?? ''} onChange={(e) => updateSummaryField('response_to_medication', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                 </div>
               </section>
 
@@ -963,28 +986,28 @@ export default function ProgressNotesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Treatments Y/N</label>
-                    <YnSwitch value={summaryForm.treatments_yn ?? ''} onChange={(v) => updateSummaryField('treatments_yn', v)} className="w-full" />
+                    <YnSwitch value={summaryForm.treatments_yn ?? ''} onChange={(v) => updateSummaryField('treatments_yn', v)} disabled={readOnly} className="w-full" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Type</label>
-                    <input type="text" value={summaryForm.treatments_type ?? ''} onChange={(e) => updateSummaryField('treatments_type', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <input type="text" value={summaryForm.treatments_type ?? ''} onChange={(e) => updateSummaryField('treatments_type', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                   </div>
                 </div>
                 <div className="mb-3">
                   <label className="block text-xs text-gray-500 dark:text-gray-400">Response to Treatment</label>
-                  <input type="text" value={summaryForm.response_to_treatment ?? ''} onChange={(e) => updateSummaryField('response_to_treatment', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                  <input type="text" value={summaryForm.response_to_treatment ?? ''} onChange={(e) => updateSummaryField('response_to_treatment', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Therapy Y/N</label>
-                    <YnSwitch value={summaryForm.therapy_yn ?? ''} onChange={(v) => updateSummaryField('therapy_yn', v)} className="w-full" />
+                    <YnSwitch value={summaryForm.therapy_yn ?? ''} onChange={(v) => updateSummaryField('therapy_yn', v)} disabled={readOnly} className="w-full" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {(['therapy_pt', 'therapy_ot', 'therapy_st'] as const).map(f => (
                     <div key={f}>
                       <label className="block text-xs text-gray-500 dark:text-gray-400">{f === 'therapy_pt' ? 'PT' : f === 'therapy_ot' ? 'OT' : 'ST'}</label>
-                      <input type="text" value={summaryForm[f] ?? ''} onChange={(e) => updateSummaryField(f, e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      <input type="text" value={summaryForm[f] ?? ''} onChange={(e) => updateSummaryField(f, e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                     </div>
                   ))}
                 </div>
@@ -996,13 +1019,13 @@ export default function ProgressNotesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">ADL</label>
-                    <select value={summaryForm.adl_level ?? ''} onChange={(e) => updateSummaryField('adl_level', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white">
+                    <select value={summaryForm.adl_level ?? ''} onChange={(e) => updateSummaryField('adl_level', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white">
                       <option value="">—</option><option value="Independent">Independent</option><option value="Minimal">Minimal</option><option value="Moderate">Moderate</option><option value="Maximum">Maximum</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Ambulation</label>
-                    <select value={summaryForm.ambulation ?? ''} onChange={(e) => updateSummaryField('ambulation', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white">
+                    <select value={summaryForm.ambulation ?? ''} onChange={(e) => updateSummaryField('ambulation', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white">
                       <option value="">—</option><option value="Independent">Independent</option><option value="Walker">Walker</option><option value="Cane">Cane</option><option value="W/C">W/C</option>
                     </select>
                   </div>
@@ -1011,22 +1034,22 @@ export default function ProgressNotesPage() {
                   {(['continent_urine_yn', 'continent_stool_yn', 'incontinent_urine_yn', 'incontinent_stool_yn'] as const).map(f => (
                     <div key={f}>
                       <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{f.replace(/_yn$/, '').replace(/_/g, ' ')} Y/N</label>
-                      <YnSwitch value={summaryForm[f] ?? ''} onChange={(v) => updateSummaryField(f, v)} className="w-full" />
+                      <YnSwitch value={summaryForm[f] ?? ''} onChange={(v) => updateSummaryField(f, v)} disabled={readOnly} className="w-full" />
                     </div>
                   ))}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Timed toileting Y/N</label>
-                    <YnSwitch value={summaryForm.timed_toileting_yn ?? ''} onChange={(v) => updateSummaryField('timed_toileting_yn', v)} className="w-full" />
+                    <YnSwitch value={summaryForm.timed_toileting_yn ?? ''} onChange={(v) => updateSummaryField('timed_toileting_yn', v)} disabled={readOnly} className="w-full" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Diapers Y/N</label>
-                    <YnSwitch value={summaryForm.diapers_yn ?? ''} onChange={(v) => updateSummaryField('diapers_yn', v)} className="w-full" />
+                    <YnSwitch value={summaryForm.diapers_yn ?? ''} onChange={(v) => updateSummaryField('diapers_yn', v)} disabled={readOnly} className="w-full" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">BM</label>
-                    <select value={summaryForm.bm_type ?? ''} onChange={(e) => updateSummaryField('bm_type', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white">
+                    <select value={summaryForm.bm_type ?? ''} onChange={(e) => updateSummaryField('bm_type', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white">
                       <option value="">—</option><option value="Regular">Regular</option><option value="Enema/Supp">Enema/Supp</option><option value="Stool Softeners/Laxatives">Stool Softeners/Laxatives</option>
                     </select>
                   </div>
@@ -1039,23 +1062,23 @@ export default function ProgressNotesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Intact Y/N</label>
-                    <YnSwitch value={summaryForm.skin_intact_yn ?? ''} onChange={(v) => updateSummaryField('skin_intact_yn', v)} className="w-full" />
+                    <YnSwitch value={summaryForm.skin_intact_yn ?? ''} onChange={(v) => updateSummaryField('skin_intact_yn', v)} disabled={readOnly} className="w-full" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Wound Type</label>
-                    <input type="text" value={summaryForm.wound_type ?? ''} onChange={(e) => updateSummaryField('wound_type', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <input type="text" value={summaryForm.wound_type ?? ''} onChange={(e) => updateSummaryField('wound_type', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Location</label>
-                    <input type="text" value={summaryForm.wound_location ?? ''} onChange={(e) => updateSummaryField('wound_location', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <input type="text" value={summaryForm.wound_location ?? ''} onChange={(e) => updateSummaryField('wound_location', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                   </div>
                 </div>
                 <div className="mb-3">
                   <label className="block text-xs text-gray-500 dark:text-gray-400">Treatment / Response to Treatment</label>
-                  <input type="text" value={summaryForm.wound_treatment ?? ''} onChange={(e) => updateSummaryField('wound_treatment', e.target.value)} placeholder="Treatment" className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white mb-1" />
-                  <input type="text" value={summaryForm.wound_response ?? ''} onChange={(e) => updateSummaryField('wound_response', e.target.value)} placeholder="Response" className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                  <input type="text" value={summaryForm.wound_treatment ?? ''} onChange={(e) => updateSummaryField('wound_treatment', e.target.value)} disabled={readOnly} placeholder="Treatment" className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white mb-1" />
+                  <input type="text" value={summaryForm.wound_response ?? ''} onChange={(e) => updateSummaryField('wound_response', e.target.value)} disabled={readOnly} placeholder="Response" className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                 </div>
               </section>
 
@@ -1065,27 +1088,27 @@ export default function ProgressNotesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Pain Y/N</label>
-                    <YnSwitch value={summaryForm.pain_yn ?? ''} onChange={(v) => updateSummaryField('pain_yn', v)} className="w-full" />
+                    <YnSwitch value={summaryForm.pain_yn ?? ''} onChange={(v) => updateSummaryField('pain_yn', v)} disabled={readOnly} className="w-full" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Location</label>
-                    <input type="text" value={summaryForm.pain_location ?? ''} onChange={(e) => updateSummaryField('pain_location', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <input type="text" value={summaryForm.pain_location ?? ''} onChange={(e) => updateSummaryField('pain_location', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Intensity (0–10)</label>
-                    <input type="text" value={summaryForm.pain_intensity ?? ''} onChange={(e) => updateSummaryField('pain_intensity', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <input type="text" value={summaryForm.pain_intensity ?? ''} onChange={(e) => updateSummaryField('pain_intensity', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Cause</label>
-                    <input type="text" value={summaryForm.pain_cause ?? ''} onChange={(e) => updateSummaryField('pain_cause', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <input type="text" value={summaryForm.pain_cause ?? ''} onChange={(e) => updateSummaryField('pain_cause', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                   </div>
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 dark:text-gray-400">Treatment / Response to Treatment</label>
-                  <input type="text" value={summaryForm.pain_treatment ?? ''} onChange={(e) => updateSummaryField('pain_treatment', e.target.value)} placeholder="Treatment" className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white mb-1" />
-                  <input type="text" value={summaryForm.pain_response ?? ''} onChange={(e) => updateSummaryField('pain_response', e.target.value)} placeholder="Response" className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                  <input type="text" value={summaryForm.pain_treatment ?? ''} onChange={(e) => updateSummaryField('pain_treatment', e.target.value)} disabled={readOnly} placeholder="Treatment" className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white mb-1" />
+                  <input type="text" value={summaryForm.pain_response ?? ''} onChange={(e) => updateSummaryField('pain_response', e.target.value)} disabled={readOnly} placeholder="Response" className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                 </div>
               </section>
 
@@ -1094,12 +1117,12 @@ export default function ProgressNotesPage() {
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Mental</h3>
                 <div className="mb-3">
                   <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Select all that apply (comma-separated or type)</label>
-                  <input type="text" value={summaryForm.mental_descriptors ?? ''} onChange={(e) => updateSummaryField('mental_descriptors', e.target.value)} placeholder="e.g. Oriented, Pleasant, Forgetful" className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                  <input type="text" value={summaryForm.mental_descriptors ?? ''} onChange={(e) => updateSummaryField('mental_descriptors', e.target.value)} disabled={readOnly} placeholder="e.g. Oriented, Pleasant, Forgetful" className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Options: Oriented, Pleasant, Happy, Forgetful, Wanders, Disoriented, Depressed, Withdrawn, Angry, Agitated, Delusions, Hallucinations, Suicidal/Homicidal, Physical Hostile, Verbal Hostile, Destructive</p>
                 <div>
                   <label className="block text-xs text-gray-500 dark:text-gray-400">Impaired Communication Other</label>
-                  <input type="text" value={summaryForm.impaired_communication_other ?? ''} onChange={(e) => updateSummaryField('impaired_communication_other', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                  <input type="text" value={summaryForm.impaired_communication_other ?? ''} onChange={(e) => updateSummaryField('impaired_communication_other', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                 </div>
               </section>
 
@@ -1109,39 +1132,39 @@ export default function ProgressNotesPage() {
                 <div className="space-y-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Describe Changes</label>
-                    <input type="text" value={summaryForm.describe_changes ?? ''} onChange={(e) => updateSummaryField('describe_changes', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <input type="text" value={summaryForm.describe_changes ?? ''} onChange={(e) => updateSummaryField('describe_changes', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs text-gray-500 dark:text-gray-400">Date MD Notified</label>
-                      <input type="date" value={summaryForm.date_md_notified ?? ''} onChange={(e) => updateSummaryField('date_md_notified', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      <input type="date" value={summaryForm.date_md_notified ?? ''} onChange={(e) => updateSummaryField('date_md_notified', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Actions</label>
-                    <input type="text" value={summaryForm.actions ?? ''} onChange={(e) => updateSummaryField('actions', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <input type="text" value={summaryForm.actions ?? ''} onChange={(e) => updateSummaryField('actions', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div>
                       <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Changes in Condition Y/N</label>
-                      <YnSwitch value={summaryForm.changes_in_condition_yn ?? ''} onChange={(v) => updateSummaryField('changes_in_condition_yn', v)} className="w-full" />
+                      <YnSwitch value={summaryForm.changes_in_condition_yn ?? ''} onChange={(v) => updateSummaryField('changes_in_condition_yn', v)} disabled={readOnly} className="w-full" />
                     </div>
                     <div>
                       <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Illness Y/N</label>
-                      <YnSwitch value={summaryForm.illness_yn ?? ''} onChange={(v) => updateSummaryField('illness_yn', v)} className="w-full" />
+                      <YnSwitch value={summaryForm.illness_yn ?? ''} onChange={(v) => updateSummaryField('illness_yn', v)} disabled={readOnly} className="w-full" />
                     </div>
                     <div>
                       <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Injury Y/N</label>
-                      <YnSwitch value={summaryForm.injury_yn ?? ''} onChange={(v) => updateSummaryField('injury_yn', v)} className="w-full" />
+                      <YnSwitch value={summaryForm.injury_yn ?? ''} onChange={(v) => updateSummaryField('injury_yn', v)} disabled={readOnly} className="w-full" />
                     </div>
                     <div>
                       <label className="block text-xs text-gray-500 dark:text-gray-400">Date Physician Notified</label>
-                      <input type="date" value={summaryForm.date_physician_notified ?? ''} onChange={(e) => updateSummaryField('date_physician_notified', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      <input type="date" value={summaryForm.date_physician_notified ?? ''} onChange={(e) => updateSummaryField('date_physician_notified', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Describe Type and Actions Taken</label>
-                    <textarea value={summaryForm.describe_type_actions_taken ?? ''} onChange={(e) => updateSummaryField('describe_type_actions_taken', e.target.value)} rows={3} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <textarea value={summaryForm.describe_type_actions_taken ?? ''} onChange={(e) => updateSummaryField('describe_type_actions_taken', e.target.value)} disabled={readOnly} rows={3} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                   </div>
                 </div>
               </section>
@@ -1149,7 +1172,7 @@ export default function ProgressNotesPage() {
               {/* Plan of Care */}
               <section className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Plan of Care</h3>
-                <textarea value={summaryForm.plan_of_care ?? ''} onChange={(e) => updateSummaryField('plan_of_care', e.target.value)} rows={4} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                <textarea value={summaryForm.plan_of_care ?? ''} onChange={(e) => updateSummaryField('plan_of_care', e.target.value)} disabled={readOnly} rows={4} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
               </section>
 
               {/* Signature / Title / Date */}
@@ -1158,11 +1181,11 @@ export default function ProgressNotesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Title</label>
-                    <input type="text" value={summaryForm.signature_title ?? ''} onChange={(e) => updateSummaryField('signature_title', e.target.value)} placeholder="e.g. RN, LPN" className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <input type="text" value={summaryForm.signature_title ?? ''} onChange={(e) => updateSummaryField('signature_title', e.target.value)} disabled={readOnly} placeholder="e.g. RN, LPN" className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400">Date</label>
-                    <input type="date" value={summaryForm.signature_date ?? ''} onChange={(e) => updateSummaryField('signature_date', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <input type="date" value={summaryForm.signature_date ?? ''} onChange={(e) => updateSummaryField('signature_date', e.target.value)} disabled={readOnly} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
                   </div>
                 </div>
                 <div>
@@ -1170,15 +1193,17 @@ export default function ProgressNotesPage() {
                   {summaryForm.signature && userProfile ? (
                     <div className="flex flex-col gap-1">
                       <InitialsOrSignatureDisplay value={summaryForm.signature} variant="signature" userProfile={userProfile} />
-                      <button
-                        type="button"
-                        onClick={() => updateSummaryField('signature', null)}
-                        className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 underline w-fit"
-                      >
-                        Clear signature
-                      </button>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => updateSummaryField('signature', null)}
+                          className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 underline w-fit"
+                        >
+                          Clear signature
+                        </button>
+                      )}
                     </div>
-                  ) : userProfile?.staff_signature ? (
+                  ) : !readOnly && userProfile?.staff_signature ? (
                     <button
                       type="button"
                       onClick={() => updateSummaryField('signature', userProfile.staff_signature)}
@@ -1186,9 +1211,9 @@ export default function ProgressNotesPage() {
                     >
                       Sign
                     </button>
-                  ) : (
+                  ) : !readOnly ? (
                     <span className="text-amber-600 dark:text-amber-400 text-sm">Set signature in Profile first</span>
-                  )}
+                  ) : null}
                 </div>
               </section>
             </div>
