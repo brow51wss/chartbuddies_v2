@@ -113,7 +113,7 @@ export default function ProgressNotesIndex() {
             href={patientId ? `/patients/${patientId}` : '/dashboard'}
             className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm font-medium inline-block mb-2"
           >
-            ← Back to Patient Modules
+            ← Back to Patient's Binder
           </Link>
           <h1 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Progress Notes</h1>
           <p className="text-gray-600 dark:text-gray-400 mb-6">

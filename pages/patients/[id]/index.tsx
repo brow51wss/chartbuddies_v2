@@ -148,7 +148,7 @@ export default function PatientHub() {
             <span>Back to Patients</span>
           </Link>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-            {patient.patient_name}
+            {patient.patient_name}'s Binder
           </h1>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-6">
             Select a module to access records and documentation for this patient

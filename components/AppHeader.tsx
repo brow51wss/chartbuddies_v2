@@ -80,7 +80,7 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
                   aria-expanded={modulesOpen}
                   aria-haspopup="true"
                 >
-                  <span>Go to module</span>
+                  <span>Go to form</span>
                   <svg className={`w-4 h-4 transition-transform ${modulesOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>

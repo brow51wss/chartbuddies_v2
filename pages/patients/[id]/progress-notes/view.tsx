@@ -232,6 +232,7 @@ export default function ProgressNotesPage() {
   const summaryFormRef = useRef<Partial<ProgressNoteMonthlySummary>>({})
   const summaryRef = useRef<ProgressNoteMonthlySummary | null>(null)
   const saveSummaryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savePhysicianTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const monthFromQuery = typeof router.query.month === 'string' ? router.query.month.trim() : null
   const monthFilterKey = parseMonthQuery(monthFromQuery)
@@ -293,11 +294,55 @@ export default function ProgressNotesPage() {
         .select('*')
         .eq('patient_id', patientId)
         .order('note_date', { ascending: false })
-      if (!entriesError) setEntries((entriesData || []).map((e: ProgressNoteEntry) => ({ ...e, is_addendum: e.is_addendum ?? false })))
+      const entriesList = entriesError ? [] : ((entriesData || []) as ProgressNoteEntry[]).map(e => ({ ...e, is_addendum: e.is_addendum ?? false }))
+      setEntries(entriesList)
+
+      // Pre-fill Physician/APRN: localStorage (most reliable) > last note > patient record
+      const storageKey = `progress-notes-physician-${patientId}`
+      const stored = (typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null)?.trim() || ''
+      const lastPhysician = entriesList.find(e => e.physician_name?.trim())?.physician_name?.trim()
+      const patientPhysician = patientData.physician_name?.trim() || ''
+      const physicianToUse = (stored && stored !== 'TBD') ? stored : (lastPhysician || (patientPhysician !== 'TBD' ? patientPhysician : ''))
+      if (physicianToUse) {
+        if (distinct.includes(physicianToUse)) {
+          setSelectedPhysician(physicianToUse)
+          setCustomPhysician('')
+        } else {
+          setSelectedPhysician('')
+          setCustomPhysician(physicianToUse)
+        }
+      } else if (patientData.physician_name && distinct.includes(patientData.physician_name)) {
+        setSelectedPhysician(patientData.physician_name)
+      }
+
       setLoading(false)
     }
     load()
   }, [patientId, router])
+
+  // Debounced save of Physician/APRN to patient record so typed value persists
+  useEffect(() => {
+    const physician = (selectedPhysician || customPhysician.trim() || '').trim()
+    if (!patientId || typeof patientId !== 'string' || !physician) return
+    const currentPatientPhysician = patient?.physician_name?.trim() || ''
+    if (physician === currentPatientPhysician) return
+    if (savePhysicianTimeoutRef.current) clearTimeout(savePhysicianTimeoutRef.current)
+    savePhysicianTimeoutRef.current = setTimeout(async () => {
+      savePhysicianTimeoutRef.current = null
+      const storageKey = `progress-notes-physician-${patientId}`
+      if (typeof window !== 'undefined') localStorage.setItem(storageKey, physician || 'TBD')
+      const { error: updateErr } = await supabase
+        .from('patients')
+        .update({ physician_name: physician || 'TBD', updated_at: new Date().toISOString() })
+        .eq('id', patientId)
+      if (!updateErr) {
+        setPatient(prev => prev ? { ...prev, physician_name: physician } : null)
+      }
+      setMessage('Saved')
+      setTimeout(() => setMessage(''), 2000)
+    }, 600)
+    return () => { if (savePhysicianTimeoutRef.current) clearTimeout(savePhysicianTimeoutRef.current) }
+  }, [patientId, patient, selectedPhysician, customPhysician])
 
   const refetchEntries = async () => {
     if (!patientId || typeof patientId !== 'string') return
@@ -593,7 +638,7 @@ export default function ProgressNotesPage() {
             </div>
           )}
           {(message || (activeTab === 'page2' && summarySaving)) && (
-            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-800 dark:text-green-200 text-sm shadow-lg">
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[1100] px-4 py-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-800 dark:text-green-200 text-sm shadow-lg">
               {activeTab === 'page2' && summarySaving ? 'Saving...' : message}
             </div>
           )}

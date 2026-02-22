@@ -398,7 +398,7 @@ export default function PatientForms() {
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Link href={typeof id === 'string' ? `/patients/${id}` : Array.isArray(id) && id[0] ? `/patients/${id[0]}` : '/dashboard'} className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm mb-2 inline-block">
-            ← Back to Patient Modules
+            ← Back to Patient's Binder
           </Link>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white mt-2">
             {patient?.patient_name || 'Patient Forms'}
