@@ -30,11 +30,13 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
   const router = useRouter()
   const [fetchedProfile, setFetchedProfile] = useState<UserProfile | null>(null)
   const [modulesOpen, setModulesOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [showExitReadOnlyModal, setShowExitReadOnlyModal] = useState(false)
   const [exitPassword, setExitPassword] = useState('')
   const [exitError, setExitError] = useState('')
   const [exiting, setExiting] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const userMenuRef = useRef<HTMLDivElement>(null)
   const userProfile = userProfileProp ?? fetchedProfile
   const { isReadOnly, enterReadOnly, exitReadOnly } = useReadOnly()
   const canUseReadOnly = userProfile?.role === 'superadmin'
@@ -64,6 +66,14 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
     if (modulesOpen) document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [modulesOpen])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setUserMenuOpen(false)
+    }
+    if (userMenuOpen) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [userMenuOpen])
 
   useEffect(() => {
     if (userProfileProp != null) return
@@ -139,55 +149,75 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
                 <span>Add Patient</span>
               </Link>
             )}
-            {canUseReadOnly && !isReadOnly && (
-              <button
-                type="button"
-                onClick={enterReadOnly}
-                className="px-4 py-2 border border-amber-500 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 text-sm font-medium transition-colors duration-200"
-              >
-                Read-Only View
-              </button>
-            )}
-            {canUseReadOnly && isReadOnly && (
-              <button
-                type="button"
-                onClick={() => setShowExitReadOnlyModal(true)}
-                className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm font-medium transition-colors duration-200"
-              >
-                Exit Read-Only
-              </button>
-            )}
             <Link
               href="/dashboard"
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
             >
               Dashboard
             </Link>
-            {!isReadOnly && userProfile?.role === 'superadmin' && (
-              <Link
-                href="/invites"
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
-              >
-                Send Invite
-              </Link>
-            )}
-            {!isReadOnly && (
-              <Link
-                href="/profile"
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
-              >
-                Profile
-              </Link>
-            )}
-            {!isReadOnly && (
+            <div className="relative" ref={userMenuRef}>
               <button
                 type="button"
-                onClick={handleLogout}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200"
+                onClick={() => setUserMenuOpen((o) => !o)}
+                className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                aria-label="User menu"
+                aria-expanded={userMenuOpen}
+                aria-haspopup="true"
               >
-                Logout
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
               </button>
-            )}
+              {userMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 py-1 w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-[1000]">
+                  {!isReadOnly && userProfile?.role === 'superadmin' && (
+                    <Link
+                      href="/invites"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="block px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      Send Invite
+                    </Link>
+                  )}
+                  {canUseReadOnly && !isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => { enterReadOnly(); setUserMenuOpen(false); }}
+                      className="w-full text-left mx-2 my-1 px-3 py-2 text-sm font-medium border border-amber-500 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                    >
+                      Read-Only View
+                    </button>
+                  )}
+                  {canUseReadOnly && isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => { setShowExitReadOnlyModal(true); setUserMenuOpen(false); }}
+                      className="w-full text-left mx-2 my-1 px-3 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600"
+                    >
+                      Exit Read-Only
+                    </button>
+                  )}
+                  {!isReadOnly && (
+                    <Link
+                      href="/profile"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="block px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      Profile
+                    </Link>
+                  )}
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => { setUserMenuOpen(false); handleLogout(); }}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      Logout
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
