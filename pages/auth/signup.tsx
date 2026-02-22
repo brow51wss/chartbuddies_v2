@@ -7,13 +7,15 @@ import { supabase } from '../../lib/supabase'
 export default function Signup() {
   const router = useRouter()
   const [formData, setFormData] = useState({
-    fullName: '',
+    firstName: '',
+    middleName: '',
+    lastName: '',
     email: '',
     password: '',
     confirmPassword: '',
     hospitalName: '',
-    facilityType: 'hospital',
-    inviteCode: '' // Optional - if joining existing hospital
+    designation: '',
+    inviteCode: '' // Optional - if joining existing facility
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -25,8 +27,16 @@ export default function Signup() {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
-  const handleStep1Submit = (e: React.FormEvent) => {
+  const fullName = [formData.firstName, formData.middleName, formData.lastName].filter(Boolean).join(' ').trim()
+
+  const [checkingEmail, setCheckingEmail] = useState(false)
+
+  const handleStep1Submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!formData.firstName.trim() || !formData.lastName.trim()) {
+      setError('First name and last name are required')
+      return
+    }
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match')
       return
@@ -36,7 +46,26 @@ export default function Signup() {
       return
     }
     setError('')
-    setStep(2)
+    setCheckingEmail(true)
+    try {
+      const { data: exists, error: rpcError } = await supabase.rpc('check_email_exists', {
+        p_email: formData.email.trim()
+      })
+      if (rpcError) {
+        console.error('Email check error:', rpcError)
+        setError('Could not verify email. Please try again.')
+        setCheckingEmail(false)
+        return
+      }
+      if (exists) {
+        setError('This email is already registered. Please sign in or use a different email.')
+        setCheckingEmail(false)
+        return
+      }
+      setStep(2)
+    } finally {
+      setCheckingEmail(false)
+    }
   }
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -59,7 +88,7 @@ export default function Signup() {
         options: {
           emailRedirectTo: redirectUrl,
           data: {
-            full_name: formData.fullName
+            full_name: fullName
           }
         }
       })
@@ -138,7 +167,7 @@ export default function Signup() {
           .rpc('create_user_profile_safe', {
             p_user_id: authData.user.id,
             p_email: authData.user.email!,
-            p_full_name: formData.fullName
+            p_full_name: fullName
           })
 
         if (functionError) {
@@ -181,13 +210,13 @@ export default function Signup() {
           .update({
             hospital_id: hospitalData.id,
             role: 'nurse',
-            full_name: formData.fullName
+            full_name: fullName
           })
           .eq('id', authData.user.id)
 
         if (profileError) {
           console.error('Profile update error:', profileError)
-          throw new Error('Failed to join hospital. Please try again.')
+          throw new Error('Failed to join facility. Please try again.')
         }
       } else {
         // Create new hospital - user becomes superadmin
@@ -220,7 +249,7 @@ export default function Signup() {
         const { data: hospitalData, error: hospitalError } = await supabase
           .rpc('create_hospital_safe', {
             p_name: formData.hospitalName,
-            p_facility_type: formData.facilityType,
+            p_facility_type: 'facility',
             p_invite_code: inviteCode
           })
 
@@ -233,18 +262,18 @@ export default function Signup() {
               .from('hospitals')
               .insert({
                 name: formData.hospitalName,
-                facility_type: formData.facilityType,
+                facility_type: 'facility',
                 invite_code: inviteCode
               })
               .select()
               .single()
             
             if (directError) {
-              throw new Error(`Failed to create hospital: ${directError.message}. Please contact support.`)
+              throw new Error(`Failed to create facility: ${directError.message}. Please contact support.`)
             }
             
             if (!directInsert) {
-              throw new Error('Hospital creation failed. Please try again.')
+              throw new Error('Facility creation failed. Please try again.')
             }
             
             // Use direct insert result
@@ -255,7 +284,8 @@ export default function Signup() {
               .update({
                 hospital_id: finalHospitalData.id,
                 role: 'superadmin',
-                full_name: formData.fullName
+                full_name: fullName,
+                designation: formData.designation?.trim() || null
               })
               .eq('id', authData.user.id)
 
@@ -274,18 +304,18 @@ export default function Signup() {
             }
             return
           }
-          throw new Error(hospitalError.message || 'Failed to create hospital. Please try again or contact support.')
+          throw new Error(hospitalError.message || 'Failed to create facility. Please try again or contact support.')
         }
 
         if (!hospitalData || hospitalData.length === 0) {
-          throw new Error('Hospital creation failed. Please try again.')
+          throw new Error('Facility creation failed. Please try again.')
         }
 
         // Function returns array, get first item
         const finalHospital = Array.isArray(hospitalData) ? hospitalData[0] : hospitalData
 
         if (!finalHospital || !finalHospital.id) {
-          throw new Error('Hospital creation failed. Please try again.')
+          throw new Error('Facility creation failed. Please try again.')
         }
 
         // Update user profile to be superadmin of new hospital
@@ -300,7 +330,8 @@ export default function Signup() {
             p_user_id: authData.user.id,
             p_hospital_id: finalHospital.id,
             p_role: 'superadmin',
-            p_full_name: formData.fullName
+            p_full_name: fullName,
+            p_designation: formData.designation?.trim() || null
           })
         
         if (functionError) {
@@ -311,7 +342,8 @@ export default function Signup() {
             .update({
               hospital_id: finalHospital.id,
               role: 'superadmin',
-              full_name: formData.fullName
+              full_name: fullName,
+              designation: formData.designation?.trim() || null
             })
             .eq('id', authData.user.id)
 
@@ -329,7 +361,7 @@ export default function Signup() {
           console.error('Profile update error:', profileError)
           // Don't throw error - hospital was created successfully
           // User can update their profile later
-          setError('Hospital created successfully! However, we could not set your admin role. Please contact support or try logging in.')
+          setError('Facility created successfully! However, we could not set your admin role. Please contact support or try logging in.')
           setLoading(false)
           return
         }
@@ -456,20 +488,51 @@ export default function Signup() {
             </div>
           ) : step === 1 ? (
             <form onSubmit={handleStep1Submit} className="space-y-6">
-              <div>
-                <label htmlFor="fullName" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  Full Name
-                </label>
-                <input
-                  id="fullName"
-                  name="fullName"
-                  type="text"
-                  value={formData.fullName}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal dark:bg-gray-700 dark:text-white transition-all duration-200"
-                  placeholder="John Doe"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label htmlFor="firstName" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    First Name *
+                  </label>
+                  <input
+                    id="firstName"
+                    name="firstName"
+                    type="text"
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal dark:bg-gray-700 dark:text-white transition-all duration-200"
+                    placeholder="John"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="middleName" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Middle Name
+                  </label>
+                  <input
+                    id="middleName"
+                    name="middleName"
+                    type="text"
+                    value={formData.middleName}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal dark:bg-gray-700 dark:text-white transition-all duration-200"
+                    placeholder=""
+                  />
+                </div>
+                <div>
+                  <label htmlFor="lastName" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Last Name *
+                  </label>
+                  <input
+                    id="lastName"
+                    name="lastName"
+                    type="text"
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal dark:bg-gray-700 dark:text-white transition-all duration-200"
+                    placeholder="Doe"
+                  />
+                </div>
               </div>
 
               <div>
@@ -524,16 +587,17 @@ export default function Signup() {
 
               <button
                 type="submit"
-                className="w-full px-4 py-3 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:ring-offset-2 font-semibold shadow-md hover:shadow-lg transition-all duration-200"
+                disabled={checkingEmail}
+                className="w-full px-4 py-3 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:ring-offset-2 font-semibold shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Continue
+                {checkingEmail ? 'Checking...' : 'Continue'}
               </button>
             </form>
           ) : success ? null : (
             <form onSubmit={handleSignup} className="space-y-6">
               <div className="mb-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                  Do you have an invite code to join an existing hospital?
+                  Do you have an invite code to join an existing facility?
                 </p>
                 <label htmlFor="inviteCode" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Invite Code (Optional)
@@ -549,7 +613,7 @@ export default function Signup() {
                   maxLength={8}
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Leave blank if you're creating a new hospital
+                  Leave blank if you're creating a new facility
                 </p>
               </div>
 
@@ -557,7 +621,7 @@ export default function Signup() {
                 <>
                   <div>
                     <label htmlFor="hospitalName" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Hospital/Facility Name *
+                      Facility Name *
                     </label>
                     <input
                       id="hospitalName"
@@ -567,26 +631,25 @@ export default function Signup() {
                       onChange={handleChange}
                       required={!formData.inviteCode}
                       className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal dark:bg-gray-700 dark:text-white transition-all duration-200"
-                      placeholder="General Hospital"
+                      placeholder="General Facility"
                     />
                   </div>
 
                   <div>
-                    <label htmlFor="facilityType" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Facility Type *
+                    <label htmlFor="designation" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      Designation
                     </label>
                     <select
-                      id="facilityType"
-                      name="facilityType"
-                      value={formData.facilityType}
+                      id="designation"
+                      name="designation"
+                      value={formData.designation}
                       onChange={handleChange}
-                      required={!formData.inviteCode}
                       className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal dark:bg-gray-700 dark:text-white transition-all duration-200"
                     >
-                      <option value="hospital">Hospital</option>
-                      <option value="home_care">Home Care</option>
-                      <option value="clinic">Clinic</option>
-                      <option value="other">Other</option>
+                      <option value="">Select designation</option>
+                      <option value="PCG">PCG</option>
+                      <option value="SCG">SCG</option>
+                      <option value="RN">RN</option>
                     </select>
                   </div>
                 </>

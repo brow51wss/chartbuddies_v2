@@ -308,6 +308,7 @@ export default function Profile() {
                   <option value="">Select designation</option>
                   <option value="PCG">PCG</option>
                   <option value="SCG">SCG</option>
+                  <option value="RN">RN</option>
                 </select>
               </div>
 
