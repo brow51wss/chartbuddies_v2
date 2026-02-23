@@ -2135,8 +2135,8 @@ export default function ViewMARForm() {
               patientName={marForm?.patient_name}
             />
 
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Main Content - 95vw with min 1000px so the white MAR card uses almost the full screen */}
+        <div className="w-[95vw] min-w-[1000px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header Navigation */}
           <div className="mb-6">
             <button
@@ -2988,6 +2988,8 @@ export default function ViewMARForm() {
               </div>
           </div>
 
+          {/* Patient info, Comments, Instructions, Legend, PRN - keep original max-width so they don't stretch */}
+          <div className="max-w-7xl mx-auto">
           {/* Patient Information Section - Box 2 */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
             {/* Row 1: Two Columns */}
@@ -3207,11 +3209,11 @@ export default function ViewMARForm() {
                   <label className="block font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">Sex:</label>
                       <div className="text-gray-800 dark:text-white">{marForm.sex}</div>
                     </div>
-                  </div>
-                </div>
               </div>
+            </div>
+          </div>
 
-          {/* PRN Records Section */}
+          {/* PRN Records Section - same max-width as Patient info above */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mt-8">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
@@ -3621,6 +3623,7 @@ export default function ViewMARForm() {
                   </table>
                 </div>
               )}
+          </div>
           </div>
         </div>
       </div>
