@@ -673,7 +673,7 @@ export default function ProgressNotesPage() {
           <>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
-              <h2 className="text-center font-bold text-gray-900 dark:text-white mb-4">PROGRESS NOTES</h2>
+             
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Name of ARCH</label>

@@ -483,7 +483,7 @@ export default function ViewMARForm() {
     const dayToScroll = lastFilledDay > 0
       ? Math.min(31, lastFilledDay)
       : Math.min(31, Math.max(1, new Date().getDate()))
-    const fixedColsWidth = MAR_COL.med + MAR_COL.startStop + MAR_COL.hour
+    const fixedColsWidth = MAR_COL.med + MAR_COL.startStop + (readOnly ? 90 : MAR_COL.hour)
     const dayColWidth = MAR_COL.day
     const scrollLeft = Math.max(0, fixedColsWidth + (dayToScroll - 1) * dayColWidth - 80)
     const applyScroll = () => {
@@ -494,7 +494,7 @@ export default function ViewMARForm() {
       applyScroll()
       if (!marTableScrollRef.current || !marHeaderScrollRef.current) setTimeout(applyScroll, 50)
     })
-  }, [loading, marForm])
+  }, [loading, marForm, readOnly])
 
   // Sync horizontal scroll between sticky header and body so they stay aligned (header outside overflow so sticky works)
   useEffect(() => {
@@ -2011,6 +2011,7 @@ export default function ViewMARForm() {
 
   const days = Array.from({ length: 31 }, (_, i) => i + 1)
   const MAR_COL = { med: 200, startStop: 120, hour: 150, day: 100 } as const
+  const hourColWidth = readOnly ? 90 : MAR_COL.hour
 
   // Show loading state while router is initializing
   if (!router.isReady || loading) {
@@ -2244,7 +2245,7 @@ export default function ViewMARForm() {
                     <colgroup>
                       <col style={{ width: MAR_COL.med, minWidth: MAR_COL.med }} />
                       <col style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop }} />
-                      <col style={{ width: MAR_COL.hour, minWidth: MAR_COL.hour }} />
+                      <col style={{ width: hourColWidth, minWidth: hourColWidth }} />
                       {days.map((_, i) => <col key={`sc-${i}`} style={{ width: MAR_COL.day, minWidth: MAR_COL.day }} />)}
                     </colgroup>
                     <thead>
@@ -2255,7 +2256,7 @@ export default function ViewMARForm() {
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop, maxWidth: MAR_COL.startStop, left: MAR_COL.med }}>
                           Start/Stop Date
                         </th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: MAR_COL.hour, minWidth: MAR_COL.hour, maxWidth: MAR_COL.hour, left: MAR_COL.med + MAR_COL.startStop }}>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth, left: MAR_COL.med + MAR_COL.startStop }}>
                           Hour
                         </th>
                         {days.map(day => (
@@ -2276,7 +2277,7 @@ export default function ViewMARForm() {
                   <colgroup>
                     <col style={{ width: MAR_COL.med, minWidth: MAR_COL.med }} />
                     <col style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop }} />
-                    <col style={{ width: MAR_COL.hour, minWidth: MAR_COL.hour }} />
+                    <col style={{ width: hourColWidth, minWidth: hourColWidth }} />
                     {days.map((_, i) => <col key={i} style={{ width: MAR_COL.day, minWidth: MAR_COL.day }} />)}
                   </colgroup>
                   <DndContext
@@ -2544,7 +2545,7 @@ export default function ViewMARForm() {
                               )}
                             </td>
                             )}
-                            <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 bg-slate-200 dark:bg-slate-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]" style={{ width: MAR_COL.hour, minWidth: MAR_COL.hour, maxWidth: MAR_COL.hour }}>
+                            <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 bg-slate-200 dark:bg-slate-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]" style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth }}>
                               {/* Vitals don't have administration time - show dash */}
                               {isVitalsEntry ? (
                                 <span className="text-gray-400">—</span>
