@@ -2272,7 +2272,7 @@ export default function ViewMARForm() {
                     </thead>
                   </table>
                 </div>
-                <div ref={marTableScrollRef} className="overflow-x-auto bg-white dark:bg-gray-800">
+                <div ref={marTableScrollRef} className="overflow-x-auto overflow-y-visible bg-white dark:bg-gray-800 pb-8">
                 <table className="min-w-full border border-gray-300 dark:border-gray-600" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
                   <colgroup>
                     <col style={{ width: MAR_COL.med, minWidth: MAR_COL.med }} />
@@ -2394,7 +2394,7 @@ export default function ViewMARForm() {
                                 {/* Add Row Indicator - Bottom */}
                                 {!readOnly && rowHover?.rowId === med.id && rowHover?.position === 'bottom' && (
                                   <div 
-                                    className="absolute left-0 right-0 -bottom-1 h-2 bg-lasso-teal z-50 flex items-center cursor-pointer hover:bg-lasso-blue transition-colors"
+                                    className="absolute left-0 right-0 -bottom-1 min-h-[2rem] py-1 bg-lasso-teal z-50 flex items-center cursor-pointer hover:bg-lasso-blue transition-colors"
                                     style={{ width: '5000px' }}
                                     onClick={(e) => {
                                       e.stopPropagation()
