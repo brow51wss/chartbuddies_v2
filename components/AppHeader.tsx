@@ -183,7 +183,11 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
                     <div className="flex justify-center my-1">
                       <button
                         type="button"
-                        onClick={() => { enterReadOnly(); setUserMenuOpen(false); }}
+                        onClick={() => {
+                          enterReadOnly()
+                          setUserMenuOpen(false)
+                          if (router.pathname === '/profile') router.push('/dashboard')
+                        }}
                         className="w-[85%] text-left px-3 py-2 text-sm font-medium border border-amber-500 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20"
                       >
                         Read-Only View

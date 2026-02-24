@@ -7,10 +7,12 @@ import AppHeader from '../components/AppHeader'
 import SignatureOrInitialsInput, { type SignatureOrInitialsInputHandle } from '../components/SignatureOrInitialsInput'
 import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
+import { useReadOnly } from '../contexts/ReadOnlyContext'
 import type { UserProfile } from '../types/auth'
 
 export default function Profile() {
   const router = useRouter()
+  const { isReadOnly } = useReadOnly()
   const signatureInputRef = useRef<SignatureOrInitialsInputHandle>(null)
   const initialsInputRef = useRef<SignatureOrInitialsInputHandle>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
@@ -34,6 +36,14 @@ export default function Profile() {
   })
 
   useEffect(() => {
+    if (isReadOnly) {
+      router.replace('/dashboard')
+      return
+    }
+  }, [isReadOnly, router])
+
+  useEffect(() => {
+    if (isReadOnly) return
     const loadProfile = async () => {
       const profile = await getCurrentUserProfile()
       if (!profile) {
@@ -90,7 +100,7 @@ export default function Profile() {
       setLoading(false)
     }
     loadProfile()
-  }, [router])
+  }, [router, isReadOnly])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
