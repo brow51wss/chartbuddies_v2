@@ -25,7 +25,12 @@ export default function InvitesPage() {
   const [designation, setDesignation] = useState<'PCG' | 'SCG'>('SCG')
   const [creating, setCreating] = useState(false)
   const [lastCode, setLastCode] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [lastInviteId, setLastInviteId] = useState('')
+  const [lastFacilityName, setLastFacilityName] = useState('')
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendMessage, setSendMessage] = useState('')
+  const [sendError, setSendError] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -84,12 +89,18 @@ export default function InvitesPage() {
       }
       const result = Array.isArray(data) ? data[0] : data
       const code = result?.code
+      const inviteId = result?.id
       if (!code) {
         setError('No invite code returned')
         setCreating(false)
         return
       }
       setLastCode(code)
+      setLastInviteId(inviteId ?? '')
+      setLastFacilityName(hospitals.find((h) => h.id === selectedHospitalId)?.name ?? '')
+      setInviteEmail('')
+      setSendMessage('')
+      setSendError('')
       setMessage(`Invite code created. Share it with the new user so they can sign up and join as ${designation}.`)
     } catch (err: unknown) {
       setError((err as Error).message || 'Failed to create invite')
@@ -98,11 +109,47 @@ export default function InvitesPage() {
     }
   }
 
-  const copyCode = () => {
-    if (!lastCode) return
-    navigator.clipboard.writeText(lastCode)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const handleSendInviteEmail = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!inviteEmail.trim() || !lastCode || !lastInviteId || !lastFacilityName) return
+    setSending(true)
+    setSendError('')
+    setSendMessage('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setSendError('You must be signed in to send an invite.')
+        setSending(false)
+        return
+      }
+      const base = typeof window !== 'undefined' ? window.location.origin : ''
+      const res = await fetch(`${base}/api/send-invite-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          inviteId: lastInviteId,
+          code: lastCode,
+          email: inviteEmail.trim(),
+          facilityName: lastFacilityName,
+          designation
+        })
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSendError(json.error || `Failed to send (${res.status})`)
+        setSending(false)
+        return
+      }
+      setSendMessage(json.message || 'Invite sent.')
+      setInviteEmail('')
+    } catch (err) {
+      setSendError((err as Error).message || 'Failed to send invite')
+    } finally {
+      setSending(false)
+    }
   }
 
   if (loading) {
@@ -207,24 +254,55 @@ export default function InvitesPage() {
         </form>
 
         {lastCode && (
-          <div className="mt-8 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Invite Code</p>
-            <div className="flex items-center gap-3">
-              <code className="flex-1 px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg font-mono text-lg tracking-widest">
+          <>
+            <div className="mt-8 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Invite Code</p>
+              <code className="block px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg font-mono text-lg tracking-widest">
                 {lastCode}
               </code>
-              <button
-                type="button"
-                onClick={copyCode}
-                className="px-4 py-2 bg-lasso-teal text-white rounded-lg hover:bg-lasso-blue font-medium"
-              >
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                Share this code with the new user. They enter it on the signup page to join your facility as {designation}.
+              </p>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              Share this code with the new user. They enter it on the signup page to join your facility as {designation}.
-            </p>
-          </div>
+
+            <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Send invite by email</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                Enter the new user&apos;s email. They will receive a link to complete signup with this code and join as {designation}.
+              </p>
+              {sendError && (
+                <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                  <p className="text-sm text-red-800 dark:text-red-200">{sendError}</p>
+                </div>
+              )}
+              {sendMessage && (
+                <div className="mb-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                  <p className="text-sm text-green-800 dark:text-green-200">{sendMessage}</p>
+                </div>
+              )}
+              <form onSubmit={handleSendInviteEmail} className="flex flex-wrap items-end gap-3">
+                <div className="flex-1 min-w-[200px]">
+                  <label htmlFor="invite-email" className="sr-only">Email address</label>
+                  <input
+                    id="invite-email"
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="newuser@example.com"
+                    required
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={sending || !inviteEmail.trim()}
+                  className="px-4 py-2 bg-lasso-teal text-white rounded-lg hover:bg-lasso-blue font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sending ? 'Sending...' : 'Send invite'}
+                </button>
+              </form>
+            </div>
+          </>
         )}
       </main>
     </ProtectedRoute>

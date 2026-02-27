@@ -6,10 +6,10 @@
 
 ## Phase 1: Send invite from the EHR
 
-- [ ] **1.1** Add UI on the invite-success screen: email input + “Send invite” (or “Email invite”) so the code can be sent from the app instead of copy/paste.
-- [ ] **1.2** Backend/API: create or use an endpoint/function that sends the invite email (with code + signup link). Decide: Supabase Edge Function, third-party email (Resend/SendGrid/etc.), or Supabase Auth email.
-- [ ] **1.3** When “Send invite” is used: record the **invited email** and **date invited** (e.g. new column or table: `invited_email`, `invited_at`) and optionally mark that this code was “sent” to that email.
-- [ ] **1.4** On send: **auto-register** the invitee as SCG for the facility (incomplete/unverified account) so they exist in the system and can be listed for the PCG. Ensure “verified” is false until they complete signup via the link.
+- [x] **1.1** Add UI on the invite-success screen: email input + “Send invite” (or “Email invite”) so the code can be sent from the app instead of copy/paste.
+- [x] **1.2** Backend/API: create or use an endpoint/function that sends the invite email (with code + signup link). Decide: Supabase Edge Function, third-party email (Resend/SendGrid/etc.), or Supabase Auth email.
+- [x] **1.3** When “Send invite” is used: record the **invited email** and **date invited** (e.g. new column or table: `invited_email`, `invited_at`) and optionally mark that this code was “sent” to that email.
+- [x] **1.4** On send: **auto-register** the invitee as SCG for the facility (incomplete/unverified account) so they exist in the system and can be listed for the PCG. Ensure “verified” is false until they complete signup via the link.
 
 ---
 
