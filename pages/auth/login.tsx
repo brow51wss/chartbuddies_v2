@@ -12,6 +12,8 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendSent, setResendSent] = useState(false)
 
   useEffect(() => {
     // Redirect if already logged in
@@ -37,6 +39,7 @@ export default function Login() {
 
     if (loginError) {
       setError(loginError.message)
+      setResendSent(false)
       setLoading(false)
       return
     }
@@ -107,6 +110,15 @@ export default function Login() {
       }
       
       if (profile) {
+        // If user has no facility, try to apply a pending invite for their email (e.g. they signed up earlier but invite wasn't applied)
+        const needsFacility = !profile.hospital_id
+        if (needsFacility) {
+          await supabase.rpc('apply_pending_invite_for_current_user').then(({ data: applied }) => {
+            if (applied) {
+              setMessage('Your invite was applied. Welcome to your facility.')
+            }
+          })
+        }
         router.push('/dashboard')
       } else {
         setError('User profile not found. Please contact administrator.')
@@ -144,6 +156,34 @@ export default function Login() {
           {error && (
             <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-md shadow-sm">
               <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
+              {error.toLowerCase().includes('email not confirmed') && (
+                <div className="mt-3">
+                  <p className="text-red-700 dark:text-red-300 text-xs mb-2">
+                    If you already clicked the link, try signing in again in a few seconds. Otherwise request a new confirmation email.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={resendLoading || resendSent}
+                    onClick={async () => {
+                      setResendLoading(true)
+                      const { error: resendError } = await supabase.auth.resend({
+                        type: 'signup',
+                        email: email.trim()
+                      })
+                      setResendLoading(false)
+                      if (resendError) {
+                        setError(resendError.message)
+                        return
+                      }
+                      setResendSent(true)
+                      setMessage('A new confirmation email was sent. Check your inbox and spam, then try signing in again.')
+                    }}
+                    className="text-sm font-medium text-lasso-teal hover:text-lasso-navy dark:text-lasso-teal dark:hover:text-lasso-blue disabled:opacity-50"
+                  >
+                    {resendLoading ? 'Sending...' : resendSent ? 'Email sent' : 'Resend confirmation email'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -170,9 +210,17 @@ export default function Login() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="password" className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Password
+                </label>
+                <Link
+                  href="/auth/forgot-password"
+                  className="text-sm text-lasso-teal hover:text-lasso-navy dark:text-lasso-teal dark:hover:text-lasso-blue font-medium"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 id="password"
                 type="password"

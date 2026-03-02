@@ -1,8 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
+
+type InviteLookup = {
+  code: string
+  email: string
+  facilityName: string
+  designation: string
+  invitedEmailFromInvite: string | null
+}
 
 export default function Signup() {
   const router = useRouter()
@@ -22,6 +30,9 @@ export default function Signup() {
   const [success, setSuccess] = useState(false)
   const [emailSent, setEmailSent] = useState('')
   const [step, setStep] = useState(1) // 1: Account info, 2: Hospital info
+  const [inviteLookup, setInviteLookup] = useState<InviteLookup | null>(null)
+  const [inviteLookupLoading, setInviteLookupLoading] = useState(false)
+  const [inviteLookupError, setInviteLookupError] = useState('')
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
@@ -29,10 +40,67 @@ export default function Signup() {
 
   const fullName = [formData.firstName, formData.middleName, formData.lastName].filter(Boolean).join(' ').trim()
 
+  // Phase 4: Load invite when opening signup via email link (?code=...&email=...)
+  useEffect(() => {
+    if (!router.isReady) return
+    const code = typeof router.query.code === 'string' ? router.query.code.trim() : ''
+    const email = typeof router.query.email === 'string' ? router.query.email.trim() : ''
+    if (!code || !email) return
+
+    // Pre-fill email and code from URL immediately so the form shows the right values even if lookup fails
+    setFormData(prev => ({
+      ...prev,
+      email: decodeURIComponent(email),
+      inviteCode: code.toUpperCase()
+    }))
+
+    setInviteLookupLoading(true)
+    setInviteLookupError('')
+    supabase
+      .rpc('get_facility_invite_for_signup', { p_code: code })
+      .then(({ data, error: rpcError }) => {
+        setInviteLookupLoading(false)
+        if (rpcError) {
+          // Function missing usually means migration 059 not run; other errors = bad code or network
+          const isMissingFunction =
+            rpcError.code === '42883' || rpcError.message?.toLowerCase().includes('does not exist')
+          setInviteLookupError(
+            isMissingFunction
+              ? 'Invite feature is not set up yet. Please ask your admin to run the latest database migration, or sign up without invite below.'
+              : 'Could not load invite. Please use the link from your email.'
+          )
+          return
+        }
+        const row = Array.isArray(data) && data.length > 0 ? data[0] : null
+        if (!row || !row.facility_name) {
+          setInviteLookupError('Invalid or expired invite link. Please request a new invite.')
+          return
+        }
+        setInviteLookup({
+          code,
+          email: decodeURIComponent(email),
+          facilityName: row.facility_name ?? '',
+          designation: row.designation ?? '',
+          invitedEmailFromInvite: row.invited_email ?? null
+        })
+      })
+  }, [router.isReady, router.query.code, router.query.email])
+
+  const inviteMode = !!inviteLookup
+  const inviteEmailMismatch =
+    inviteMode &&
+    inviteLookup.invitedEmailFromInvite != null &&
+    inviteLookup.invitedEmailFromInvite.trim() !== '' &&
+    formData.email.trim().toLowerCase() !== inviteLookup.invitedEmailFromInvite.trim().toLowerCase()
+
   const [checkingEmail, setCheckingEmail] = useState(false)
 
   const handleStep1Submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (inviteEmailMismatch) {
+      setError('This invite was sent to a different email address. Please use the signup link from that email.')
+      return
+    }
     if (!formData.firstName.trim() || !formData.lastName.trim()) {
       setError('First name and last name are required')
       return
@@ -58,7 +126,13 @@ export default function Signup() {
         return
       }
       if (exists) {
-        setError('This email is already registered. Please sign in or use a different email.')
+        if (inviteLookup) {
+          setError(
+            `This email already has an account. Sign in to complete your invite and join ${inviteLookup.facilityName} as ${inviteLookup.designation}.`
+          )
+        } else {
+          setError('This email is already registered. Please sign in or use a different email.')
+        }
         setCheckingEmail(false)
         return
       }
@@ -194,12 +268,13 @@ export default function Signup() {
       if (formData.inviteCode) {
         const code = formData.inviteCode.toUpperCase().trim()
 
-        // Try facility_invites first (designation pre-assigned, locked)
+        // Try facility_invites first (designation pre-assigned, locked). Pass email when from invite link so DB enforces match.
         const { data: inviteJoined, error: inviteError } = await supabase
           .rpc('join_facility_via_invite', {
             p_code: code,
             p_user_id: authData.user.id,
-            p_full_name: fullName
+            p_full_name: fullName,
+            ...(inviteMode && formData.email ? { p_email: formData.email.trim() } : {})
           })
 
         if (inviteError) {
@@ -437,9 +512,30 @@ export default function Signup() {
             </p>
           </div>
 
+          {inviteLookupLoading && (
+            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md">
+              <p className="text-gray-700 dark:text-gray-300 text-sm">Loading invite...</p>
+            </div>
+          )}
+          {inviteLookupError && !inviteLookup && (
+            <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 rounded-md shadow-sm">
+              <p className="text-amber-800 dark:text-amber-200 text-sm">{inviteLookupError}</p>
+              <Link href="/auth/signup" className="mt-2 inline-block text-sm font-medium text-amber-700 dark:text-amber-300 hover:underline">
+                Sign up without invite
+              </Link>
+            </div>
+          )}
           {error && (
             <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-md shadow-sm">
               <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
+              {inviteLookup && error.includes('already has an account') && (
+                <Link
+                  href="/auth/login"
+                  className="mt-3 inline-block px-3 py-1.5 bg-lasso-teal text-white text-sm font-medium rounded-lg hover:opacity-90"
+                >
+                  Sign in to complete your invite
+                </Link>
+              )}
             </div>
           )}
 
@@ -503,7 +599,40 @@ export default function Signup() {
               </p>
             </div>
           ) : step === 1 ? (
+            inviteLookupLoading && router.query.code && router.query.email ? (
+              <div className="text-center py-6 text-gray-600 dark:text-gray-400">
+                <p>Loading your invite...</p>
+              </div>
+            ) : (
             <form onSubmit={handleStep1Submit} className="space-y-6">
+              {inviteLookup && (
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg space-y-3">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">You're joining via invite</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">Email</span>
+                      <p className="font-medium text-gray-900 dark:text-white truncate">{inviteLookup.email}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">Invite code</span>
+                      <p className="font-mono font-medium text-gray-900 dark:text-white">{inviteLookup.code}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">Facility</span>
+                      <p className="font-medium text-gray-900 dark:text-white">{inviteLookup.facilityName}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">Designation</span>
+                      <p className="font-medium text-gray-900 dark:text-white">{inviteLookup.designation}</p>
+                    </div>
+                  </div>
+                  {inviteEmailMismatch && (
+                    <p className="text-amber-700 dark:text-amber-300 text-sm">
+                      This invite was sent to a different email. Use the link from that email to sign up.
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label htmlFor="firstName" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
@@ -562,7 +691,8 @@ export default function Signup() {
                   value={formData.email}
                   onChange={handleChange}
                   required
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal dark:bg-gray-700 dark:text-white transition-all duration-200"
+                  readOnly={inviteMode}
+                  className={`w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal dark:bg-gray-700 dark:text-white transition-all duration-200 ${inviteMode ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed' : ''}`}
                   placeholder="your@email.com"
                 />
               </div>
@@ -603,14 +733,26 @@ export default function Signup() {
 
               <button
                 type="submit"
-                disabled={checkingEmail}
+                disabled={checkingEmail || inviteEmailMismatch}
                 className="w-full px-4 py-3 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:ring-offset-2 font-semibold shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {checkingEmail ? 'Checking...' : 'Continue'}
               </button>
             </form>
+            )
           ) : success ? null : (
             <form onSubmit={handleSignup} className="space-y-6">
+              {inviteMode && inviteLookup ? (
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    You're joining <strong>{inviteLookup.facilityName}</strong> as <strong>{inviteLookup.designation}</strong>.
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Click Sign Up below to create your account.
+                  </p>
+                </div>
+              ) : (
+                <>
               <div className="mb-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                   Do you have an invite code to join an existing facility?
@@ -667,6 +809,8 @@ export default function Signup() {
                       <option value="SCG">SCG</option>
                     </select>
                   </div>
+                </>
+              )}
                 </>
               )}
 

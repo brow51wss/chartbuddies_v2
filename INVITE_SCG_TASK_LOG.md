@@ -15,8 +15,8 @@
 
 ## Phase 2: PCG view – facility users
 
-- [ ] **2.1** Add a route/page (e.g. “Facility users” or “Team” under a relevant nav) that only PCG (and allowed roles) can access.
-- [ ] **2.2** Load and display users for the PCG’s facility with columns:
+- [x] **2.1** Add a route/page (e.g. “Facility users” or “Team” under a relevant nav) that only PCG (and allowed roles) can access.
+- [x] **2.2** Load and display users for the PCG’s facility with columns:
   - First name  
   - Middle name  
   - Last name  
@@ -24,23 +24,23 @@
   - Date invited  
   - Invite code (used for that user)  
   - Date account verified (when they completed signup via invite link)
-- [ ] **2.3** Backend: ensure data model supports “date invited” and “date verified” (and invite code per user) and that RLS allows PCG to read only their facility’s users.
+- [x] **2.3** Backend: ensure data model supports “date invited” and “date verified” (and invite code per user) and that RLS allows PCG to read only their facility’s users.
 
 ---
 
 ## Phase 3: Invite email and signup link
 
-- [ ] **3.1** Invite email content: include the **signup link** that encodes (or references) the invite code so the SCG can open it and land on the special signup page.
-- [ ] **3.2** Signup link format: define URL (e.g. `/auth/signup?code=XXX` or `/auth/join?code=XXX`) and ensure the code is validated server-side when the page loads.
+- [x] **3.1** Invite email content: include the **signup link** that encodes (or references) the invite code so the SCG can open it and land on the special signup page.
+- [x] **3.2** Signup link format: URL uses `code` and `email` (e.g. `/auth/signup?code=XXX&email=...`); send-invite API builds this link. Code validation on signup page is next (Phase 4).
 
 ---
 
 ## Phase 4: Signup page for invite (locked fields + validation)
 
-- [ ] **4.1** Signup page when opened via invite link: pre-fill and **lock** (read-only, not editable): email, invite code, facility name, designation.
-- [ ] **4.2** Validation: if the **email** (from form/pre-fill) **does not match** the email tied to the invite code → user cannot proceed (disable or block “Continue” and show clear message).
-- [ ] **4.3** If email matches: allow user to proceed to the rest of signup (e.g. password, name, etc.) and complete account setup.
-- [ ] **4.4** On successful completion: mark account as **verified** and set **date verified** so PCG view can show it.
+- [x] **4.1** Signup page when opened via invite link: pre-fill and **lock** (read-only, not editable): email, invite code, facility name, designation.
+- [x] **4.2** Validation: if the **email** (from form/pre-fill) **does not match** the email tied to the invite code → user cannot proceed (disable or block “Continue” and show clear message).
+- [x] **4.3** If email matches: allow user to proceed to the rest of signup (e.g. password, name, etc.) and complete account setup.
+- [x] **4.4** On successful completion: mark account as **verified** and set **date verified** so PCG view can show it.
 
 ---
 

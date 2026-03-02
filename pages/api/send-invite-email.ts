@@ -61,11 +61,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: 'Failed to record invite' })
   }
 
-  let baseUrl = process.env.NEXT_PUBLIC_APP_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-    || (req.headers.host ? `https://${req.headers.host}` : '')
-  if (baseUrl && (req.headers.host || '').includes('localhost')) {
-    baseUrl = baseUrl.replace(/^https:\/\//, 'http://')
+  const isLocal = (req.headers.host || '').includes('localhost')
+  let baseUrl: string
+  if (isLocal) {
+    baseUrl = `http://${req.headers.host || 'localhost:3000'}`
+  } else {
+    baseUrl = process.env.NEXT_PUBLIC_APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+      || (req.headers.host ? `https://${req.headers.host}` : '')
   }
   const signupUrl = `${baseUrl}/auth/signup?code=${encodeURIComponent(code)}&email=${encodeURIComponent(email.trim())}`
 
@@ -92,9 +95,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   })
 
   if (sendError) {
-    const message = sendError.message || 'Failed to send email'
+    const rawMessage = sendError.message || 'Failed to send email'
     console.error('[send-invite-email] Resend error:', sendError)
-    return res.status(500).json({ error: message })
+    // Resend without verified domain only allows sending to the account email; surface a clear message
+    const isTestingRestriction =
+      /only send (testing )?emails to|your own email address|verify a domain/i.test(rawMessage)
+    const allowedMatch = rawMessage.match(/your own email address\s*\(([^)]+)\)/i) ||
+      rawMessage.match(/to\s+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i)
+    const allowedEmail = allowedMatch ? allowedMatch[1].trim() : null
+    if (isTestingRestriction) {
+      return res.status(403).json({
+        error: allowedEmail
+          ? `With the current email setup, invites can only be sent to ${allowedEmail} for testing. To send to any address, verify a domain at resend.com/domains and set RESEND_FROM_EMAIL to use that domain.`
+          : 'With the current email setup, you can only send to your Resend account email. Verify a domain at resend.com/domains to send to any address.',
+        code: 'RESEND_TESTING_RESTRICTION',
+        allowedEmail: allowedEmail || undefined
+      })
+    }
+    return res.status(500).json({ error: rawMessage })
   }
 
   return res.status(200).json({ success: true, message: 'Invite sent.', id: sendData?.id })

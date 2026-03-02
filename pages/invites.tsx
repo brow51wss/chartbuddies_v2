@@ -31,6 +31,7 @@ export default function InvitesPage() {
   const [sending, setSending] = useState(false)
   const [sendMessage, setSendMessage] = useState('')
   const [sendError, setSendError] = useState('')
+  const [resendAllowedEmail, setResendAllowedEmail] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -140,9 +141,11 @@ export default function InvitesPage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         setSendError(json.error || `Failed to send (${res.status})`)
+        setResendAllowedEmail(json.code === 'RESEND_TESTING_RESTRICTION' ? json.allowedEmail ?? null : null)
         setSending(false)
         return
       }
+      setResendAllowedEmail(null)
       setSendMessage(json.message || 'Invite sent.')
       setInviteEmail('')
     } catch (err) {
@@ -273,6 +276,18 @@ export default function InvitesPage() {
               {sendError && (
                 <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
                   <p className="text-sm text-red-800 dark:text-red-200">{sendError}</p>
+                  {resendAllowedEmail && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInviteEmail(resendAllowedEmail)
+                        setSendError('')
+                      }}
+                      className="mt-2 text-sm font-medium text-lasso-teal hover:text-lasso-navy dark:text-lasso-teal dark:hover:text-lasso-blue"
+                    >
+                      Use {resendAllowedEmail} for testing
+                    </button>
+                  )}
                 </div>
               )}
               {sendMessage && (
