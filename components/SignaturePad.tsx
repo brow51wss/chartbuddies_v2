@@ -89,7 +89,7 @@ export default function SignaturePad({
     if (canvas && pos && !hasMoved.current) {
       const ctx = canvas.getContext('2d')
       if (ctx) {
-        ctx.fillStyle = '#000000'
+        ctx.fillStyle = '#212427'
         ctx.beginPath()
         ctx.arc(pos.x, pos.y, 2, 0, 2 * Math.PI)
         ctx.fill()
@@ -110,7 +110,9 @@ export default function SignaturePad({
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (ctx) {
-      ctx.clearRect(0, 0, width, height)
+      ctx.fillStyle = '#FAFAFA'
+      ctx.fillRect(0, 0, width, height)
+      ctx.strokeStyle = '#212427'
       onChange('')
     }
   }, [onChange, width, height])
@@ -127,7 +129,9 @@ export default function SignaturePad({
     const ctx = canvas.getContext('2d')
     if (ctx) {
       ctx.scale(dpr, dpr)
-      ctx.strokeStyle = '#000000'
+      ctx.fillStyle = '#FAFAFA'
+      ctx.fillRect(0, 0, width, height)
+      ctx.strokeStyle = '#212427'
       ctx.lineWidth = 2
       ctx.lineCap = 'round'
       ctx.lineJoin = 'round'
@@ -146,6 +150,9 @@ export default function SignaturePad({
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.scale(dpr, dpr)
+      ctx.fillStyle = '#FAFAFA'
+      ctx.fillRect(0, 0, width, height)
+      ctx.strokeStyle = '#212427'
       ctx.drawImage(img, 0, 0, width, height)
     }
     img.src = value
@@ -164,8 +171,8 @@ export default function SignaturePad({
         onTouchStart={startDrawing}
         onTouchMove={moveDrawing}
         onTouchEnd={endDrawing}
-        className="border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 touch-none cursor-crosshair disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{ width: `${width}px`, height: `${height}px` }}
+        className="border border-gray-300 dark:border-gray-500 rounded-lg bg-white dark:bg-gray-800 touch-none cursor-crosshair disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ width: `${width}px`, height: `${height}px`, backgroundColor: '#FAFAFA' }}
       />
       <div className="flex items-center gap-2 mt-2">
         <button
