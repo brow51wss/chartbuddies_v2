@@ -29,6 +29,8 @@ export default function SignaturePad({
   const isDrawing = useRef(false)
   const lastPos = useRef<{ x: number; y: number } | null>(null)
   const prevPos = useRef<{ x: number; y: number } | null>(null)
+  const pointsQueue = useRef<{ x: number; y: number }[]>([])
+  const rafId = useRef<number | null>(null)
   const hasMoved = useRef(false)
 
   // Logical (CSS) coords for canvas. Use rect so we can support getCoalescedEvents().
@@ -76,7 +78,7 @@ export default function SignaturePad({
     }
     const prev = lastPos.current
     const dist = Math.hypot(point.x - prev.x, point.y - prev.y)
-    const maxStep = 4
+    const maxStep = 2
     if (dist > maxStep) {
       const steps = Math.ceil(dist / maxStep)
       for (let i = 1; i <= steps; i++) {
@@ -104,13 +106,36 @@ export default function SignaturePad({
       hasMoved.current = false
       prevPos.current = null
       lastPos.current = point
+      pointsQueue.current = []
+      const loop = () => {
+        if (!isDrawing.current) {
+          rafId.current = null
+          return
+        }
+        const queue = pointsQueue.current
+        if (queue.length > 0) {
+          pointsQueue.current = []
+          for (const pt of queue) draw(pt)
+        }
+        rafId.current = requestAnimationFrame(loop)
+      }
+      rafId.current = requestAnimationFrame(loop)
     }
-  }, [disabled, getPointFromClient])
+  }, [disabled, getPointFromClient, draw])
 
   const endDrawing = useCallback(() => {
     if (!isDrawing.current) return
+    if (rafId.current != null) {
+      cancelAnimationFrame(rafId.current)
+      rafId.current = null
+    }
     const canvas = canvasRef.current
     const pos = lastPos.current
+    const queue = pointsQueue.current
+    if (queue.length > 0 && canvas) {
+      for (const pt of queue) draw(pt)
+      pointsQueue.current = []
+    }
     isDrawing.current = false
     lastPos.current = null
     prevPos.current = null
@@ -134,7 +159,7 @@ export default function SignaturePad({
         // ignore
       }
     }
-  }, [onChange, width])
+  }, [onChange, width, draw])
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!isDrawing.current || disabled) return
@@ -143,16 +168,18 @@ export default function SignaturePad({
     const coalesced = typeof (e.nativeEvent as PointerEvent).getCoalescedEvents === 'function'
       ? (e.nativeEvent as PointerEvent).getCoalescedEvents()
       : []
+    const toQueue: { x: number; y: number }[] = []
     if (coalesced.length > 0) {
       for (const ev of coalesced) {
         const point = getPointFromClient(ev.clientX, ev.clientY)
-        if (point) draw(point)
+        if (point) toQueue.push(point)
       }
     } else {
       const point = getPointFromClient(e.clientX, e.clientY)
-      if (point) draw(point)
+      if (point) toQueue.push(point)
     }
-  }, [disabled, getPointFromClient, draw])
+    if (toQueue.length > 0) pointsQueue.current = pointsQueue.current.concat(toQueue)
+  }, [disabled, getPointFromClient])
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
     try {
