@@ -31,18 +31,12 @@ export default function SignaturePad({
   const prevPos = useRef<{ x: number; y: number } | null>(null)
   const hasMoved = useRef(false)
 
-  // Use logical (CSS) coordinates so they match the scaled context (ctx.scale(dpr, dpr)).
-  const getPoint = useCallback((e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent) => {
+  // Logical (CSS) coords for canvas. Use rect so we can support getCoalescedEvents().
+  const getPointFromClient = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current
     if (!canvas) return null
     const rect = canvas.getBoundingClientRect()
-    if ('touches' in e) {
-      const t = e.touches[0] || (e as React.TouchEvent).changedTouches?.[0]
-      if (!t) return null
-      return { x: t.clientX - rect.left, y: t.clientY - rect.top }
-    }
-    const m = e as MouseEvent
-    return { x: m.clientX - rect.left, y: m.clientY - rect.top }
+    return { x: clientX - rect.left, y: clientY - rect.top }
   }, [])
 
   const drawSegment = useCallback((point: { x: number; y: number }) => {
@@ -97,25 +91,21 @@ export default function SignaturePad({
     drawSegment(point)
   }, [drawSegment])
 
-  const startDrawing = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+  // Pointer events + getCoalescedEvents(): use all intermediate positions the browser coalesced,
+  // so fast strokes get many points per frame and stay smooth (no lag).
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (disabled) return
     e.preventDefault()
-    const point = getPoint(e)
-    if (point) {
+    const canvas = canvasRef.current
+    const point = getPointFromClient(e.clientX, e.clientY)
+    if (point && canvas) {
+      (e.target as Element).setPointerCapture(e.pointerId)
       isDrawing.current = true
       hasMoved.current = false
       prevPos.current = null
       lastPos.current = point
     }
-  }, [disabled, getPoint])
-
-  const moveDrawing = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing.current || disabled) return
-    e.preventDefault()
-    hasMoved.current = true
-    const point = getPoint(e)
-    if (point) draw(point)
-  }, [disabled, getPoint, draw])
+  }, [disabled, getPointFromClient])
 
   const endDrawing = useCallback(() => {
     if (!isDrawing.current) return
@@ -145,6 +135,37 @@ export default function SignaturePad({
       }
     }
   }, [onChange, width])
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isDrawing.current || disabled) return
+    e.preventDefault()
+    hasMoved.current = true
+    const coalesced = typeof (e.nativeEvent as PointerEvent).getCoalescedEvents === 'function'
+      ? (e.nativeEvent as PointerEvent).getCoalescedEvents()
+      : []
+    if (coalesced.length > 0) {
+      for (const ev of coalesced) {
+        const point = getPointFromClient(ev.clientX, ev.clientY)
+        if (point) draw(point)
+      }
+    } else {
+      const point = getPointFromClient(e.clientX, e.clientY)
+      if (point) draw(point)
+    }
+  }, [disabled, getPointFromClient, draw])
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    try {
+      (e.target as Element).releasePointerCapture(e.pointerId)
+    } catch {
+      // ignore
+    }
+    endDrawing()
+  }, [endDrawing])
+
+  const onPointerCancel = useCallback(() => {
+    endDrawing()
+  }, [endDrawing])
 
   const clear = useCallback(() => {
     const canvas = canvasRef.current
@@ -207,13 +228,11 @@ export default function SignaturePad({
         ref={canvasRef}
         width={width}
         height={height}
-        onMouseDown={startDrawing}
-        onMouseMove={moveDrawing}
-        onMouseUp={endDrawing}
-        onMouseLeave={endDrawing}
-        onTouchStart={startDrawing}
-        onTouchMove={moveDrawing}
-        onTouchEnd={endDrawing}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        onPointerLeave={onPointerUp}
         className="border border-gray-300 dark:border-gray-500 rounded-lg bg-white dark:bg-gray-800 touch-none cursor-crosshair disabled:opacity-50 disabled:cursor-not-allowed"
         style={{ width: `${width}px`, height: `${height}px`, backgroundColor: '#FAFAFA' }}
       />
