@@ -89,9 +89,11 @@ export default function SignaturePad({
     if (canvas && pos && !hasMoved.current) {
       const ctx = canvas.getContext('2d')
       if (ctx) {
+        const refWidth = 320
+        const dotRadius = Math.max(1.5, 2 * (width / refWidth))
         ctx.fillStyle = '#212427'
         ctx.beginPath()
-        ctx.arc(pos.x, pos.y, 2, 0, 2 * Math.PI)
+        ctx.arc(pos.x, pos.y, dotRadius, 0, 2 * Math.PI)
         ctx.fill()
       }
     }
@@ -103,7 +105,7 @@ export default function SignaturePad({
         // ignore
       }
     }
-  }, [onChange])
+  }, [onChange, width])
 
   const clear = useCallback(() => {
     const canvas = canvasRef.current
@@ -132,7 +134,9 @@ export default function SignaturePad({
       ctx.fillStyle = '#FAFAFA'
       ctx.fillRect(0, 0, width, height)
       ctx.strokeStyle = '#212427'
-      ctx.lineWidth = 2
+      // Scale line width with canvas so stroke looks same thickness in portrait vs landscape
+      const refWidth = 320
+      ctx.lineWidth = Math.max(1.5, 2 * (width / refWidth))
       ctx.lineCap = 'round'
       ctx.lineJoin = 'round'
     }
