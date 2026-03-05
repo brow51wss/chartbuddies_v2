@@ -78,7 +78,7 @@ export default function SignaturePad({
     }
     const prev = lastPos.current
     const dist = Math.hypot(point.x - prev.x, point.y - prev.y)
-    const maxStep = 2
+    const maxStep = 1
     if (dist > maxStep) {
       const steps = Math.ceil(dist / maxStep)
       for (let i = 1; i <= steps; i++) {
