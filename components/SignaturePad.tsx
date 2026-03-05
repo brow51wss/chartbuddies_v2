@@ -50,9 +50,13 @@ export default function SignaturePad({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     if (lastPos.current) {
+      const prev = lastPos.current
       ctx.beginPath()
-      ctx.moveTo(lastPos.current.x, lastPos.current.y)
-      ctx.lineTo(point.x, point.y)
+      ctx.moveTo(prev.x, prev.y)
+      // Smooth curve between segments: use midpoint as control so strokes look fluid, not jagged
+      const cpx = (prev.x + point.x) / 2
+      const cpy = (prev.y + point.y) / 2
+      ctx.quadraticCurveTo(cpx, cpy, point.x, point.y)
       ctx.stroke()
     }
     lastPos.current = point
