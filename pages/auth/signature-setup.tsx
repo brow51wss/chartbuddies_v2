@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import SignaturePad from '../../components/SignaturePad'
@@ -9,9 +9,31 @@ type Step = 'signature' | 'initials'
 
 const API = '/api/signature-setup'
 
+function usePadSize90vw() {
+  const getSize = useCallback(() => {
+    if (typeof window === 'undefined') return { sigW: 320, sigH: 140, iniW: 200, iniH: 80 }
+    const w = Math.min(window.innerWidth * 0.9, 400)
+    return {
+      sigW: Math.round(w),
+      sigH: Math.round((140 / 320) * w),
+      iniW: Math.round(w),
+      iniH: Math.round((80 / 200) * w)
+    }
+  }, [])
+  const [size, setSize] = useState(getSize)
+  useEffect(() => {
+    setSize(getSize())
+    const onResize = () => setSize(getSize())
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [getSize])
+  return size
+}
+
 export default function SignatureSetupPage() {
   const router = useRouter()
   const { token } = router.query
+  const padSize = usePadSize90vw()
   const [status, setStatus] = useState<'loading' | 'invalid' | 'ready' | 'submitting' | 'done'>('loading')
   const [step, setStep] = useState<Step>('signature')
   const [signatureDataUrl, setSignatureDataUrl] = useState('')
@@ -142,12 +164,12 @@ export default function SignatureSetupPage() {
             <>
               <h1 className="text-lg font-semibold text-gray-800 dark:text-white mb-1">Step 1: Draw your signature</h1>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Sign in the box below with your finger or stylus.</p>
-              <div className="flex justify-center mb-6">
+              <div className="flex justify-center mb-6 w-[90vw] max-w-[400px] mx-auto">
                 <SignaturePad
                   value={signatureDataUrl}
                   onChange={setSignatureDataUrl}
-                  width={320}
-                  height={140}
+                  width={padSize.sigW}
+                  height={padSize.sigH}
                   placeholder="Draw your full signature"
                 />
               </div>
@@ -166,12 +188,12 @@ export default function SignatureSetupPage() {
             <>
               <h1 className="text-lg font-semibold text-gray-800 dark:text-white mb-1">Step 2: Draw your initials</h1>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Draw your initials in the box below.</p>
-              <div className="flex justify-center mb-6">
+              <div className="flex justify-center mb-6 w-[90vw] max-w-[400px] mx-auto">
                 <SignaturePad
                   value={initialsDataUrl}
                   onChange={setInitialsDataUrl}
-                  width={200}
-                  height={80}
+                  width={padSize.iniW}
+                  height={padSize.iniH}
                   placeholder="Draw initials"
                 />
               </div>

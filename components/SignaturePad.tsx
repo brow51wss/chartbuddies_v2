@@ -29,19 +29,18 @@ export default function SignaturePad({
   const isDrawing = useRef(false)
   const lastPos = useRef<{ x: number; y: number } | null>(null)
 
+  // Use logical (CSS) coordinates so they match the scaled context (ctx.scale(dpr, dpr)).
   const getPoint = useCallback((e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent) => {
     const canvas = canvasRef.current
     if (!canvas) return null
     const rect = canvas.getBoundingClientRect()
-    const scaleX = canvas.width / rect.width
-    const scaleY = canvas.height / rect.height
     if ('touches' in e) {
       const t = e.touches[0] || (e as React.TouchEvent).changedTouches?.[0]
       if (!t) return null
-      return { x: (t.clientX - rect.left) * scaleX, y: (t.clientY - rect.top) * scaleY }
+      return { x: t.clientX - rect.left, y: t.clientY - rect.top }
     }
     const m = e as MouseEvent
-    return { x: (m.clientX - rect.left) * scaleX, y: (m.clientY - rect.top) * scaleY }
+    return { x: m.clientX - rect.left, y: m.clientY - rect.top }
   }, [])
 
   const draw = useCallback((point: { x: number; y: number }) => {
@@ -97,10 +96,10 @@ export default function SignaturePad({
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.clearRect(0, 0, width, height)
       onChange('')
     }
-  }, [onChange])
+  }, [onChange, width, height])
 
   // Initialize canvas size and stroke style (once)
   useEffect(() => {
@@ -121,7 +120,7 @@ export default function SignaturePad({
     }
   }, [width, height])
 
-  // Load existing image into canvas when value is a data URL
+  // Load existing image into canvas when value is a data URL (use logical size; context is scaled by dpr)
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !value || !value.startsWith('data:image')) return
@@ -129,7 +128,10 @@ export default function SignaturePad({
     if (!ctx) return
     const img = new Image()
     img.onload = () => {
-      ctx.clearRect(0, 0, width, height)
+      const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.scale(dpr, dpr)
       ctx.drawImage(img, 0, 0, width, height)
     }
     img.src = value
