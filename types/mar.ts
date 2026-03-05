@@ -62,6 +62,7 @@ export interface MARPRNRecord {
   reason: string
   result: string | null
   staff_signature: string | null
+  signed_by: string | null
   entry_number: number | null
   note: string | null
   created_at: string

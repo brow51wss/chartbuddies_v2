@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../components/ProtectedRoute'
 import AppHeader from '../components/AppHeader'
-import SignatureOrInitialsInput, { type SignatureOrInitialsInputHandle } from '../components/SignatureOrInitialsInput'
 import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
 import { useReadOnly } from '../contexts/ReadOnlyContext'
@@ -13,25 +12,19 @@ import type { UserProfile } from '../types/auth'
 export default function Profile() {
   const router = useRouter()
   const { isReadOnly } = useReadOnly()
-  const signatureInputRef = useRef<SignatureOrInitialsInputHandle>(null)
-  const initialsInputRef = useRef<SignatureOrInitialsInputHandle>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [facilityName, setFacilityName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  
-  const [signatureFont, setSignatureFont] = useState<string>('Dancing Script')
-  const [signatureInputMode, setSignatureInputMode] = useState<'type' | 'draw'>('type')
+  const [signatureLinkSending, setSignatureLinkSending] = useState(false)
+  const [signatureLinkMessage, setSignatureLinkMessage] = useState('')
+  const [signatureLinkError, setSignatureLinkError] = useState('')
   const [formData, setFormData] = useState({
     first_name: '',
     middle_name: '',
     last_name: '',
-    staff_initials: '',
-    staff_initials_text: '',
-    staff_signature: '',
-    staff_signature_text: '',
     designation: ''
   })
 
@@ -51,19 +44,10 @@ export default function Profile() {
         return
       }
       setUserProfile(profile)
-      const initialsVal = profile.staff_initials ?? ''
-      const initialsTextVal = profile.staff_initials_text ?? ''
-      const signatureVal = profile.staff_signature ?? ''
-      const signatureTextVal = profile.staff_signature_text ?? ''
-      const signatureFontVal = profile.staff_signature_font ?? 'Dancing Script'
-      setSignatureFont(signatureFontVal)
-      
       // Parse full_name into separate fields if they don't exist
       let firstName = (profile as any).first_name || ''
       let middleName = (profile as any).middle_name || ''
       let lastName = (profile as any).last_name || ''
-      
-      // If separate fields don't exist, parse from full_name
       if (!firstName && !lastName && profile.full_name) {
         const names = profile.full_name.trim().split(/\s+/)
         if (names.length >= 2) {
@@ -76,15 +60,10 @@ export default function Profile() {
           firstName = names[0]
         }
       }
-      
       setFormData({
         first_name: firstName,
         middle_name: middleName,
         last_name: lastName,
-        staff_initials: initialsVal,
-        staff_initials_text: initialsTextVal,
-        staff_signature: signatureVal,
-        staff_signature_text: signatureTextVal,
         designation: profile.designation || ''
       })
       if (profile.hospital_id) {
@@ -105,31 +84,15 @@ export default function Profile() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!userProfile) return
-    const hasInitials = formData.staff_initials.trim().length > 0 || formData.staff_initials.startsWith('data:image')
-    if (!hasInitials) {
-      setError('Please draw your staff initials in the box above.')
-      setTimeout(() => setError(''), 5000)
-      return
-    }
-
     setSaving(true)
     setError('')
     setMessage('')
-
     try {
-      const signatureText = signatureInputRef.current?.getText()?.trim() ?? formData.staff_signature_text.trim()
-      const initialsText = initialsInputRef.current?.getText()?.trim() ?? formData.staff_initials_text.trim()
       const updatePayload: Record<string, unknown> = {
         first_name: formData.first_name.trim(),
         middle_name: formData.middle_name.trim() || null,
-        last_name: formData.last_name.trim(),
-        staff_initials: formData.staff_initials.startsWith('data:image') ? formData.staff_initials : (formData.staff_initials.trim().toUpperCase() || null),
-        staff_initials_text: initialsText || null,
-        staff_signature: formData.staff_signature.trim() || null,
-        staff_signature_font: signatureFont || null,
-        staff_signature_text: signatureText || null
+        last_name: formData.last_name.trim()
       }
-      // Only update designation if not locked (set via invite code)
       if (!userProfile.designation_locked) {
         updatePayload.designation = formData.designation.trim() || null
       }
@@ -137,27 +100,18 @@ export default function Profile() {
         .from('user_profiles')
         .update(updatePayload)
         .eq('id', userProfile.id)
-
       if (updateError) throw updateError
-
-      // Reload profile and refresh form so signature/initials show correctly
       const updatedProfile = await getCurrentUserProfile()
       if (updatedProfile) {
         setUserProfile(updatedProfile)
-        if (updatedProfile.staff_signature_font) setSignatureFont(updatedProfile.staff_signature_font)
         setFormData((prev) => ({
           ...prev,
-          staff_initials: updatedProfile.staff_initials ?? prev.staff_initials,
-          staff_initials_text: updatedProfile.staff_initials_text ?? prev.staff_initials_text,
-          staff_signature: updatedProfile.staff_signature ?? prev.staff_signature,
-          staff_signature_text: updatedProfile.staff_signature_text ?? prev.staff_signature_text,
           first_name: updatedProfile.first_name ?? prev.first_name,
-          middle_name: updatedProfile.middle_name ?? prev.middle_name,
-          last_name: updatedProfile.last_name ?? prev.last_name,
+          middle_name: (updatedProfile as any).middle_name ?? prev.middle_name,
+          last_name: (updatedProfile as any).last_name ?? prev.last_name,
           designation: updatedProfile.designation ?? prev.designation
         }))
       }
-
       setMessage('Profile updated successfully!')
       setTimeout(() => setMessage(''), 3000)
     } catch (err: any) {
@@ -166,6 +120,34 @@ export default function Profile() {
       setTimeout(() => setError(''), 5000)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSendSignatureSetupLink = async () => {
+    setSignatureLinkError('')
+    setSignatureLinkMessage('')
+    setSignatureLinkSending(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setSignatureLinkError('Please sign in again.')
+        return
+      }
+      const res = await fetch('/api/send-signature-setup-email', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSignatureLinkError(data.error || 'Failed to send email')
+        return
+      }
+      setSignatureLinkMessage(data.message || 'Email sent. Use the link on your phone or tablet to draw your signature and initials.')
+      setTimeout(() => setSignatureLinkMessage(''), 8000)
+    } catch {
+      setSignatureLinkError('Network error')
+    } finally {
+      setSignatureLinkSending(false)
     }
   }
 
@@ -261,53 +243,58 @@ export default function Profile() {
                 </div>
               </div>
 
-              {/* Staff Signature - type (with font) or draw, like DocuSign */}
+              {/* Signature and initials: set via email link on mobile/tablet only */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Staff Signature
+                  Signature and initials
                 </label>
-                <SignatureOrInitialsInput
-                  ref={signatureInputRef}
-                  value={formData.staff_signature}
-                  savedText={formData.staff_signature_text}
-                  onChange={(dataUrl) => setFormData({ ...formData, staff_signature: dataUrl })}
-                  variant="signature"
-                  width={320}
-                  height={120}
-                  onFontChange={setSignatureFont}
-                  onModeChange={setSignatureInputMode}
-                />
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  You must set your signature and initials using a mobile device or tablet. Click below to receive an email with a secure link.
+                </p>
+                {(userProfile?.staff_signature || userProfile?.staff_initials) && (
+                  <div className="flex flex-wrap gap-4 mb-3">
+                    {userProfile.staff_signature && (userProfile.staff_signature.startsWith('data:image') ? (
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current signature</span>
+                        <img src={userProfile.staff_signature} alt="Your signature" className="max-h-14 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700" />
+                      </div>
+                    ) : (
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current signature</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{userProfile.staff_signature}</span>
+                      </div>
+                    ))}
+                    {userProfile.staff_initials && (userProfile.staff_initials.startsWith('data:image') ? (
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current initials</span>
+                        <img src={userProfile.staff_initials} alt="Your initials" className="max-h-10 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700" />
+                      </div>
+                    ) : (
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current initials</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{userProfile.staff_initials}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSendSignatureSetupLink}
+                  disabled={signatureLinkSending}
+                  className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {signatureLinkSending ? 'Sending...' : 'Create/Edit signature and initials'}
+                </button>
+                {signatureLinkMessage && (
+                  <p className="mt-2 text-sm text-green-600 dark:text-green-400">{signatureLinkMessage}</p>
+                )}
+                {signatureLinkError && (
+                  <p className="mt-2 text-sm text-red-600 dark:text-red-400">{signatureLinkError}</p>
+                )}
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  Optional: Type your signature and pick a font, or draw it. Used on the MAR for PRN records.
+                  Used on the MAR for PRN records and whenever you initial. The link in the email is one-time use and time-limited.
                 </p>
               </div>
-
-              {/* Staff Initials - hidden until Staff Signature is filled; same font as signature, no font picker */}
-              {(() => {
-                const hasSignature = (formData.staff_signature || '').trim().length > 0 || (formData.staff_signature || '').startsWith('data:image')
-                if (!hasSignature) return null
-                return (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Staff Initials *
-                    </label>
-                    <SignatureOrInitialsInput
-                      ref={initialsInputRef}
-                      value={formData.staff_initials}
-                      savedText={formData.staff_initials_text}
-                      onChange={(dataUrl) => setFormData({ ...formData, staff_initials: dataUrl })}
-                      variant="initials"
-                      width={180}
-                      height={60}
-                      fixedFont={signatureFont || 'Dancing Script'}
-                      modeLock={signatureInputMode}
-                    />
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                      Type your initials or draw them. Uses the same style as your signature. Used on the MAR whenever you initial.
-                    </p>
-                  </div>
-                )
-              })()}
 
               {/* Designation */}
               <div>

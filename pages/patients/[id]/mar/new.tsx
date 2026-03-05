@@ -256,6 +256,7 @@ export default function NewMARForm() {
             reason: prn.reason,
             result: prn.result || null,
             staff_signature: prn.staffSignature,
+            signed_by: prn.staffSignature ? userProfile.id : null,
             entry_number: i + 1
           })
       }

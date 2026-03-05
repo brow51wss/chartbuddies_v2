@@ -65,6 +65,20 @@ function InitialsOrSignatureDisplay({
   }
   return <span>{value}</span>
 }
+
+/** Current user's initials for matching PRN rows (when signed_by is null). Prefer profile text, else derive from name. */
+function currentUserInitialsForMatch(userProfile: UserProfile | null): string {
+  if (!userProfile) return ''
+  if (userProfile.staff_initials && !userProfile.staff_initials.startsWith('data:image')) return userProfile.staff_initials.trim().toUpperCase()
+  const first = (userProfile as any).first_name?.trim()?.[0] || ''
+  const last = (userProfile as any).last_name?.trim()?.[0] || ''
+  if (first && last) return `${first}${last}`.toUpperCase()
+  const full = userProfile.full_name?.trim().split(/\s+/) || []
+  if (full.length >= 2) return (full[0][0] + full[full.length - 1][0]).toUpperCase()
+  if (full.length === 1 && full[0].length >= 2) return full[0].slice(0, 2).toUpperCase()
+  return ''
+}
+
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../../../../lib/auth'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
@@ -728,6 +742,7 @@ export default function ViewMARForm() {
           reason: record.reason,
           result: record.result,
           staff_signature: record.staffSignature,
+          signed_by: record.staffSignature ? userProfile.id : null,
           entry_number: nextEntryNumber
         })
 
@@ -759,6 +774,11 @@ export default function ViewMARForm() {
       setSaving(true)
       
       const updateData: any = { [field]: value }
+      
+      // When setting/clearing staff_signature, set signed_by so we can show current profile signature for that user
+      if (field === 'staff_signature') {
+        updateData.signed_by = value ? (userProfile?.id ?? null) : null
+      }
       
       // DB column is VARCHAR(10); never send data URL or >10 chars
       if (field === 'initials' && typeof value === 'string') {
@@ -3578,18 +3598,21 @@ export default function ViewMARForm() {
                                   className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
                                 />
                               </div>
-                            ) : prn.staff_signature ? (
+                            ) : (() => {
+                              const isMine = prn.signed_by === userProfile?.id || (prn.signed_by == null && prn.initials?.trim().toUpperCase() === currentUserInitialsForMatch(userProfile))
+                              const effectiveSig = isMine && userProfile?.staff_signature ? userProfile.staff_signature : (prn.staff_signature ?? '')
+                              return effectiveSig ? (
                               <div className="flex flex-col gap-0.5">
-                                <InitialsOrSignatureDisplay value={prn.staff_signature} variant="signature" userProfile={userProfile} />
+                                <InitialsOrSignatureDisplay value={effectiveSig} variant="signature" userProfile={userProfile} />
                                 {!readOnly && (
                                   <button
                                     type="button"
                                     onClick={async (ev) => {
                                       ev.stopPropagation()
                                       const prevSig = prn.staff_signature
-                                      setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: '' } : r))
+                                      setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: '', signed_by: null } : r))
                                       const ok = await updatePRNRecord(prn.id, 'staff_signature', null)
-                                      if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: prevSig } : r))
+                                      if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: prevSig, signed_by: prn.signed_by } : r))
                                     }}
                                     className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 underline w-fit"
                                   >
@@ -3604,10 +3627,10 @@ export default function ViewMARForm() {
                                   ev.stopPropagation()
                                   const sig = userProfile!.staff_signature
                                   const inits = prn.initials?.trim().toUpperCase()
-                                  setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: sig } : r))
+                                  setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: sig, signed_by: userProfile?.id ?? null } : r))
                                   if (inits) setStaffInitials(prev => ({ ...prev, [inits]: sig }))
                                   const ok = await updatePRNRecord(prn.id, 'staff_signature', sig)
-                                  if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: prn.staff_signature } : r))
+                                  if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: prn.staff_signature, signed_by: prn.signed_by } : r))
                                 }}
                                 className="px-2 py-1 text-sm font-medium text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10 dark:hover:bg-lasso-teal/20"
                               >
@@ -3615,7 +3638,8 @@ export default function ViewMARForm() {
                               </button>
                             ) : (
                               <span className="text-gray-400">—</span>
-                            )}
+                            )
+                            })()}
                           </td>
                         </tr>
                       ))}

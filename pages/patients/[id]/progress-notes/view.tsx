@@ -852,10 +852,10 @@ export default function ProgressNotesPage() {
                         )}
                       </td>
                       <td className="px-4 py-2 align-top">
-                        {entry.signature ? (
+                        {(entry.signature || (entry.created_by === userProfile?.id && userProfile?.staff_signature)) ? (
                           <div className="flex flex-col gap-1">
                             <InitialsOrSignatureDisplay
-                              value={entry.signature}
+                              value={entry.created_by === userProfile?.id && userProfile?.staff_signature ? userProfile.staff_signature : (entry.signature ?? '')}
                               variant="signature"
                               userProfile={userProfile}
                             />
@@ -1190,9 +1190,9 @@ export default function ProgressNotesPage() {
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Signature</label>
-                  {summaryForm.signature && userProfile ? (
+                  {((summaryForm.signature || (summaryForm.created_by === userProfile?.id && userProfile?.staff_signature)) && userProfile) ? (
                     <div className="flex flex-col gap-1">
-                      <InitialsOrSignatureDisplay value={summaryForm.signature} variant="signature" userProfile={userProfile} />
+                      <InitialsOrSignatureDisplay value={summaryForm.created_by === userProfile?.id && userProfile?.staff_signature ? userProfile.staff_signature : (summaryForm.signature ?? '')} variant="signature" userProfile={userProfile} />
                       {!readOnly && (
                         <button
                           type="button"
