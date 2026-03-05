@@ -29,8 +29,6 @@ export default function SignaturePad({
   const isDrawing = useRef(false)
   const lastPos = useRef<{ x: number; y: number } | null>(null)
   const prevPos = useRef<{ x: number; y: number } | null>(null)
-  const targetPoint = useRef<{ x: number; y: number } | null>(null) // latest from move; RAF interpolates toward it
-  const rafId = useRef<number | null>(null)
   const hasMoved = useRef(false)
 
   // Use logical (CSS) coordinates so they match the scaled context (ctx.scale(dpr, dpr)).
@@ -108,49 +106,21 @@ export default function SignaturePad({
       hasMoved.current = false
       prevPos.current = null
       lastPos.current = point
-      targetPoint.current = null
-      const loop = () => {
-        if (!isDrawing.current) return
-        const canvas = canvasRef.current
-        const target = targetPoint.current
-        if (canvas && target && lastPos.current) {
-          const lp = lastPos.current
-          const dist = Math.hypot(target.x - lp.x, target.y - lp.y)
-          if (dist > 0.5) {
-            const stepSize = Math.min(0.4, 3 / dist)
-            const next = {
-              x: lp.x + (target.x - lp.x) * stepSize,
-              y: lp.y + (target.y - lp.y) * stepSize
-            }
-            draw(next)
-            if (Math.hypot(next.x - target.x, next.y - target.y) < 1.5) targetPoint.current = null
-          }
-        }
-        rafId.current = requestAnimationFrame(loop)
-      }
-      rafId.current = requestAnimationFrame(loop)
     }
-  }, [disabled, getPoint, draw])
+  }, [disabled, getPoint])
 
   const moveDrawing = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing.current || disabled) return
     e.preventDefault()
     hasMoved.current = true
     const point = getPoint(e)
-    if (point) targetPoint.current = point
-  }, [disabled, getPoint])
+    if (point) draw(point)
+  }, [disabled, getPoint, draw])
 
   const endDrawing = useCallback(() => {
     if (!isDrawing.current) return
-    if (rafId.current != null) {
-      cancelAnimationFrame(rafId.current)
-      rafId.current = null
-    }
     const canvas = canvasRef.current
     const pos = lastPos.current
-    const target = targetPoint.current
-    if (target && pos && canvas) draw(target)
-    targetPoint.current = null
     isDrawing.current = false
     lastPos.current = null
     prevPos.current = null
@@ -174,7 +144,7 @@ export default function SignaturePad({
         // ignore
       }
     }
-  }, [onChange, width, draw])
+  }, [onChange, width])
 
   const clear = useCallback(() => {
     const canvas = canvasRef.current
