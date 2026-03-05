@@ -256,7 +256,7 @@ export default function Profile() {
                     {userProfile.staff_signature && (userProfile.staff_signature.startsWith('data:image') ? (
                       <div>
                         <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current signature</span>
-                        <img src={userProfile.staff_signature} alt="Your signature" className="max-h-14 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700" />
+                        <img src={userProfile.staff_signature} alt="Your signature" className="max-h-14 rounded bg-white dark:bg-gray-700" />
                       </div>
                     ) : (
                       <div>
@@ -267,7 +267,7 @@ export default function Profile() {
                     {userProfile.staff_initials && (userProfile.staff_initials.startsWith('data:image') ? (
                       <div>
                         <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current initials</span>
-                        <img src={userProfile.staff_initials} alt="Your initials" className="max-h-10 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700" />
+                        <img src={userProfile.staff_initials} alt="Your initials" className="max-h-10 rounded bg-white dark:bg-gray-700" />
                       </div>
                     ) : (
                       <div>

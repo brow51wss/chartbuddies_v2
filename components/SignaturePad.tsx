@@ -28,6 +28,7 @@ export default function SignaturePad({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const isDrawing = useRef(false)
   const lastPos = useRef<{ x: number; y: number } | null>(null)
+  const hasMoved = useRef(false)
 
   // Use logical (CSS) coordinates so they match the scaled context (ctx.scale(dpr, dpr)).
   const getPoint = useCallback((e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent) => {
@@ -63,6 +64,7 @@ export default function SignaturePad({
     const point = getPoint(e)
     if (point) {
       isDrawing.current = true
+      hasMoved.current = false
       lastPos.current = point
     }
   }, [disabled, getPoint])
@@ -70,6 +72,7 @@ export default function SignaturePad({
   const moveDrawing = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing.current || disabled) return
     e.preventDefault()
+    hasMoved.current = true
     const point = getPoint(e)
     if (point) {
       draw(point)
@@ -78,9 +81,20 @@ export default function SignaturePad({
 
   const endDrawing = useCallback(() => {
     if (!isDrawing.current) return
+    const canvas = canvasRef.current
+    const pos = lastPos.current
     isDrawing.current = false
     lastPos.current = null
-    const canvas = canvasRef.current
+    // If user tapped without moving, draw a small dot (e.g. for "i", "j", periods)
+    if (canvas && pos && !hasMoved.current) {
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.fillStyle = '#000000'
+        ctx.beginPath()
+        ctx.arc(pos.x, pos.y, 2, 0, 2 * Math.PI)
+        ctx.fill()
+      }
+    }
     if (canvas) {
       try {
         const dataUrl = canvas.toDataURL('image/png')
@@ -113,7 +127,7 @@ export default function SignaturePad({
     const ctx = canvas.getContext('2d')
     if (ctx) {
       ctx.scale(dpr, dpr)
-      ctx.strokeStyle = '#111827'
+      ctx.strokeStyle = '#000000'
       ctx.lineWidth = 2
       ctx.lineCap = 'round'
       ctx.lineJoin = 'round'
@@ -150,7 +164,7 @@ export default function SignaturePad({
         onTouchStart={startDrawing}
         onTouchMove={moveDrawing}
         onTouchEnd={endDrawing}
-        className="border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 touch-none cursor-crosshair disabled:opacity-50 disabled:cursor-not-allowed"
+        className="border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 touch-none cursor-crosshair disabled:opacity-50 disabled:cursor-not-allowed"
         style={{ width: `${width}px`, height: `${height}px` }}
       />
       <div className="flex items-center gap-2 mt-2">
