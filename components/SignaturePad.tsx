@@ -28,7 +28,9 @@ export default function SignaturePad({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const isDrawing = useRef(false)
   const lastPos = useRef<{ x: number; y: number } | null>(null)
-  const prevPos = useRef<{ x: number; y: number } | null>(null) // point before lastPos, for smooth curve through 3 points
+  const prevPos = useRef<{ x: number; y: number } | null>(null)
+  const targetPoint = useRef<{ x: number; y: number } | null>(null) // latest from move; RAF interpolates toward it
+  const rafId = useRef<number | null>(null)
   const hasMoved = useRef(false)
 
   // Use logical (CSS) coordinates so they match the scaled context (ctx.scale(dpr, dpr)).
@@ -45,9 +47,9 @@ export default function SignaturePad({
     return { x: m.clientX - rect.left, y: m.clientY - rect.top }
   }, [])
 
-  const draw = useCallback((point: { x: number; y: number }) => {
+  const drawSegment = useCallback((point: { x: number; y: number }) => {
     const canvas = canvasRef.current
-    if (!canvas || !isDrawing.current) return
+    if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     if (!lastPos.current) {
@@ -55,38 +57,6 @@ export default function SignaturePad({
       return
     }
     const prev = lastPos.current
-    const dist = Math.hypot(point.x - prev.x, point.y - prev.y)
-    const maxStep = 10
-    if (dist > maxStep) {
-      const steps = Math.ceil(dist / maxStep)
-      const points: { x: number; y: number }[] = [prev]
-      for (let i = 1; i < steps; i++) {
-        const t = i / steps
-        points.push({
-          x: prev.x + (point.x - prev.x) * t,
-          y: prev.y + (point.y - prev.y) * t
-        })
-      }
-      points.push(point)
-      for (let i = 1; i < points.length; i++) {
-        const p0 = points[i - 1]
-        const p1 = points[i]
-        ctx.beginPath()
-        if (i >= 2) {
-          ctx.moveTo(points[i - 2].x, points[i - 2].y)
-          ctx.quadraticCurveTo(p0.x, p0.y, p1.x, p1.y)
-        } else {
-          ctx.moveTo(p0.x, p0.y)
-          const cpx = (p0.x + p1.x) / 2
-          const cpy = (p0.y + p1.y) / 2
-          ctx.quadraticCurveTo(cpx, cpy, p1.x, p1.y)
-        }
-        ctx.stroke()
-      }
-      prevPos.current = points[points.length - 2]
-      lastPos.current = point
-      return
-    }
     ctx.beginPath()
     if (prevPos.current) {
       const p0 = prevPos.current
@@ -103,6 +73,32 @@ export default function SignaturePad({
     lastPos.current = point
   }, [])
 
+  const draw = useCallback((point: { x: number; y: number }) => {
+    const canvas = canvasRef.current
+    if (!canvas || !isDrawing.current) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    if (!lastPos.current) {
+      lastPos.current = point
+      return
+    }
+    const prev = lastPos.current
+    const dist = Math.hypot(point.x - prev.x, point.y - prev.y)
+    const maxStep = 4
+    if (dist > maxStep) {
+      const steps = Math.ceil(dist / maxStep)
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps
+        drawSegment({
+          x: prev.x + (point.x - prev.x) * t,
+          y: prev.y + (point.y - prev.y) * t
+        })
+      }
+      return
+    }
+    drawSegment(point)
+  }, [drawSegment])
+
   const startDrawing = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     if (disabled) return
     e.preventDefault()
@@ -112,23 +108,49 @@ export default function SignaturePad({
       hasMoved.current = false
       prevPos.current = null
       lastPos.current = point
+      targetPoint.current = null
+      const loop = () => {
+        if (!isDrawing.current) return
+        const canvas = canvasRef.current
+        const target = targetPoint.current
+        if (canvas && target && lastPos.current) {
+          const lp = lastPos.current
+          const dist = Math.hypot(target.x - lp.x, target.y - lp.y)
+          if (dist > 0.5) {
+            const stepSize = Math.min(0.4, 3 / dist)
+            const next = {
+              x: lp.x + (target.x - lp.x) * stepSize,
+              y: lp.y + (target.y - lp.y) * stepSize
+            }
+            draw(next)
+            if (Math.hypot(next.x - target.x, next.y - target.y) < 1.5) targetPoint.current = null
+          }
+        }
+        rafId.current = requestAnimationFrame(loop)
+      }
+      rafId.current = requestAnimationFrame(loop)
     }
-  }, [disabled, getPoint])
+  }, [disabled, getPoint, draw])
 
   const moveDrawing = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing.current || disabled) return
     e.preventDefault()
     hasMoved.current = true
     const point = getPoint(e)
-    if (point) {
-      draw(point)
-    }
-  }, [disabled, draw])
+    if (point) targetPoint.current = point
+  }, [disabled, getPoint])
 
   const endDrawing = useCallback(() => {
     if (!isDrawing.current) return
+    if (rafId.current != null) {
+      cancelAnimationFrame(rafId.current)
+      rafId.current = null
+    }
     const canvas = canvasRef.current
     const pos = lastPos.current
+    const target = targetPoint.current
+    if (target && pos && canvas) draw(target)
+    targetPoint.current = null
     isDrawing.current = false
     lastPos.current = null
     prevPos.current = null
@@ -152,7 +174,7 @@ export default function SignaturePad({
         // ignore
       }
     }
-  }, [onChange, width])
+  }, [onChange, width, draw])
 
   const clear = useCallback(() => {
     const canvas = canvasRef.current
