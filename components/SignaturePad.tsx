@@ -28,6 +28,7 @@ export default function SignaturePad({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const isDrawing = useRef(false)
   const lastPos = useRef<{ x: number; y: number } | null>(null)
+  const prevPos = useRef<{ x: number; y: number } | null>(null) // point before lastPos, for smooth curve through 3 points
   const hasMoved = useRef(false)
 
   // Use logical (CSS) coordinates so they match the scaled context (ctx.scale(dpr, dpr)).
@@ -49,16 +50,56 @@ export default function SignaturePad({
     if (!canvas || !isDrawing.current) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    if (lastPos.current) {
-      const prev = lastPos.current
-      ctx.beginPath()
+    if (!lastPos.current) {
+      lastPos.current = point
+      return
+    }
+    const prev = lastPos.current
+    const dist = Math.hypot(point.x - prev.x, point.y - prev.y)
+    const maxStep = 10
+    if (dist > maxStep) {
+      const steps = Math.ceil(dist / maxStep)
+      const points: { x: number; y: number }[] = [prev]
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps
+        points.push({
+          x: prev.x + (point.x - prev.x) * t,
+          y: prev.y + (point.y - prev.y) * t
+        })
+      }
+      points.push(point)
+      for (let i = 1; i < points.length; i++) {
+        const p0 = points[i - 1]
+        const p1 = points[i]
+        ctx.beginPath()
+        if (i >= 2) {
+          ctx.moveTo(points[i - 2].x, points[i - 2].y)
+          ctx.quadraticCurveTo(p0.x, p0.y, p1.x, p1.y)
+        } else {
+          ctx.moveTo(p0.x, p0.y)
+          const cpx = (p0.x + p1.x) / 2
+          const cpy = (p0.y + p1.y) / 2
+          ctx.quadraticCurveTo(cpx, cpy, p1.x, p1.y)
+        }
+        ctx.stroke()
+      }
+      prevPos.current = points[points.length - 2]
+      lastPos.current = point
+      return
+    }
+    ctx.beginPath()
+    if (prevPos.current) {
+      const p0 = prevPos.current
+      ctx.moveTo(p0.x, p0.y)
+      ctx.quadraticCurveTo(prev.x, prev.y, point.x, point.y)
+    } else {
       ctx.moveTo(prev.x, prev.y)
-      // Smooth curve between segments: use midpoint as control so strokes look fluid, not jagged
       const cpx = (prev.x + point.x) / 2
       const cpy = (prev.y + point.y) / 2
       ctx.quadraticCurveTo(cpx, cpy, point.x, point.y)
-      ctx.stroke()
     }
+    ctx.stroke()
+    prevPos.current = prev
     lastPos.current = point
   }, [])
 
@@ -69,6 +110,7 @@ export default function SignaturePad({
     if (point) {
       isDrawing.current = true
       hasMoved.current = false
+      prevPos.current = null
       lastPos.current = point
     }
   }, [disabled, getPoint])
@@ -89,6 +131,7 @@ export default function SignaturePad({
     const pos = lastPos.current
     isDrawing.current = false
     lastPos.current = null
+    prevPos.current = null
     // If user tapped without moving, draw a small dot (e.g. for "i", "j", periods)
     if (canvas && pos && !hasMoved.current) {
       const ctx = canvas.getContext('2d')
