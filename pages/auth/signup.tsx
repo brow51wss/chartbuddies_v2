@@ -149,13 +149,11 @@ export default function Signup() {
 
     try {
       // Step 1: Create auth user
-      // Get the redirect URL - use production URL if available, otherwise current origin
-      const redirectUrl = typeof window !== 'undefined' 
-        ? `${window.location.origin}/auth/login`
-        : process.env.NEXT_PUBLIC_SITE_URL 
-          ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/login`
-          : 'https://your-production-url.vercel.app/auth/login'
-      
+      // Redirect after email confirm: use NEXT_PUBLIC_APP_URL (e.g. https://www.lasso-app.com) so production uses your real domain, not the Vercel URL
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      const appUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '')
+      const redirectUrl = (appUrl || origin) ? `${(appUrl || origin)}/auth/login` : `${origin}/auth/login`
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
