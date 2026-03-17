@@ -68,7 +68,7 @@ export default function Home() {
         <section className="relative py-20 sm:py-28 px-4 sm:px-6 lg:px-8 overflow-hidden">
           <div className="max-w-6xl mx-auto text-center">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white tracking-tight">
-              Your electronic health record, built for care teams.
+              Your electronic health record for care.
             </h1>
             <p className="mt-6 text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
               Progress notes, vital signs, and medication documentation in one place—so your team stays compliant and your record stays complete.
