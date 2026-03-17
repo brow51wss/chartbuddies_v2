@@ -34,8 +34,8 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Lasso | Medication Administration, Simplified</title>
-        <meta name="description" content="Simplify Medication Administration Records for every nurse on shift. Lasso replaces clunky charts with an intuitive digital MAR." />
+        <title>Lasso | EHR for Care Teams</title>
+        <meta name="description" content="Lasso is an electronic health record for care teams. Progress notes, vital signs, and medication administration in one place." />
       </Head>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         {/* Header */}
@@ -68,10 +68,10 @@ export default function Home() {
         <section className="relative py-20 sm:py-28 px-4 sm:px-6 lg:px-8 overflow-hidden">
           <div className="max-w-6xl mx-auto text-center">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white tracking-tight">
-              Simplify Medication Administration Records for every nurse on shift.
+              Your electronic health record, built for care teams.
             </h1>
             <p className="mt-6 text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
-              Lasso replaces clunky charts with an intuitive digital MAR that keeps your team compliant, in sync, and confident with every dose.
+              Progress notes, vital signs, and medication documentation in one place—so your team stays compliant and your record stays complete.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-4">
               <Link
@@ -103,7 +103,7 @@ export default function Home() {
                   <svg className="w-6 h-6 text-lasso-teal dark:text-lasso-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </div>
                 <p className="text-3xl font-bold text-lasso-teal dark:text-lasso-blue">Accurate</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">med-administration tracking</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">tracking</p>
               </div>
               <div className="flex flex-col items-center">
                 <div className="w-12 h-12 rounded-full bg-lasso-teal/10 dark:bg-lasso-blue/20 flex items-center justify-center mb-3" aria-hidden>
@@ -138,11 +138,11 @@ export default function Home() {
                 <div className="w-10 h-10 rounded-lg bg-lasso-teal/10 dark:bg-lasso-blue/20 flex items-center justify-center mb-3 text-lasso-teal dark:text-lasso-blue" aria-hidden>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Lasso keeps nurses in control</h2>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Lasso keeps your team in control</h2>
                 <ul className="mt-4 space-y-2 text-gray-600 dark:text-gray-400">
-                  <li>• Pre-loaded medication schedules matched to each patient.</li>
-                  <li>• One-tap documentation captures time, dose, and signature.</li>
-                  <li>• Real-time alerts keep the whole care team aligned.</li>
+                  <li>• Full EHR with progress notes, vitals, and medication documentation in one place.</li>
+                  <li>• One-tap documentation for doses and signatures so nothing falls through the cracks.</li>
+                  <li>• Real-time updates keep the whole care team aligned across the record.</li>
                 </ul>
               </div>
             </div>
@@ -155,32 +155,36 @@ export default function Home() {
             <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">
               Everything you need to deliver safer care
             </h2>
+            <p className="text-center text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-12">
+              One electronic health record—progress notes, vital signs, and medication administration.
+            </p>
             <div className="mt-12 grid sm:grid-cols-3 gap-8">
               <div className="p-6 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
                 <div className="w-11 h-11 rounded-lg bg-lasso-teal/10 dark:bg-lasso-blue/20 flex items-center justify-center mb-4 text-lasso-teal dark:text-lasso-blue" aria-hidden>
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 </div>
-                <h3 className="text-lg font-semibold text-lasso-navy dark:text-lasso-teal">Smart Scheduling</h3>
+                <h3 className="text-lg font-semibold text-lasso-navy dark:text-lasso-teal">Progress notes & vitals</h3>
                 <p className="mt-2 text-gray-600 dark:text-gray-400 text-sm">
-                  Auto-generate MAR schedules from your EHR or medication list. Lasso flags conflicts and suggests the safest cadence.
+                  Document daily notes and vital signs alongside medication administration—one record, one workflow.
                 </p>
               </div>
-              <div className="p-6 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
+              <div className="p-6 rounded-xl bg-white dark:bg-gray-800 border border-lasso-teal/20 dark:border-lasso-blue/30 shadow-sm relative">
+                <span className="absolute top-3 right-3 text-xs font-medium text-lasso-teal dark:text-lasso-blue bg-lasso-teal/10 dark:bg-lasso-blue/20 px-2 py-0.5 rounded">Most used</span>
                 <div className="w-11 h-11 rounded-lg bg-lasso-teal/10 dark:bg-lasso-blue/20 flex items-center justify-center mb-4 text-lasso-teal dark:text-lasso-blue" aria-hidden>
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" /></svg>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                 </div>
-                <h3 className="text-lg font-semibold text-lasso-navy dark:text-lasso-teal">One-Tap Documentation</h3>
+                <h3 className="text-lg font-semibold text-lasso-navy dark:text-lasso-teal">Digital MAR</h3>
                 <p className="mt-2 text-gray-600 dark:text-gray-400 text-sm">
-                  Record dose, route, and patient confirmation in seconds—no more handwriting, scanning, or double entry.
+                  The module care teams use most: schedules, one-tap documentation, PRN tracking, and signatures—built right into the EHR.
                 </p>
               </div>
               <div className="p-6 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
                 <div className="w-11 h-11 rounded-lg bg-lasso-teal/10 dark:bg-lasso-blue/20 flex items-center justify-center mb-4 text-lasso-teal dark:text-lasso-blue" aria-hidden>
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
                 </div>
-                <h3 className="text-lg font-semibold text-lasso-navy dark:text-lasso-teal">Real-Time Alerts</h3>
+                <h3 className="text-lg font-semibold text-lasso-navy dark:text-lasso-teal">Audit-ready</h3>
                 <p className="mt-2 text-gray-600 dark:text-gray-400 text-sm">
-                  Stay ahead of missed doses, PRN requests, and medication changes with smart alerts that reach the right team members instantly.
+                  Full traceability across notes, vitals, and meds—so you’re ready for surveyors and compliance.
                 </p>
               </div>
             </div>
@@ -248,7 +252,7 @@ export default function Home() {
               <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" /></svg>
             </div>
             <blockquote className="text-xl text-gray-700 dark:text-gray-300 italic">
-              &ldquo;Lasso has cut our medication documentation time in half. My team leaves on time, patients get the right care, and I sleep better knowing our MARs are always audit-ready.&rdquo;
+              &ldquo;We needed one place for notes, vitals, and meds. Lasso is that EHR. Documentation time is down, and our records are always survey-ready.&rdquo;
             </blockquote>
             <p className="mt-4 font-medium text-gray-900 dark:text-white">— Priya S., Director of Nursing</p>
           </div>
@@ -264,7 +268,7 @@ export default function Home() {
               <img src="/images/security-trust.png" alt="HIPAA and security compliance" className="w-full h-auto rounded-xl shadow-md" />
             </div>
             <p className="text-center text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
-              Lasso uses secure, HIPAA-ready infrastructure with role-based access, audit trails, and encryption at rest and in transit.
+              Your EHR runs on HIPAA-ready infrastructure with role-based access, audit trails, and encryption at rest and in transit.
             </p>
             <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="text-center p-4 rounded-lg bg-gray-50 dark:bg-gray-700/50">
@@ -299,10 +303,10 @@ export default function Home() {
         <section className="py-20 sm:py-24 px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Ready to simplify your MAR workflow?
+              Ready to simplify your EHR workflow?
             </h2>
             <p className="mt-4 text-gray-600 dark:text-gray-400">
-              See how Lasso transforms medication administration for your nurses.
+              One record for progress notes, vitals, and medication documentation—for your whole care team.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-4">
               <Link
@@ -328,7 +332,7 @@ export default function Home() {
               <img src="/images/icon-wordmark.webp" alt="Lasso" className="h-8 w-auto" />
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Medication Administration Records made effortless.
+              Electronic health records for care teams.
             </p>
             <nav className="flex gap-6 text-sm">
               <a href="#features" className="text-gray-600 dark:text-gray-400 hover:text-lasso-teal dark:hover:text-lasso-blue">Features</a>
