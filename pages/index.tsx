@@ -66,29 +66,33 @@ export default function Home() {
 
         {/* Hero */}
         <section className="relative py-20 sm:py-28 px-4 sm:px-6 lg:px-8 overflow-hidden">
-          <div className="max-w-6xl mx-auto text-center">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white tracking-tight">
-              Your electronic health record for care.
-            </h1>
-            <p className="mt-6 text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
-              Progress notes, vital signs, and medication documentation in one place—so your team stays compliant and your record stays complete.
-            </p>
-            <div className="mt-10 flex flex-wrap justify-center gap-4">
-              <Link
-                href="/auth/signup"
-                className="px-6 py-3 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue font-medium shadow-lg transition-all duration-200"
-              >
-                Get Started
-              </Link>
-              <a
-                href="#workflow"
-                className="px-6 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 font-medium transition-colors"
-              >
-                See How It Works
-              </a>
-            </div>
-            <div className="mt-12 max-w-2xl mx-auto">
-              <img src="/images/hero-illustration.png" alt="Digital MAR workflow" className="w-full h-auto rounded-xl shadow-lg" />
+          <div className="max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+              <div className="text-center lg:text-left">
+                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white tracking-tight">
+                  Your electronic health record for care.
+                </h1>
+                <p className="mt-6 text-xl text-gray-600 dark:text-gray-400 lg:max-w-xl">
+                  Progress notes, vital signs, and medication documentation in one place—so your team stays compliant and your record stays complete.
+                </p>
+                <div className="mt-10 flex flex-wrap justify-center lg:justify-start gap-4">
+                  <Link
+                    href="/auth/signup"
+                    className="px-6 py-3 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue font-medium shadow-lg transition-all duration-200"
+                  >
+                    Get Started
+                  </Link>
+                  <a
+                    href="#workflow"
+                    className="px-6 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 font-medium transition-colors"
+                  >
+                    See How It Works
+                  </a>
+                </div>
+              </div>
+              <div className="flex justify-center lg:justify-end">
+                <img src="/images/hero-illustration.png" alt="Digital MAR workflow" className="w-full max-w-lg h-auto rounded-xl shadow-lg" />
+              </div>
             </div>
             <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-8 text-center">
               <div className="flex flex-col items-center">
