@@ -49,7 +49,7 @@ function InitialsOrSignatureDisplay({
       <span
         style={{
           fontFamily: `"${font}", cursive`,
-          fontSize: variant === 'initials' ? '1.1em' : '1.4em',
+          fontSize: variant === 'initials' ? '1.1em' : '1.75em',
           verticalAlign: 'middle'
         }}
       >
@@ -62,7 +62,7 @@ function InitialsOrSignatureDisplay({
       <img
         src={value}
         alt={variant === 'initials' ? 'Initials' : 'Signature'}
-        style={{ maxHeight: variant === 'initials' ? '1.25em' : '1.75em', maxWidth: variant === 'initials' ? '3em' : '8em', verticalAlign: 'middle', display: 'inline-block' }}
+        style={{ maxHeight: variant === 'initials' ? '1.25em' : '2.5em', maxWidth: variant === 'initials' ? '3em' : '12em', verticalAlign: 'middle', display: 'inline-block' }}
       />
     )
   }
@@ -353,6 +353,14 @@ export default function ProgressNotesPage() {
     return () => { if (savePhysicianTimeoutRef.current) clearTimeout(savePhysicianTimeoutRef.current) }
   }, [patientId, patient, selectedPhysician, customPhysician])
 
+  useEffect(() => {
+    const onAfterPrint = () => {
+      document.body.classList.remove('print-view-notes', 'print-view-page2')
+    }
+    window.addEventListener('afterprint', onAfterPrint)
+    return () => window.removeEventListener('afterprint', onAfterPrint)
+  }, [])
+
   const refetchEntries = async () => {
     if (!patientId || typeof patientId !== 'string') return
     const { data: entriesData, error: entriesError } = await supabase
@@ -618,9 +626,28 @@ export default function ProgressNotesPage() {
       })
     : allMainEntries
 
-  return (<ProtectedRoute>
+  const handlePrintAllNotes = async () => {
+    document.body.classList.add('print-view-notes')
+    await refetchEntries()
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => window.print())
+    })
+  }
+
+  const handlePrintPage2 = () => {
+    document.body.classList.add('print-view-page2')
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => window.print())
+    })
+  }
+
+  return (
+    <ProtectedRoute>
       <Head>
         <title>Progress Notes - {patient.patient_name}</title>
+        <style dangerouslySetInnerHTML={{
+          __html: '.progress-notes-print-view,.progress-notes-page2-print-view{display:none}@media print{.no-print{display:none!important}body *{visibility:hidden}body.print-view-notes .progress-notes-print-view,body.print-view-notes .progress-notes-print-view *{visibility:visible}body.print-view-notes .progress-notes-print-view{position:absolute;left:0;top:0;width:100%;display:block!important}body.print-view-page2 .progress-notes-page2-print-view,body.print-view-page2 .progress-notes-page2-print-view *{visibility:visible}body.print-view-page2 .progress-notes-page2-print-view{position:absolute;left:0;top:0;width:100%;display:block!important}'
+        }} />
       </Head>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <AppHeader
@@ -628,7 +655,7 @@ export default function ProgressNotesPage() {
           patientName={patient?.patient_name}
         />
 
-        <main className="max-w-5xl mx-auto px-4 py-6">
+        <main className="no-print max-w-5xl mx-auto px-4 py-6">
           <Link
             href={router.query.id ? `/patients/${router.query.id}/progress-notes` : '/dashboard'}
             className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm font-medium inline-block mb-2"
@@ -817,13 +844,22 @@ export default function ProgressNotesPage() {
                     <td colSpan={3} className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Existing notes</h3>
-                        <button
-                          type="button"
-                          onClick={() => refetchEntries()}
-                          className="text-xs px-2 py-1 text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10"
-                        >
-                          Refresh
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handlePrintAllNotes}
+                            className="text-xs px-3 py-1.5 bg-gray-600 text-white rounded hover:bg-gray-700"
+                          >
+                            Print all notes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => refetchEntries()}
+                            className="text-xs px-2 py-1 text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10"
+                          >
+                            Refresh
+                          </button>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -903,6 +939,13 @@ export default function ProgressNotesPage() {
                   />
                 )}
                 {summaryLoading && <span className="text-sm text-gray-500">Loading...</span>}
+                <button
+                  type="button"
+                  onClick={handlePrintPage2}
+                  className="ml-auto text-xs px-3 py-1.5 bg-gray-600 text-white rounded hover:bg-gray-700 no-print"
+                >
+                  Print
+                </button>
               </div>
 
               {/* Monthly Summary */}
@@ -1220,6 +1263,181 @@ export default function ProgressNotesPage() {
           </div>
           )}
         </main>
+
+        {/* Print view: Page 2 Monthly Summary. Hidden on screen, shown when printing with body.print-view-page2. */}
+        <div className="progress-notes-page2-print-view p-6 text-sm text-gray-900" style={{ display: 'none' }}>
+          <h1 className="text-lg font-bold mb-2">PROGRESS NOTES – Page 2 (Monthly Summary)</h1>
+          <p className="mb-4"><strong>Month / Year:</strong> {formatMonthYearDisplay(monthFilterKey || summaryMonthYear)}</p>
+          <p className="mb-4"><strong>Resident:</strong> {patient?.patient_name ?? '—'} | <strong>ARCH:</strong> {facilityName || '—'} | <strong>Care Giver:</strong> {userProfile?.full_name ?? '—'}</p>
+          {(() => {
+            const s = summaryForm
+            const currentWtNum = s.wt != null && s.wt.trim() !== '' ? parseFloat(s.wt) : NaN
+            const previousWtNum = previousSummary?.wt != null && previousSummary.wt.trim() !== '' ? parseFloat(previousSummary.wt) : NaN
+            const weightDiff = !Number.isNaN(currentWtNum) && !Number.isNaN(previousWtNum) ? currentWtNum - previousWtNum : null
+            const weightUnit = (s.weight_unit === 'kg' || s.weight_unit === 'lbs') ? s.weight_unit : 'lbs'
+            const v = (x: string | null | undefined) => (x ?? '—') as string
+            return (
+              <>
+                <section className="mb-4 border border-gray-400 rounded p-3">
+                  <h3 className="font-semibold mb-2">Monthly Summary</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 mb-2">
+                    <div>B.P.: {v(s.bp)}</div>
+                    <div>P.: {v(s.pulse)}</div>
+                    <div>R.: {v(s.resp)}</div>
+                    <div>Temp.: {v(s.temp)}</div>
+                    <div>Wt.: {v(s.wt)} {s.weight_unit ?? 'lbs'}</div>
+                    <div>Wt. Change Y/N: {v(s.wt_change_yn)}{weightDiff != null ? ` (${weightDiff > 0 ? '+' : ''}${weightDiff} ${weightUnit})` : ''}</div>
+                  </div>
+                  <div>Response to Diet: {v(s.response_to_diet)}</div>
+                </section>
+                <section className="mb-4 border border-gray-400 rounded p-3">
+                  <h3 className="font-semibold mb-2">Medication</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
+                    <div>Medication available Y/N: {v(s.medication_available_yn)}</div>
+                    <div>Medication secured Y/N: {v(s.medication_secured_yn)}</div>
+                    <div>Taking medications Y/N: {v(s.taking_medications_yn)}</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>Physician Notified Y/N: {v(s.physician_notified_yn)}</div>
+                    <div>Date: {v(s.physician_notified_date)}</div>
+                  </div>
+                  <div className="mb-2">Medication Changes Y/N: {v(s.medication_changes_yn)}</div>
+                  <div>Response to Medication: {v(s.response_to_medication)}</div>
+                </section>
+                <section className="mb-4 border border-gray-400 rounded p-3">
+                  <h3 className="font-semibold mb-2">Treatments</h3>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>Treatments Y/N: {v(s.treatments_yn)}</div>
+                    <div>Type: {v(s.treatments_type)}</div>
+                  </div>
+                  <div className="mb-2">Response to Treatment: {v(s.response_to_treatment)}</div>
+                  <div className="mb-2">Therapy Y/N: {v(s.therapy_yn)}</div>
+                  <div className="grid grid-cols-3 gap-2">PT: {v(s.therapy_pt)} | OT: {v(s.therapy_ot)} | ST: {v(s.therapy_st)}</div>
+                </section>
+                <section className="mb-4 border border-gray-400 rounded p-3">
+                  <h3 className="font-semibold mb-2">ADL / Ambulation / Continence / BM</h3>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>ADL: {v(s.adl_level)}</div>
+                    <div>Ambulation: {v(s.ambulation)}</div>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                    <div>Continent urine Y/N: {v(s.continent_urine_yn)}</div>
+                    <div>Continent stool Y/N: {v(s.continent_stool_yn)}</div>
+                    <div>Incontinent urine Y/N: {v(s.incontinent_urine_yn)}</div>
+                    <div>Incontinent stool Y/N: {v(s.incontinent_stool_yn)}</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    <div>Timed toileting Y/N: {v(s.timed_toileting_yn)}</div>
+                    <div>Diapers Y/N: {v(s.diapers_yn)}</div>
+                    <div>BM: {v(s.bm_type)}</div>
+                  </div>
+                </section>
+                <section className="mb-4 border border-gray-400 rounded p-3">
+                  <h3 className="font-semibold mb-2">Skin Integrity</h3>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>Intact Y/N: {v(s.skin_intact_yn)}</div>
+                    <div>Wound Type: {v(s.wound_type)}</div>
+                  </div>
+                  <div className="mb-2">Location: {v(s.wound_location)}</div>
+                  <div>Treatment / Response: {v(s.wound_treatment)} / {v(s.wound_response)}</div>
+                </section>
+                <section className="mb-4 border border-gray-400 rounded p-3">
+                  <h3 className="font-semibold mb-2">Pain</h3>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>Pain Y/N: {v(s.pain_yn)}</div>
+                    <div>Location: {v(s.pain_location)}</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>Intensity (0–10): {v(s.pain_intensity)}</div>
+                    <div>Cause: {v(s.pain_cause)}</div>
+                  </div>
+                  <div>Treatment / Response: {v(s.pain_treatment)} / {v(s.pain_response)}</div>
+                </section>
+                <section className="mb-4 border border-gray-400 rounded p-3">
+                  <h3 className="font-semibold mb-2">Mental</h3>
+                  <div className="mb-2">Descriptors: {v(s.mental_descriptors)}</div>
+                  <div>Impaired Communication Other: {v(s.impaired_communication_other)}</div>
+                </section>
+                <section className="mb-4 border border-gray-400 rounded p-3">
+                  <h3 className="font-semibold mb-2">Changes and Actions</h3>
+                  <div className="mb-2">Describe Changes: {v(s.describe_changes)}</div>
+                  <div className="mb-2">Date MD Notified: {v(s.date_md_notified)}</div>
+                  <div className="mb-2">Actions: {v(s.actions)}</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                    <div>Changes in Condition Y/N: {v(s.changes_in_condition_yn)}</div>
+                    <div>Illness Y/N: {v(s.illness_yn)}</div>
+                    <div>Injury Y/N: {v(s.injury_yn)}</div>
+                    <div>Date Physician Notified: {v(s.date_physician_notified)}</div>
+                  </div>
+                  <div>Describe Type and Actions Taken: {v(s.describe_type_actions_taken)}</div>
+                </section>
+                <section className="mb-4 border border-gray-400 rounded p-3">
+                  <h3 className="font-semibold mb-2">Plan of Care</h3>
+                  <div className="whitespace-pre-wrap">{v(s.plan_of_care)}</div>
+                </section>
+                <section className="mb-4 border border-gray-400 rounded p-3">
+                  <h3 className="font-semibold mb-2">Signature / Title / Date</h3>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>Title: {v(s.signature_title)}</div>
+                    <div>Date: {v(s.signature_date)}</div>
+                  </div>
+                  <div>
+                    {((s.signature || (s.created_by === userProfile?.id && userProfile?.staff_signature)) && userProfile) ? (
+                      <InitialsOrSignatureDisplay value={s.created_by === userProfile?.id && userProfile?.staff_signature ? userProfile.staff_signature! : (s.signature ?? '')} variant="signature" userProfile={userProfile} />
+                    ) : (
+                      <span>—</span>
+                    )}
+                  </div>
+                </section>
+              </>
+            )
+          })()}
+        </div>
+
+        {/* Print view: all progress notes (uses same entries state so new notes appear). Hidden on screen, shown when printing. */}
+        <div className="progress-notes-print-view p-6 text-sm" style={{ display: 'none' }}>
+          <h1 className="text-lg font-bold text-gray-900 mb-2">Progress Notes – All Notes</h1>
+          <div className="mb-4 grid grid-cols-2 gap-2 text-gray-800">
+            <div><strong>Name of ARCH:</strong> {facilityName || '—'}</div>
+            <div><strong>Primary Care Giver:</strong> {userProfile?.full_name ?? '—'}</div>
+            <div><strong>Resident:</strong> {patient?.patient_name ?? '—'}</div>
+            <div><strong>Physician/APRN or Clinic:</strong> {selectedPhysician || customPhysician?.trim() || '—'}</div>
+          </div>
+          <table className="w-full border border-gray-400" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr className="bg-gray-200">
+                <th className="border border-gray-400 px-3 py-2 text-left font-semibold">Date</th>
+                <th className="border border-gray-400 px-3 py-2 text-left font-semibold">Notes</th>
+                <th className="border border-gray-400 px-3 py-2 text-left font-semibold w-40">Signature</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allMainEntries.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="border border-gray-400 px-3 py-4 text-gray-500">No progress notes.</td>
+                </tr>
+              ) : (
+                allMainEntries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td className="border border-gray-400 px-3 py-2 whitespace-nowrap">{new Date(entry.note_date).toLocaleDateString('en-US')}</td>
+                    <td className="border border-gray-400 px-3 py-2 whitespace-pre-wrap align-top">{entry.notes}</td>
+                    <td className="border border-gray-400 px-3 py-2 align-top">
+                      {(entry.signature || (entry.created_by === userProfile?.id && userProfile?.staff_signature)) ? (
+                        <InitialsOrSignatureDisplay
+                          value={entry.created_by === userProfile?.id && userProfile?.staff_signature ? userProfile.staff_signature : (entry.signature ?? '')}
+                          variant="signature"
+                          userProfile={userProfile}
+                        />
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </ProtectedRoute>
   )

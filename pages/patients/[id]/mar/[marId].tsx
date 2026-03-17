@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -46,7 +46,7 @@ function InitialsOrSignatureDisplay({
       <span
         style={{
           fontFamily: `"${font}", cursive`,
-          fontSize: variant === 'initials' ? '1.1em' : '1.4em',
+          fontSize: variant === 'initials' ? '1.35em' : '1.4em',
           verticalAlign: 'middle'
         }}
       >
@@ -59,7 +59,7 @@ function InitialsOrSignatureDisplay({
       <img
         src={value}
         alt={variant === 'initials' ? 'Initials' : 'Signature'}
-        style={{ maxHeight: variant === 'initials' ? '1.25em' : '1.75em', maxWidth: variant === 'initials' ? '3em' : '8em', verticalAlign: 'middle', display: 'inline-block' }}
+        style={{ maxHeight: variant === 'initials' ? '3em' : '3em', maxWidth: variant === 'initials' ? '7em' : '7em', verticalAlign: 'middle', display: 'inline-block' }}
       />
     )
   }
@@ -273,6 +273,9 @@ export default function ViewMARForm() {
   const allowNavigationRef = useRef(false)
   const marTableScrollRef = useRef<HTMLDivElement>(null)
   const marHeaderScrollRef = useRef<HTMLDivElement>(null)
+  const [printRowHeights, setPrintRowHeights] = useState<number[]>([])
+  const marMeasureTbodyRef = useRef<HTMLTableSectionElement>(null)
+  const marMeasureTbodyRef2 = useRef<HTMLTableSectionElement>(null)
 
   useEffect(() => {
     // Wait for router to be ready
@@ -979,6 +982,45 @@ export default function ViewMARForm() {
       }
     }
     return null
+  }
+
+  /** Return plain text for a day cell for print (no buttons/links). */
+  const getDayCellPrintText = (
+    med: MARMedication,
+    day: number,
+    medAdmin: { [day: number]: MARAdministration },
+    isVitalsEntry: boolean
+  ): string => {
+    const admin = medAdmin[day]
+    const status = admin?.status || 'Not Given'
+    const rawInitials = admin?.initials ?? ''
+    const initialsForLogic = rawInitials.startsWith('data:image') ? '' : rawInitials.trim().toUpperCase()
+    const initials = rawInitials.startsWith('data:image') ? '' : rawInitials
+    const isNotGiven = status === 'Not Given'
+    const isGiven = status === 'Given'
+    const isPRN = status === 'PRN'
+    const isDC = initialsForLogic === 'DC'
+    const isRefused = initialsForLogic === 'R'
+    const isHeld = initialsForLogic === 'H'
+    let isDiscontinued = false
+    if (!isVitalsEntry) {
+      for (let checkDay = 1; checkDay < day; checkDay++) {
+        const checkAdmin = medAdmin[checkDay]
+        const checkRaw = checkAdmin?.initials ?? ''
+        if (!checkRaw.startsWith('data:image') && checkRaw.trim().toUpperCase() === 'DC') {
+          isDiscontinued = true
+          break
+        }
+      }
+    }
+    if (isDiscontinued && !isDC) return '—'
+    if (isDC) return 'DC'
+    if (isRefused) return 'R'
+    if (isHeld) return 'H'
+    if (isGiven && initials) return initials
+    if (isNotGiven && initials) return `○${initials}`
+    if (isPRN) return 'PRN'
+    return '—'
   }
 
   /** Sync MAR day note to Progress Notes Page 1. Includes time so each administration can be updated in place. */
@@ -2033,6 +2075,210 @@ export default function ViewMARForm() {
   const MAR_COL = { med: 200, startStop: 120, hour: 150, day: 100 } as const
   const hourColWidth = readOnly ? 90 : MAR_COL.hour
 
+  /** Key so print view remounts when MAR data changes and shows current state in print preview. */
+  const printDataKey = [
+    medications.map((m) => m.id).join(','),
+    Object.entries(administrations)
+      .map(([id, daysByDay]) =>
+        Object.entries(daysByDay)
+          .map(([d, a]) => `${d}:${a?.status ?? ''}:${(a?.initials ?? '').slice(0, 10)}`)
+          .sort((a, b) => Number(a.split(':')[0]) - Number(b.split(':')[0]))
+          .join(';')
+      )
+      .sort()
+      .join('|')
+  ].join('::')
+
+  /** Print pagination: group keys in order and row ranges so we can chunk by pixel height. Order matches MAR page; only multi-time medications are grouped (never split). VITALS stay in MAR order, one row per chunk. */
+  const printGroupInfo = React.useMemo(() => {
+    const medicationGroups: { [key: string]: { meds: MARMedication[]; rowSpan: number } } = {}
+    medications.forEach((med) => {
+      const isV = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
+      const gk = isV ? `vitals_${med.id}` : `${med.medication_name}|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
+      if (!medicationGroups[gk]) medicationGroups[gk] = { meds: [], rowSpan: 0 }
+      medicationGroups[gk].meds.push(med)
+    })
+    Object.keys(medicationGroups).forEach((k) => { medicationGroups[k].rowSpan = medicationGroups[k].meds.length })
+    const isFirstInGroup: { [medId: string]: boolean } = {}
+    Object.values(medicationGroups).forEach((g) => { if (g.meds.length > 0) isFirstInGroup[g.meds[0].id] = true })
+    const groupKeysInOrder: string[] = []
+    const seen: { [k: string]: boolean } = {}
+    medications.forEach((med) => {
+      const isV = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
+      const gk = isV ? `vitals_${med.id}` : `${med.medication_name}|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
+      if (!seen[gk]) { groupKeysInOrder.push(gk); seen[gk] = true }
+    })
+    const groupRanges: { start: number; end: number }[] = []
+    let row = 0
+    groupKeysInOrder.forEach((gk) => {
+      const span = medicationGroups[gk].rowSpan
+      groupRanges.push({ start: row, end: row + span })
+      row += span
+    })
+    return { medicationGroups, isFirstInGroup, groupKeysInOrder, groupRanges }
+  }, [medications])
+
+  /** Measure each row height (px) for both half-month tables; use max so chunking fits both halves (rows with notes on 16–31 are taller there). */
+  useLayoutEffect(() => {
+    const tbody1 = marMeasureTbodyRef.current
+    const tbody2 = marMeasureTbodyRef2.current
+    if (!tbody1 || medications.length === 0) {
+      if (medications.length === 0) setPrintRowHeights([])
+      return
+    }
+    const trs1 = Array.from(tbody1.querySelectorAll<HTMLTableRowElement>('tr'))
+    if (trs1.length !== medications.length) return
+    const heights1 = trs1.map((tr) => tr.offsetHeight)
+    let heights2: number[] = heights1
+    if (tbody2) {
+      const trs2 = Array.from(tbody2.querySelectorAll<HTMLTableRowElement>('tr'))
+      if (trs2.length === medications.length) {
+        heights2 = trs2.map((tr) => tr.offsetHeight)
+      }
+    }
+    const maxHeights = heights1.map((h, i) => Math.max(h, heights2[i] ?? 0))
+    setPrintRowHeights(maxHeights)
+  }, [medications.length, printDataKey])
+
+  /** Paper and print area in pixels (CSS: 96px = 1in). Landscape: short side is height. */
+  const PRINT_PAGE_HEIGHT_PX = 8.5 * 96
+  const PRINT_MARGIN_PX = 0.5 * 96 * 2
+  const PRINT_BROWSER_HEADER_FOOTER_PX = 120
+  const PRINT_MAR_HEADER_PX = 72 // MAR title + Patient | DOB | Sex | Month/Year | Facility line + padding (p-4 pb-2)
+  const PRINT_TABLE_HEADER_ROW_PX = 28
+  const PRINT_ROW_BORDER_PX = 1
+  const PRINT_SAFETY_BUFFER_PX = 80 // leave room so rows never spill; print can differ from measured layout
+  const PRINT_AVAILABLE_TBODY_PX = Math.max(100, PRINT_PAGE_HEIGHT_PX - PRINT_MARGIN_PX - PRINT_BROWSER_HEADER_FOOTER_PX - PRINT_MAR_HEADER_PX - PRINT_TABLE_HEADER_ROW_PX - PRINT_SAFETY_BUFFER_PX)
+
+  /** Chunk by pixel height so each page fits; never split a multi-time medication across pages. Order matches MAR (VITALS stay in page order). */
+  const printMedicationChunks = React.useMemo((): MARMedication[][] => {
+    const { groupKeysInOrder, groupRanges, medicationGroups } = printGroupInfo
+    if (medications.length === 0) return [[]]
+    if (printRowHeights.length !== medications.length) {
+      const fallbackRowsPerPage = Math.max(1, Math.floor(PRINT_AVAILABLE_TBODY_PX / 40))
+      const chunks: MARMedication[][] = []
+      for (let i = 0; i < medications.length; i += fallbackRowsPerPage) chunks.push(medications.slice(i, i + fallbackRowsPerPage))
+      return chunks.length ? chunks : [[]]
+    }
+    const groupHeights = groupRanges.map(({ start, end }) => {
+      let h = 0
+      for (let r = start; r < end; r++) h += printRowHeights[r] + PRINT_ROW_BORDER_PX
+      return h
+    })
+    const chunks: MARMedication[][] = []
+    let current: MARMedication[] = []
+    let currentH = 0
+    for (let g = 0; g < groupKeysInOrder.length; g++) {
+      const need = groupHeights[g]
+      if (current.length > 0 && currentH + need > PRINT_AVAILABLE_TBODY_PX) {
+        chunks.push(current)
+        current = []
+        currentH = 0
+      }
+      const groupMeds = medicationGroups[groupKeysInOrder[g]]?.meds ?? []
+      current.push(...groupMeds)
+      currentH += need
+    }
+    if (current.length > 0) chunks.push(current)
+    return chunks
+  }, [medications, printRowHeights, printGroupInfo])
+
+  /** Defer print so React has committed latest state and browser has painted the print view. */
+  const handlePrint = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.print()
+      })
+    })
+  }
+
+  /** Renders MAR table body rows for print/measure (shared by measurement table and print pages). When rowHeights + startIndex are passed, each <tr> gets that height so first-half and second-half pages match. */
+  const renderMarPrintRows = (meds: MARMedication[], daySubset: number[], startIndex?: number, rowHeights?: number[]) => {
+    const { medicationGroups, isFirstInGroup } = printGroupInfo
+    if (meds.length === 0) {
+      return (
+        <tr>
+          <td colSpan={3 + daySubset.length} className="border border-gray-400 px-2 py-4 text-left text-gray-500">No medications recorded.</td>
+        </tr>
+      )
+    }
+    return meds.map((med, i) => {
+      const medAdmin = administrations[med.id] || {}
+      const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
+      const groupKey = isVitalsEntry ? `vitals_${med.id}` : `${med.medication_name}|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
+      const group = medicationGroups[groupKey]
+      const shouldMerge = !isVitalsEntry && group && group.rowSpan > 1
+      const isFirstRow = isFirstInGroup[med.id] || false
+      const rowSpan = shouldMerge ? group.rowSpan : undefined
+      const rowHeightPx = rowHeights != null && startIndex != null ? rowHeights[startIndex + i] : undefined
+      return (
+        <tr
+          key={med.id}
+          className={isVitalsEntry ? 'bg-blue-50' : ''}
+          style={rowHeightPx != null ? { height: rowHeightPx, minHeight: rowHeightPx } : undefined}
+        >
+          {(shouldMerge && !isFirstRow) ? null : (
+            <td rowSpan={rowSpan} className="border border-gray-400 px-2 py-1.5 align-top">
+              <div className="font-medium text-gray-900">{med.medication_name}</div>
+              {med.dosage && <div className="text-gray-600">{med.dosage}</div>}
+              {!isVitalsEntry && med.route && <div className="text-gray-500 italic text-xs">{med.route}</div>}
+              {!isVitalsEntry && med.frequency != null && med.frequency > 0 && (
+                <div className="text-gray-500 text-xs">{med.frequency_display || `${med.frequency} time${med.frequency > 1 ? 's' : ''} per day`}</div>
+              )}
+              {!isVitalsEntry && med.notes && <div className="text-gray-500 text-xs">{med.notes}</div>}
+              {!isVitalsEntry && med.parameter && <div className="italic text-gray-500 text-xs border-t border-gray-300 mt-0.5 pt-0.5">{med.parameter}</div>}
+            </td>
+          )}
+          {(shouldMerge && !isFirstRow) ? null : (
+            <td rowSpan={rowSpan} className="border border-gray-400 px-0.5 py-1.5 text-left align-top">
+              <div className="font-semibold">Start</div>
+              <div>
+                {new Date(med.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </div>
+              {med.stop_date && (
+                <div className="mt-1.5">
+                  <div className="font-semibold">Stop</div>
+                  <div>
+                    {new Date(med.stop_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </div>
+                </div>
+              )}
+            </td>
+          )}
+          <td className="border border-gray-400 px-0.5 py-1.5 text-left">{isVitalsEntry ? '—' : (med.hour ? formatTimeDisplay(med.hour) : '—')}</td>
+          {daySubset.map((day) => {
+            const admin = medAdmin[day]
+            const note = admin?.notes?.trim() || null
+            const initialsDataUrl = admin?.initials?.startsWith('data:image') ? admin.initials : null
+            const status = admin?.status || 'Not Given'
+            const isGiven = status === 'Given'
+            const isNotGiven = status === 'Not Given'
+            const showImageInitials = initialsDataUrl && (isGiven || isNotGiven)
+            return (
+              <td key={day} className="border border-gray-400 px-1 py-1 text-center align-top">
+                <div>
+                  {showImageInitials ? (
+                    <>
+                      {isNotGiven && <span className="text-red-600 font-bold">○ </span>}
+                      <img
+                        src={initialsDataUrl!}
+                        alt="Initials"
+                        style={{ maxHeight: '1.25em', maxWidth: '3em', display: 'inline-block', verticalAlign: 'middle' }}
+                      />
+                    </>
+                  ) : (
+                    getDayCellPrintText(med, day, medAdmin, isVitalsEntry)
+                  )}
+                </div>
+                {note && <div className="text-xs text-gray-600 mt-0.5 break-words leading-tight">{note}</div>}
+              </td>
+            )
+          })}
+        </tr>
+      )
+    })
+  }
+
   // Show loading state while router is initializing
   if (!router.isReady || loading) {
     return (
@@ -2146,17 +2392,32 @@ export default function ViewMARForm() {
     <ProtectedRoute>
       <Head>
         <title>MAR Form - {marForm.month_year} - Lasso</title>
+        <style dangerouslySetInnerHTML={{ __html: `
+          .mar-print-view { display: none; }
+          @media print {
+            .no-print { display: none !important; }
+            body * { visibility: hidden; }
+            .mar-print-view, .mar-print-view * { visibility: visible; }
+            .mar-print-view { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            @page { size: landscape; margin: 0.5in; }
+            .mar-print-measure { display: none !important; }
+          }
+          .mar-print-measure { position: absolute; left: -9999px; top: 0; width: 960px; visibility: hidden; pointer-events: none; }
+        `}} />
       </Head>
       <div className="min-h-screen">
-        <AppHeader
+        <div className="no-print">
+          <AppHeader
               userProfile={userProfile}
               onLogout={handleLogout}
               patientId={typeof patientId === 'string' ? patientId : Array.isArray(patientId) ? patientId[0] : undefined}
               patientName={marForm?.patient_name}
             />
+        </div>
 
         {/* Main Content - 95vw with min 1000px so the white MAR card uses almost the full screen */}
-        <div className="w-[95vw] min-w-[1000px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="no-print w-[95vw] min-w-[1000px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header Navigation */}
           <div className="mb-6">
             <button
@@ -2170,6 +2431,13 @@ export default function ViewMARForm() {
                 Medication Administration Record (MAR)
               </h1>
               <div className="flex space-x-3">
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm font-medium"
+                >
+                  Print
+                </button>
                 {!readOnly && (
                   <>
                     <button
@@ -2258,10 +2526,11 @@ export default function ViewMARForm() {
               </div>
 
               {/* Medication Administration Table - sticky header OUTSIDE overflow so it sticks to viewport; body has overflow-x for horizontal scroll */}
-              <div className="relative">
-                {/* Sticky header: outside overflow container so sticky works; syncs horizontal scroll with body via effect */}
-                <div ref={marHeaderScrollRef} className="sticky top-[73px] z-30 overflow-x-auto overflow-y-hidden bg-white dark:bg-gray-800 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ marginBottom: -1 }}>
-                  <table className="min-w-full border border-gray-300 dark:border-gray-600 border-b-0" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
+              <div className="relative overflow-visible">
+                {/* Sticky header: no overflow on sticky div so it sticks to viewport; inner div handles horizontal scroll sync */}
+                <div className="sticky top-0 z-30 bg-white dark:bg-gray-800 overflow-visible" style={{ marginBottom: -1 }}>
+                  <div ref={marHeaderScrollRef} className="overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <table className="min-w-full border border-gray-300 dark:border-gray-600 border-b-0" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
                     <colgroup>
                       <col style={{ width: MAR_COL.med, minWidth: MAR_COL.med }} />
                       <col style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop }} />
@@ -2291,6 +2560,7 @@ export default function ViewMARForm() {
                       </tr>
                     </thead>
                   </table>
+                  </div>
                 </div>
                 <div ref={marTableScrollRef} className="overflow-x-auto overflow-y-visible bg-white dark:bg-gray-800 pb-8">
                 <table className="min-w-full border border-gray-300 dark:border-gray-600" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
@@ -3650,6 +3920,264 @@ export default function ViewMARForm() {
           </div>
           </div>
         </div>
+      </div>
+
+      {/* Hidden tables for measuring row heights: first half (1–15) and second half (16–31). Use max per row so both print pages fit. Not printed. */}
+      {medications.length > 0 && (
+        <>
+          <div className="mar-print-measure text-xs" aria-hidden="true">
+            <table className="min-w-full border border-gray-400" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '960px' }}>
+              <colgroup>
+                <col style={{ width: '26%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '6%' }} />
+                {days.slice(0, 15).map((_, i) => <col key={i} style={{ width: `${60 / 15}%` }} />)}
+              </colgroup>
+              <thead>
+                <tr className="bg-gray-200">
+                  <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Medication</th>
+                  <th className="border border-gray-400 px-0.5 py-1.5 text-left font-semibold">Start/Stop</th>
+                  <th className="border border-gray-400 px-0.5 py-1.5 text-left font-semibold">Hour</th>
+                  {days.slice(0, 15).map((d) => <th key={d} className="border border-gray-400 px-1 py-1.5 text-center font-semibold">{d}</th>)}
+                </tr>
+              </thead>
+              <tbody ref={marMeasureTbodyRef}>
+                {renderMarPrintRows(medications, days.slice(0, 15))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mar-print-measure text-xs" aria-hidden="true">
+            <table className="min-w-full border border-gray-400" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '960px' }}>
+              <colgroup>
+                <col style={{ width: '26%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '6%' }} />
+                {days.slice(15, 31).map((_, i) => <col key={i} style={{ width: `${60 / 16}%` }} />)}
+              </colgroup>
+              <thead>
+                <tr className="bg-gray-200">
+                  <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Medication</th>
+                  <th className="border border-gray-400 px-0.5 py-1.5 text-left font-semibold">Start/Stop</th>
+                  <th className="border border-gray-400 px-0.5 py-1.5 text-left font-semibold">Hour</th>
+                  {days.slice(15, 31).map((d) => <th key={d} className="border border-gray-400 px-1 py-1.5 text-center font-semibold">{d}</th>)}
+                </tr>
+              </thead>
+              <tbody ref={marMeasureTbodyRef2}>
+                {renderMarPrintRows(medications, days.slice(15, 31))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Print-only MAR: two landscape pages — left columns + days 1–15, then left columns + days 16–31 */}
+      <div key={printDataKey} className="mar-print-view text-xs" style={{ display: 'none' }}>
+        {(() => {
+          const formatDOB = (dob: string | null | undefined) => {
+            if (!dob) return '—'
+            try {
+              const d = new Date(dob)
+              return isNaN(d.getTime()) ? dob : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            } catch {
+              return dob
+            }
+          }
+          const printHeader = (
+            <div className="p-4 pb-2 text-xs">
+              <h1 className="text-xs font-bold text-gray-900">Medication Administration Record (MAR)</h1>
+              <p className="text-xs text-gray-700 mt-1">
+                <strong>Patient:</strong> {marForm.patient_name}
+                &nbsp;|&nbsp; <strong>DOB:</strong> {formatDOB(marForm.date_of_birth)}
+                &nbsp;|&nbsp; <strong>Sex:</strong> {marForm.sex ?? '—'}
+                &nbsp;|&nbsp; <strong>Month/Year:</strong> {marForm.month_year}
+                &nbsp;|&nbsp; <strong>Facility:</strong> {facilityNameFromProfile ?? marForm.facility_name ?? 'N/A'}
+              </p>
+            </div>
+          )
+          const medicationChunks = printMedicationChunks
+          const firstHalfDays = days.slice(0, 15)   // 1-15
+          const secondHalfDays = days.slice(15, 31) // 16-31
+
+          const printTablePage = (chunk: typeof medications, dayRange: 'first' | 'second', pageKey: string, isLast: boolean, startIndex: number) => {
+            const daySubset = dayRange === 'first' ? firstHalfDays : secondHalfDays
+            const dayColWidthPct = 60 / daySubset.length
+            const useRowHeights = printRowHeights.length === medications.length
+            return (
+              <div key={pageKey} style={isLast ? undefined : { pageBreakAfter: 'always' }}>
+                {printHeader}
+                <table className="min-w-full border border-gray-400 text-xs" style={{ borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '26%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '6%' }} />
+                    {daySubset.map((_, i) => <col key={i} style={{ width: `${dayColWidthPct}%` }} />)}
+                  </colgroup>
+                  <thead>
+                    <tr className="bg-gray-200">
+                      <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Medication</th>
+                      <th className="border border-gray-400 px-0.5 py-1.5 text-left font-semibold">Start/Stop</th>
+                      <th className="border border-gray-400 px-0.5 py-1.5 text-left font-semibold">Hour</th>
+                      {daySubset.map((d) => <th key={d} className="border border-gray-400 px-1 py-1.5 text-center font-semibold">{d}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {renderMarPrintRows(chunk, daySubset, useRowHeights ? startIndex : undefined, useRowHeights ? printRowHeights : undefined)}
+                  </tbody>
+                </table>
+              </div>
+            )
+          }
+
+          const printPages: { chunk: typeof medications; dayRange: 'first' | 'second'; startIndex: number }[] = []
+          let chunkStart = 0
+          medicationChunks.forEach((chunk) => {
+            printPages.push({ chunk, dayRange: 'first', startIndex: chunkStart })
+            printPages.push({ chunk, dayRange: 'second', startIndex: chunkStart })
+            chunkStart += chunk.length
+          })
+
+          return (
+            <>
+              {printPages.map(({ chunk, dayRange, startIndex }, idx) =>
+                printTablePage(chunk, dayRange, `mar-page-${idx}-${dayRange}`, idx === printPages.length - 1 && prnRecords.length === 0, startIndex)
+              )}
+              {prnRecords.length > 0 && (
+                <div style={{ pageBreakBefore: 'always' }} className="mt-6">
+                  {printHeader}
+                  <h2 className="text-xs font-bold text-gray-900 mb-2 mt-2">PRN Records</h2>
+                  <table className="min-w-full border border-gray-400 text-xs" style={{ borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr className="bg-gray-200">
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Entry #</th>
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Date</th>
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Time</th>
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Initials</th>
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Medication</th>
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Dosage</th>
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Reason/Indication</th>
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Result</th>
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Staff Signature</th>
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {prnRecords.map((prn) => (
+                        <tr key={prn.id}>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.entry_number ?? '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.date ? new Date(prn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.hour ? formatTimeDisplay(prn.hour) : '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5 align-middle">
+                            {prn.initials?.startsWith('data:image') ? (
+                              <img src={prn.initials} alt="Initials" style={{ maxHeight: '1.25em', maxWidth: '3em', display: 'inline-block', verticalAlign: 'middle' }} />
+                            ) : (
+                              prn.initials || '—'
+                            )}
+                          </td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.medication || '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.dosage || '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.reason || '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.result || '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5 align-middle">
+                            {prn.staff_signature?.startsWith('data:image') ? (
+                              <img src={prn.staff_signature} alt="Signature" style={{ maxHeight: '1.75em', maxWidth: '8em', display: 'inline-block', verticalAlign: 'middle' }} />
+                            ) : (
+                              prn.staff_signature || '—'
+                            )}
+                          </td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.note || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {/* Summary / Instructions / Legend page (print-only) */}
+              <div style={{ pageBreakBefore: 'always' }} className="mt-6">
+                {printHeader}
+                <div className="p-4 pt-8 text-xs pb-8 pt-6">
+                  <h2 className="text-xs font-bold text-gray-900 mb-2 mt-2">MAR Summary / Instructions / Legend</h2>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="space-y-1">
+                      <div>
+                        <span className="font-bold uppercase">Diagnosis:</span>{' '}
+                        <span>{marForm.diagnosis || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="font-bold uppercase">Allergies:</span>{' '}
+                        <span>{marForm.allergies || 'None'}</span>
+                      </div>
+                      <div>
+                        <span className="font-bold uppercase">Name:</span>{' '}
+                        <span>{marForm.patient_name}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div>
+                        <div className="font-bold uppercase">Diet / Special Instructions:</div>
+                        <div className="border border-gray-300 px-2 py-1 min-h-[40px]">
+                          {marForm.diet || 'N/A'}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="font-bold uppercase">Physician Name:</span>{' '}
+                        <span>{marForm.physician_name || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="font-bold uppercase">Phone Number:</span>{' '}
+                        <span>{marForm.physician_phone || 'N/A'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 pt-8">
+                    <div>
+                      <div className="font-bold uppercase mb-1">Comments:</div>
+                      <div className="border border-gray-300 px-2 py-1 min-h-[48px] whitespace-pre-wrap">
+                        {marForm.comments || 'No comments'}
+                      </div>
+                    </div>
+                    <div className="text-[0.7rem] text-gray-800 space-y-0.5">
+                      <div className="font-bold uppercase mb-1">Instructions:</div>
+                      <div>A. Put initials in appropriate box when medication is given.</div>
+                      <div>B. Circle initials when not given.</div>
+                      <div>C. State reason for refusal / omission on back of form.</div>
+                      <div>D. PRN Medications: Reason given and results must be noted on back of form.</div>
+                    </div>
+                    <div className="text-[0.7rem] text-gray-800 space-y-0.5">
+                      <div className="font-bold uppercase mb-1">Legend:</div>
+                      <div>
+                        <strong>◯</strong> = Not Given
+                      </div>
+                      <div>
+                        <strong>PRN</strong> = As Needed
+                      </div>
+                      <div>
+                        <strong>H</strong> = Held
+                      </div>
+                      <div>
+                        <strong>R</strong> = Refused
+                      </div>
+                      <div>
+                        <strong>DC</strong> = Discontinued
+                      </div>
+                      <div>
+                        <strong>NG</strong> = Not Given
+                      </div>
+                      <div>
+                        <strong>ABC</strong> = Absent From Care
+                      </div>
+                      <div>
+                        <strong>BDC</strong> = test
+                      </div>
+                      <div>
+                        <strong>DP</strong> = Day Program
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )
+        })()}
       </div>
 
       {/* Add Medication/Vitals Modal */}
