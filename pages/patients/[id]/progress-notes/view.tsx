@@ -4,6 +4,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
 import AppHeader from '../../../../components/AppHeader'
+import PatientStickyBar from '../../../../components/PatientStickyBar'
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../../lib/auth'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
@@ -650,23 +651,18 @@ export default function ProgressNotesPage() {
         }} />
       </Head>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <AppHeader
-          patientId={typeof router.query.id === 'string' ? router.query.id : Array.isArray(router.query.id) ? router.query.id[0] : undefined}
-          patientName={patient?.patient_name}
-        />
-        <div className="no-print sticky top-0 z-40 w-full bg-lasso-navy text-white border-b border-lasso-blue/30">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4 text-xs font-semibold">
-              <span>{patient?.patient_name || 'Unknown Patient'}</span>
-              <span>{patient?.date_of_birth ? new Date(patient.date_of_birth).toLocaleDateString() : '—'}</span>
-              <span>{patient?.sex || '—'}</span>
-            </div>
-            <div className="text-xs font-semibold">
-              <span className="uppercase tracking-wide text-lasso-blue/90 mr-2">Record No.</span>
-              <span>{patient?.record_number || '—'}</span>
-            </div>
-          </div>
+        <div className="no-print">
+          <AppHeader
+            patientId={typeof router.query.id === 'string' ? router.query.id : Array.isArray(router.query.id) ? router.query.id[0] : undefined}
+            patientName={patient?.patient_name}
+          />
         </div>
+        <PatientStickyBar
+          patientName={patient?.patient_name}
+          dateOfBirth={patient?.date_of_birth}
+          sex={patient?.sex}
+          recordNumber={patient?.record_number}
+        />
 
         <main className="no-print max-w-5xl mx-auto px-4 py-6">
           <Link
