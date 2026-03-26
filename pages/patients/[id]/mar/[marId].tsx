@@ -3633,7 +3633,31 @@ export default function ViewMARForm() {
                       </tr>
                     </thead>
                     <tbody>
-                      {prnRecords.map((prn) => (
+                      {prnRecords.map((prn) => {
+                        const hasTime = !!prn.hour
+                        const hasResult = !!prn.result?.trim()
+                        const hasInitials = !!prn.initials?.trim()
+                        const hasSignature = !!prn.staff_signature?.trim()
+                        const needsTimeAndResult = !hasTime || !hasResult
+                        const needsInitials = !hasInitials
+                        const nextStepText = !hasTime
+                          ? 'Set Time first'
+                          : !hasResult
+                            ? 'Set Result next'
+                            : !hasInitials
+                              ? 'Set Initials next'
+                              : !hasSignature
+                                ? 'Ready to Sign'
+                                : 'Signed'
+                        const initialsHelperText = !hasTime
+                          ? 'Set Time first'
+                          : !hasResult
+                            ? 'Set Result next'
+                            : hasInitials
+                              ? ''
+                              : 'Set Initials next'
+
+                        return (
                         <tr key={prn.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
                             {prn.entry_number || '—'}
@@ -3696,10 +3720,10 @@ export default function ViewMARForm() {
                           </td>
                           <td 
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
-                              readOnly ? '' : prn.hour && prn.result ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
+                              readOnly ? '' : hasTime && hasResult ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
                             }`}
                             onClick={readOnly ? undefined : () => {
-                              if (prn.hour && prn.result) {
+                              if (hasTime && hasResult) {
                                 if (!prn.initials) {
                                   let userInitials: string | null = null
                                   const si = userProfile?.staff_initials
@@ -3727,7 +3751,7 @@ export default function ViewMARForm() {
                                 handlePRNFieldEdit(prn.id, 'initials', prn.initials)
                               }
                             }}
-                            title={readOnly ? '' : !prn.hour || !prn.result ? 'Time and Result must be filled first' : ''}
+                            title={readOnly ? '' : initialsHelperText}
                           >
                             {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'initials' ? (
                               <div className="flex items-center gap-2">
@@ -3752,7 +3776,7 @@ export default function ViewMARForm() {
                               </div>
                             ) : prn.initials ? (
                               <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} />
-                            ) : !readOnly && prn.hour && prn.result && (userProfile?.staff_initials || userProfile?.full_name) ? (
+                            ) : !readOnly && hasTime && hasResult && (userProfile?.staff_initials || userProfile?.full_name) ? (
                               <button
                                 type="button"
                                 onClick={async (e) => {
@@ -3784,8 +3808,10 @@ export default function ViewMARForm() {
                               >
                                 Initial
                               </button>
-                            ) : prn.hour && prn.result ? (
+                            ) : hasTime && hasResult ? (
                               <span className="text-xs text-amber-600 dark:text-amber-400">Set initials in Profile</span>
+                            ) : !readOnly && initialsHelperText ? (
+                              <span className="text-xs text-amber-600 dark:text-amber-400">{initialsHelperText}</span>
                             ) : (
                               <span className="text-gray-400">—</span>
                             )}
@@ -3942,10 +3968,10 @@ export default function ViewMARForm() {
                           </td>
                           <td 
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
-                              readOnly ? '' : prn.initials ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50'
+                              readOnly ? '' : hasInitials ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50'
                             }`}
                             onClick={readOnly ? undefined : async (e) => {
-                              if (!prn.initials) return
+                              if (!hasTime || !hasResult || !hasInitials) return
                               e.stopPropagation()
                               if (prn.staff_signature && editingPRNField?.recordId !== prn.id) return
                               if (!prn.staff_signature && userProfile?.staff_signature) {
@@ -3959,7 +3985,7 @@ export default function ViewMARForm() {
                               }
                               if (prn.staff_signature) handlePRNFieldEdit(prn.id, 'staff_signature', prn.staff_signature)
                             }}
-                            title={readOnly ? '' : !prn.initials ? 'Initials must be set first' : !prn.staff_signature ? 'Click to sign (apply saved signature)' : ''}
+                            title={readOnly ? '' : (!hasTime || !hasResult || !hasInitials) ? 'Complete Time, Result, and Initials first' : !prn.staff_signature ? 'Click to sign (apply saved signature)' : ''}
                           >
                             {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'staff_signature' ? (
                               <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
@@ -4002,7 +4028,7 @@ export default function ViewMARForm() {
                                   </button>
                                 )}
                               </div>
-                            ) : !readOnly && userProfile?.staff_signature && prn.initials ? (
+                            ) : !readOnly && userProfile?.staff_signature && hasTime && hasResult && hasInitials ? (
                               <button
                                 type="button"
                                 onClick={async (ev) => {
@@ -4018,13 +4044,28 @@ export default function ViewMARForm() {
                               >
                                 Sign
                               </button>
+                            ) : !readOnly && (!hasTime || !hasResult || !hasInitials) ? (
+                              <button
+                                type="button"
+                                disabled
+                                title="Complete Time, Result, and Initials first"
+                                className="px-2 py-1 text-sm font-medium text-gray-400 border border-gray-300 dark:border-gray-600 rounded cursor-not-allowed"
+                              >
+                                Sign
+                              </button>
                             ) : (
                               <span className="text-gray-400">—</span>
                             )
                             })()}
+                            {!readOnly && (
+                              <div className={`mt-1 text-[11px] ${nextStepText === 'Signed' ? 'text-green-600 dark:text-green-400' : nextStepText === 'Ready to Sign' ? 'text-lasso-teal dark:text-lasso-blue' : 'text-amber-600 dark:text-amber-400'}`}>
+                                {nextStepText}
+                              </div>
+                            )}
                           </td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
