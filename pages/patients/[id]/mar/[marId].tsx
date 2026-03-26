@@ -84,7 +84,7 @@ import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../../../../lib/auth'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import type { UserProfile } from '../../../../types/auth'
-import type { MARForm, MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns, MARCustomLegend } from '../../../../types/mar'
+import type { MARForm, MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns, MARCustomLegend, MARPRNMedication } from '../../../../types/mar'
 import {
   DndContext,
   closestCenter,
@@ -206,6 +206,7 @@ export default function ViewMARForm() {
   const [medications, setMedications] = useState<MARMedication[]>([])
   const [administrations, setAdministrations] = useState<{ [medId: string]: { [day: number]: MARAdministration } }>({})
   const [prnRecords, setPrnRecords] = useState<MARPRNRecord[]>([])
+  const [prnMedicationList, setPrnMedicationList] = useState<MARPRNMedication[]>([])
   const [vitalSigns, setVitalSigns] = useState<{ [day: number]: MARVitalSigns }>({})
   const [staffInitials, setStaffInitials] = useState<{ [initials: string]: string }>({})
   const [dailyInitials, setDailyInitials] = useState<{ [day: number]: string }>({})
@@ -219,6 +220,7 @@ export default function ViewMARForm() {
   // Removed page navigation - everything shows in one table
   const [showAddMedModal, setShowAddMedModal] = useState(false)
   const [showAddPRNModal, setShowAddPRNModal] = useState(false)
+  const [showAddPRNRecordModal, setShowAddPRNRecordModal] = useState(false)
   const [showEditPatientInfoModal, setShowEditPatientInfoModal] = useState(false)
   const [showVitalSignsModal, setShowVitalSignsModal] = useState(false)
   const [editingCell, setEditingCell] = useState<{ medId: string; day: number } | null>(null)
@@ -406,6 +408,8 @@ export default function ViewMARForm() {
           setShowVitalSignsModal(false)
         } else if (showAddPRNModal) {
           setShowAddPRNModal(false)
+        } else if (showAddPRNRecordModal) {
+          setShowAddPRNRecordModal(false)
         } else if (showPRNNoteModal) {
           setShowPRNNoteModal(false)
           setEditingPRNNote(null)
@@ -434,7 +438,7 @@ export default function ViewMARForm() {
     return () => {
       window.removeEventListener('keydown', handleEscKey)
     }
-  }, [showAddMedModal, showEditPatientInfoModal, showVitalSignsModal, showAddPRNModal, showPRNNoteModal, showMedicationParameterModal, showMedicationNotesModal, showAdministrationNoteModal, showCustomLegendModal, showDeleteConfirmModal, showLeaveConfirmModal])
+  }, [showAddMedModal, showEditPatientInfoModal, showVitalSignsModal, showAddPRNModal, showAddPRNRecordModal, showPRNNoteModal, showMedicationParameterModal, showMedicationNotesModal, showAdministrationNoteModal, showCustomLegendModal, showDeleteConfirmModal, showLeaveConfirmModal])
 
   const loadUserProfile = async () => {
     const profile = await getCurrentUserProfile()
@@ -766,6 +770,61 @@ export default function ViewMARForm() {
     } catch (err: any) {
       setError(err.message || 'Failed to add PRN record')
       setTimeout(() => setError(''), 5000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const addPRNMedication = async (item: {
+    date: string
+    medication: string
+    dosage: string | null
+    reason: string
+  }) => {
+    if (!userProfile || !marFormId) return
+
+    try {
+      setSaving(true)
+      const { error } = await supabase
+        .from('mar_prn_medications')
+        .insert({
+          mar_form_id: marFormId,
+          date_added: item.date,
+          medication: item.medication.trim(),
+          dosage: item.dosage?.trim() || null,
+          reason: item.reason.trim(),
+          created_by: userProfile.id,
+        })
+
+      if (error) throw error
+      await loadMARForm()
+      setMessage('PRN medication added to list successfully!')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      if (err.message?.includes('does not exist')) {
+        setError('PRN list table is not available yet. Please run the latest database migration first.')
+      } else {
+        setError(err.message || 'Failed to add PRN medication to list')
+      }
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const updatePRNRecordBatch = async (recordId: string, updates: Partial<MARPRNRecord>) => {
+    try {
+      setSaving(true)
+      const { error } = await supabase
+        .from('mar_prn_records')
+        .update(updates)
+        .eq('id', recordId)
+      if (error) throw error
+      return true
+    } catch (err: any) {
+      setError(err.message || 'Failed to update PRN record')
+      setTimeout(() => setError(''), 5000)
+      return false
     } finally {
       setSaving(false)
     }
@@ -1173,6 +1232,15 @@ export default function ViewMARForm() {
         }
       }
       setEditingPRNValue(currentValue || userInitials)
+    } else if (field === 'medication') {
+      const record = prnRecords.find(r => r.id === recordId)
+      const matched = prnMedicationList.find(
+        (m) =>
+          m.medication === (record?.medication || '') &&
+          (m.dosage || '') === (record?.dosage || '') &&
+          m.reason === (record?.reason || '')
+      )
+      setEditingPRNValue(matched?.id || '')
     } else if (field === 'staff_signature' && currentValue?.startsWith('data:image')) {
       setEditingPRNValue('') // Don't put data URL in text input
     } else {
@@ -2040,6 +2108,24 @@ export default function ViewMARForm() {
 
       if (prnError) throw prnError
       setPrnRecords(prnData || [])
+
+      // Load PRN medication library (used by Add PRN Record medication dropdown)
+      const { data: prnMedsData, error: prnMedsError } = await supabase
+        .from('mar_prn_medications')
+        .select('*')
+        .eq('mar_form_id', marFormId)
+        .order('created_at', { ascending: false })
+
+      if (prnMedsError) {
+        // Allow app to function before migration is applied.
+        if (prnMedsError.message?.includes('does not exist')) {
+          setPrnMedicationList([])
+        } else {
+          throw prnMedsError
+        }
+      } else {
+        setPrnMedicationList((prnMedsData || []) as MARPRNMedication[])
+      }
 
       // Build staff initials legend from PRN records
       const initialsMap: { [initials: string]: string } = {}
@@ -3518,7 +3604,7 @@ export default function ViewMARForm() {
                 </h2>
                 {!readOnly && (
                   <button
-                    onClick={() => setShowAddPRNModal(true)}
+                    onClick={() => setShowAddPRNRecordModal(true)}
                     className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
                   >
                     + Add PRN Record
@@ -3710,19 +3796,38 @@ export default function ViewMARForm() {
                           >
                             {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'medication' ? (
                               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="text"
+                                <select
                                   value={editingPRNValue}
-                                  onChange={(e) => setEditingPRNValue(e.target.value)}
-                                  onBlur={() => handlePRNFieldSave(prn.id, 'medication')}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handlePRNFieldSave(prn.id, 'medication')
-                                    else if (e.key === 'Escape') handlePRNFieldCancel()
+                                  onChange={async (e) => {
+                                    const selectedId = e.target.value
+                                    const selected = prnMedicationList.find((m) => m.id === selectedId)
+                                    if (!selected) {
+                                      setEditingPRNValue(selectedId)
+                                      return
+                                    }
+                                    const updates = {
+                                      medication: selected.medication,
+                                      dosage: selected.dosage || null,
+                                      reason: selected.reason,
+                                    }
+                                    setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, ...updates } : r))
+                                    const ok = await updatePRNRecordBatch(prn.id, updates)
+                                    if (!ok) {
+                                      setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, medication: prn.medication, dosage: prn.dosage, reason: prn.reason } : r))
+                                    }
+                                    setEditingPRNField(null)
+                                    setEditingPRNValue('')
                                   }}
                                   autoFocus
-                                  placeholder="Medication name"
                                   className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
-                                />
+                                >
+                                  <option value="">Select PRN...</option>
+                                  {prnMedicationList.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.medication}{item.dosage ? ` (${item.dosage})` : ''}
+                                    </option>
+                                  ))}
+                                </select>
                                 <button type="button" onClick={() => handlePRNFieldCancel()} className="text-xs text-gray-500 hover:text-gray-700">✕</button>
                               </div>
                             ) : (
@@ -4450,8 +4555,41 @@ export default function ViewMARForm() {
         </div>
       )}
 
-      {/* Add PRN Record Modal */}
+      {/* Add PRN Medication (Library) Modal */}
       {showAddPRNModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Add PRN to List</h2>
+              <button
+                onClick={() => setShowAddPRNModal(false)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <AddPRNMedicationForm
+              onSubmit={async (prnData) => {
+                try {
+                  await addPRNMedication(prnData)
+                  setShowAddPRNModal(false)
+                } catch (err) {
+                  console.error('Error adding PRN medication:', err)
+                  // Don't close modal on error so user can fix and retry
+                }
+              }}
+              onCancel={() => setShowAddPRNModal(false)}
+              defaultDate={new Date().toISOString().split('T')[0]}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Add PRN Record Modal */}
+      {showAddPRNRecordModal && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
         >
@@ -4459,7 +4597,7 @@ export default function ViewMARForm() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 dark:text-white">Add PRN Record</h2>
               <button
-                onClick={() => setShowAddPRNModal(false)}
+                onClick={() => setShowAddPRNRecordModal(false)}
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                 aria-label="Close"
               >
@@ -4470,14 +4608,14 @@ export default function ViewMARForm() {
               onSubmit={async (prnData) => {
                 try {
                   await addPRNRecord(prnData)
-                  setShowAddPRNModal(false)
+                  setShowAddPRNRecordModal(false)
                 } catch (err) {
                   console.error('Error adding PRN record:', err)
-                  // Don't close modal on error so user can fix and retry
                 }
               }}
-              onCancel={() => setShowAddPRNModal(false)}
+              onCancel={() => setShowAddPRNRecordModal(false)}
               defaultDate={new Date().toISOString().split('T')[0]}
+              prnMedicationList={prnMedicationList}
             />
           </div>
         </div>
@@ -5448,21 +5586,17 @@ function EditableHourField({
   )
 }
 
-// Add PRN Record Form Component
-function AddPRNRecordForm({ 
+// Add PRN Medication (Library) Form Component
+function AddPRNMedicationForm({ 
   onSubmit, 
   onCancel,
   defaultDate
 }: { 
   onSubmit: (data: {
     date: string
-    hour: string | null
-    initials: string | null
     medication: string
     dosage: string | null
     reason: string
-    result: string | null
-    staffSignature: string | null
   }) => Promise<void>
   onCancel: () => void
   defaultDate: string
@@ -5486,13 +5620,9 @@ function AddPRNRecordForm({
     try {
       await onSubmit({
         date: formData.date,
-        hour: null,
         medication: formData.medication,
         dosage: formData.dosage.trim() || null,
-        reason: formData.reason,
-        result: null,
-        initials: null,
-        staffSignature: null
+        reason: formData.reason
       })
       // Reset form
       setFormData({
@@ -5575,6 +5705,176 @@ function AddPRNRecordForm({
         <button
           type="submit"
           disabled={isSubmitting}
+          className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isSubmitting ? 'Adding...' : 'Add PRN to List'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+// Add PRN Record Form Component
+function AddPRNRecordForm({ 
+  onSubmit, 
+  onCancel,
+  defaultDate,
+  prnMedicationList
+}: { 
+  onSubmit: (data: {
+    date: string
+    hour: string | null
+    initials: string | null
+    medication: string
+    dosage: string | null
+    reason: string
+    result: string | null
+    staffSignature: string | null
+  }) => Promise<void>
+  onCancel: () => void
+  defaultDate: string
+  prnMedicationList: MARPRNMedication[]
+}) {
+  const [formData, setFormData] = useState({
+    date: defaultDate,
+    medication: '',
+    dosage: '',
+    reason: '',
+    prnMedicationId: ''
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleSelectPRNMedication = (id: string) => {
+    const selected = prnMedicationList.find((m) => m.id === id)
+    if (!selected) {
+      setFormData(prev => ({ ...prev, prnMedicationId: '', medication: '', dosage: '', reason: '' }))
+      return
+    }
+    setFormData(prev => ({
+      ...prev,
+      prnMedicationId: id,
+      medication: selected.medication,
+      dosage: selected.dosage || '',
+      reason: selected.reason,
+    }))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!formData.date || !formData.medication || !formData.reason) {
+      alert('Please select a PRN from the list')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      await onSubmit({
+        date: formData.date,
+        hour: null,
+        medication: formData.medication,
+        dosage: formData.dosage.trim() || null,
+        reason: formData.reason,
+        result: null,
+        initials: null,
+        staffSignature: null
+      })
+      setFormData({
+        date: defaultDate,
+        medication: '',
+        dosage: '',
+        reason: '',
+        prnMedicationId: ''
+      })
+    } catch (err) {
+      console.error('Error submitting PRN record:', err)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Date *
+        </label>
+        <input
+          type="date"
+          value={formData.date}
+          onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+          required
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          PRN List
+        </label>
+        <select
+          value={formData.prnMedicationId}
+          onChange={(e) => handleSelectPRNMedication(e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+        >
+          <option value="">Select from PRN list</option>
+          {prnMedicationList.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.medication}{item.dosage ? ` (${item.dosage})` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Medication Name
+        </label>
+        <input
+          type="text"
+          value={formData.medication}
+          readOnly
+          placeholder="Select a PRN item above"
+          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Dosage
+        </label>
+        <input
+          type="text"
+          value={formData.dosage}
+          readOnly
+          placeholder="Auto-filled from PRN list"
+          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Reason/Indication
+        </label>
+        <input
+          type="text"
+          value={formData.reason}
+          readOnly
+          placeholder="Auto-filled from PRN list"
+          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400"
+        />
+      </div>
+
+      <div className="flex justify-end space-x-3 pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={isSubmitting || !formData.prnMedicationId}
           className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? 'Adding...' : 'Add PRN Record'}

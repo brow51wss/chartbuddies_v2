@@ -69,6 +69,18 @@ export interface MARPRNRecord {
   updated_at: string
 }
 
+export interface MARPRNMedication {
+  id: string
+  mar_form_id: string
+  date_added: string
+  medication: string
+  dosage: string | null
+  reason: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface MARVitalSigns {
   id: string
   mar_form_id: string
