@@ -654,6 +654,19 @@ export default function ProgressNotesPage() {
           patientId={typeof router.query.id === 'string' ? router.query.id : Array.isArray(router.query.id) ? router.query.id[0] : undefined}
           patientName={patient?.patient_name}
         />
+        <div className="no-print sticky top-0 z-40 w-full bg-lasso-navy text-white border-b border-lasso-blue/30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4 text-xs font-semibold">
+              <span>{patient?.patient_name || 'Unknown Patient'}</span>
+              <span>{patient?.date_of_birth ? new Date(patient.date_of_birth).toLocaleDateString() : '—'}</span>
+              <span>{patient?.sex || '—'}</span>
+            </div>
+            <div className="text-xs font-semibold">
+              <span className="uppercase tracking-wide text-lasso-blue/90 mr-2">Record No.</span>
+              <span>{patient?.record_number || '—'}</span>
+            </div>
+          </div>
+        </div>
 
         <main className="no-print max-w-5xl mx-auto px-4 py-6">
           <Link

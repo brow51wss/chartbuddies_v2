@@ -2415,6 +2415,19 @@ export default function ViewMARForm() {
               patientName={marForm?.patient_name}
             />
         </div>
+        <div className="no-print sticky top-0 z-40 w-full bg-lasso-navy text-white border-b border-lasso-blue/30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4 text-xs font-semibold">
+              <span>{marForm?.patient_name || 'Unknown Patient'}</span>
+              <span>{marForm?.date_of_birth ? new Date(marForm.date_of_birth).toLocaleDateString() : '—'}</span>
+              <span>{marForm?.sex || '—'}</span>
+            </div>
+            <div className="text-xs font-semibold">
+              <span className="uppercase tracking-wide text-lasso-blue/90 mr-2">Record No.</span>
+              <span>{marForm?.record_number || '—'}</span>
+            </div>
+          </div>
+        </div>
 
         {/* Main Content - 95vw with min 1000px so the white MAR card uses almost the full screen */}
         <div className="no-print w-[95vw] min-w-[1000px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -2528,7 +2541,7 @@ export default function ViewMARForm() {
               {/* Medication Administration Table - sticky header OUTSIDE overflow so it sticks to viewport; body has overflow-x for horizontal scroll */}
               <div className="relative overflow-visible">
                 {/* Sticky header: no overflow on sticky div so it sticks to viewport; inner div handles horizontal scroll sync */}
-                <div className="sticky top-0 z-30 bg-white dark:bg-gray-800 overflow-visible" style={{ marginBottom: -1 }}>
+                <div className="sticky top-[35px] z-30 bg-white dark:bg-gray-800 overflow-visible" style={{ marginBottom: -1 }}>
                   <div ref={marHeaderScrollRef} className="overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <table className="min-w-full border border-gray-300 dark:border-gray-600 border-b-0" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
                     <colgroup>
