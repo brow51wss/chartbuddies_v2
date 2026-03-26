@@ -112,7 +112,22 @@ Only the homepage (`/`) items shown in screenshots are listed here.
 
 ---
 
-## 5) Known/Observed Errors From Current Session (Reference)
+## 5) Product / Development Tasks (Ordered)
+
+Follow these in order. Do not start the next item until the current item is confirmed complete.
+
+1. Restore the ability to edit patient data, especially patient names/spelling, since that was lost when the admissions form editing was removed.
+2. Add the patient's name in another visible area of the MAR screen so users can more easily see who they are working on while navigating back and forth.
+3. Fix the medication date-editing bug where saved dates shift backward by one day (example: March 23 saves as March 22).
+4. Add support for multiple times per day for a single vital entry, similar to meds having multiple times; each vital should still remain its own item (blood pressure and blood sugar separate), but each can have multiple times in a day.
+5. Rework the PRN workflow so “Add PRN Record” creates a reusable PRN medication list/database instead of separate rows, so users can select existing PRNs (for example, Tylenol) instead of retyping medication and dosage every time.
+6. Ensure PRNs feed into Progress Notes, not just the MAR table.
+7. Add clearer visual guidance/validation for PRN completion, especially when users try to sign before completing required fields (such as time and initials), with feedback indicating they must pick a time first before signing.
+8. Rename the “Repair Order” button to something clearer, because it is not an undo button and “order” is misleading; it is only meant to fix display/order when drag-and-drop gets messed up.
+
+---
+
+## 6) Known/Observed Errors From Current Session (Reference)
 
 These are from recent local/dev observations and prior troubleshooting. Treat as reference until confirmed on live.
 
@@ -154,7 +169,7 @@ These are from recent local/dev observations and prior troubleshooting. Treat as
 
 ---
 
-## 6) Triage Checklist (Per Live Issue)
+## 7) Triage Checklist (Per Live Issue)
 
 For each live incident, capture:
 
@@ -174,7 +189,7 @@ Then classify:
 
 ---
 
-## 7) Reproduction & Fix Workflow
+## 8) Reproduction & Fix Workflow
 
 1. Reproduce on hotfix branch.
 2. Add a short “before” note under issue row.
@@ -188,7 +203,7 @@ Then classify:
 
 ---
 
-## 8) Regression Checklist (Minimum)
+## 9) Regression Checklist (Minimum)
 
 Run after all hotfixes:
 
@@ -202,7 +217,7 @@ Run after all hotfixes:
 
 ---
 
-## 9) Deployment + Monitoring
+## 10) Deployment + Monitoring
 
 After deploy:
 
@@ -213,7 +228,7 @@ After deploy:
 
 ---
 
-## 10) Resume Billing Work (After Stabilization)
+## 11) Resume Billing Work (After Stabilization)
 
 Only after all P0/P1 live issues are closed:
 
@@ -224,7 +239,7 @@ Only after all P0/P1 live issues are closed:
 
 ---
 
-## 11) Session Notes
+## 12) Session Notes
 
 - Billing/e-commerce work is intentionally paused until live stability is restored.
 - This doc is the source of truth for hotfix execution and issue status.

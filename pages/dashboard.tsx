@@ -20,9 +20,36 @@ const parsePatientName = (fullName: string) => {
   return { firstName, lastName }
 }
 
+const parsePatientNameParts = (fullName: string) => {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return { firstName: '', middleName: '', lastName: '' }
+  if (parts.length === 1) return { firstName: parts[0], middleName: '', lastName: '' }
+  if (parts.length === 2) return { firstName: parts[0], middleName: '', lastName: parts[1] }
+  return {
+    firstName: parts[0],
+    middleName: parts.slice(1, -1).join(' '),
+    lastName: parts[parts.length - 1]
+  }
+}
+
+interface EditPatientFormState {
+  firstName: string
+  middleName: string
+  lastName: string
+  dateOfBirth: string
+  sex: Patient['sex'] | ''
+  diagnosis: string
+  diet: string
+  allergies: string
+  physicianName: string
+  physicianPhone: string
+  facilityName: string
+}
+
 export default function Dashboard() {
   const router = useRouter()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [userFacilityName, setUserFacilityName] = useState('')
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -30,6 +57,10 @@ export default function Dashboard() {
   const [sortColumn, setSortColumn] = useState<SortColumn>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [showNameSortMenu, setShowNameSortMenu] = useState(false)
+  const [editingPatientId, setEditingPatientId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<EditPatientFormState | null>(null)
+  const [editError, setEditError] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
   const nameSortRef = useRef<HTMLTableCellElement>(null)
   const { isReadOnly } = useReadOnly()
 
@@ -139,6 +170,17 @@ export default function Dashboard() {
         return
       }
       setUserProfile(profile)
+
+      if (profile.hospital_id) {
+        const { data: hospital } = await supabase
+          .from('hospitals')
+          .select('name')
+          .eq('id', profile.hospital_id)
+          .single()
+        setUserFacilityName(hospital?.name ?? '')
+      } else {
+        setUserFacilityName('')
+      }
 
       // Load patients based on role
       await loadPatients(profile)
@@ -298,6 +340,121 @@ export default function Dashboard() {
       console.error('Error deleting patient:', err)
       setError(err.message || 'Failed to delete patient')
       setTimeout(() => setError(''), 5000)
+    }
+  }
+
+  const openEditPatientModal = (patient: Patient) => {
+    const nameParts = parsePatientNameParts(patient.patient_name)
+    setEditingPatientId(patient.id)
+    setEditError('')
+    setEditForm({
+      firstName: nameParts.firstName,
+      middleName: nameParts.middleName,
+      lastName: nameParts.lastName,
+      dateOfBirth: patient.date_of_birth?.slice(0, 10) || '',
+      sex: patient.sex,
+      diagnosis: patient.diagnosis || '',
+      diet: patient.diet || '',
+      allergies: patient.allergies || '',
+      physicianName: patient.physician_name || '',
+      physicianPhone: patient.physician_phone || '',
+      facilityName: userFacilityName || patient.facility_name || ''
+    })
+  }
+
+  const closeEditPatientModal = () => {
+    if (savingEdit) return
+    setEditingPatientId(null)
+    setEditForm(null)
+    setEditError('')
+  }
+
+  const handleEditFieldChange = (field: keyof EditPatientFormState, value: string) => {
+    setEditForm(prev => (prev ? { ...prev, [field]: value } : prev))
+  }
+
+  const handleSavePatientEdits = async () => {
+    if (!editingPatientId || !editForm || !userProfile) return
+    if (userProfile.role !== 'head_nurse' && userProfile.role !== 'superadmin') {
+      setEditError('You do not have permission to edit patient details.')
+      return
+    }
+
+    const firstName = editForm.firstName.trim()
+    const middleName = editForm.middleName.trim()
+    const lastName = editForm.lastName.trim()
+    const patientName = [firstName, middleName, lastName].filter(Boolean).join(' ').trim()
+
+    if (!firstName || !lastName) {
+      setEditError('First name and last name are required.')
+      return
+    }
+    if (!patientName) {
+      setEditError('Patient name cannot be blank.')
+      return
+    }
+    if (!editForm.dateOfBirth) {
+      setEditError('Date of birth is required.')
+      return
+    }
+    if (!editForm.sex) {
+      setEditError('Sex is required.')
+      return
+    }
+    setSavingEdit(true)
+    setEditError('')
+    try {
+      const payload = {
+        patient_name: patientName,
+        date_of_birth: editForm.dateOfBirth,
+        sex: editForm.sex as Patient['sex'],
+        diagnosis: editForm.diagnosis.trim() || null,
+        diet: editForm.diet.trim() || null,
+        allergies: editForm.allergies.trim() || 'None',
+        physician_name: editForm.physicianName.trim() || 'TBD',
+        physician_phone: editForm.physicianPhone.trim() || null,
+        facility_name: editForm.facilityName.trim() || null
+      }
+
+      const { data, error: updateError } = await supabase
+        .from('patients')
+        .update(payload)
+        .eq('id', editingPatientId)
+        .select('*')
+        .single()
+
+      if (updateError) throw updateError
+      if (!data) throw new Error('No updated patient returned from server.')
+
+      // Keep existing MAR records aligned with patient demographic edits.
+      const marSyncPayload = {
+        patient_name: payload.patient_name,
+        date_of_birth: payload.date_of_birth,
+        sex: payload.sex,
+        diagnosis: payload.diagnosis,
+        diet: payload.diet,
+        allergies: payload.allergies,
+        physician_name: payload.physician_name,
+        physician_phone: payload.physician_phone,
+        facility_name: userFacilityName || payload.facility_name
+      }
+      const { error: marSyncError } = await supabase
+        .from('mar_forms')
+        .update(marSyncPayload)
+        .eq('patient_id', editingPatientId)
+
+      if (marSyncError) {
+        throw new Error(`Patient saved, but failed to sync MAR forms: ${marSyncError.message}`)
+      }
+
+      setPatients(prev => prev.map(p => (p.id === editingPatientId ? { ...p, ...data } : p)))
+      setMessage('Patient updated.')
+      setTimeout(() => setMessage(''), 3000)
+      closeEditPatientModal()
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to update patient.')
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -505,6 +662,17 @@ export default function Dashboard() {
                                   </Link>
                                   {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && !isReadOnly && (
                                     <button
+                                      onClick={() => openEditPatientModal(patient)}
+                                      className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-lasso-blue dark:text-gray-300 dark:hover:text-lasso-blue transition-colors"
+                                      title="Edit patient details"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                      </svg>
+                                    </button>
+                                  )}
+                                  {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && !isReadOnly && (
+                                    <button
                                       onClick={() => handleDeletePatient(patient.id, patient.patient_name)}
                                       className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
                                       title="Delete patient"
@@ -525,6 +693,120 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+
+            {editingPatientId && editForm && (
+              <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="edit-patient-title">
+                <div className="w-full max-w-3xl bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+                  <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h3 id="edit-patient-title" className="text-lg font-semibold text-gray-900 dark:text-white">Edit Patient Details</h3>
+                    <button
+                      type="button"
+                      onClick={closeEditPatientModal}
+                      disabled={savingEdit}
+                      className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-50"
+                      aria-label="Close"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="px-6 py-4 max-h-[70vh] overflow-y-auto space-y-4">
+                    {editError && (
+                      <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">
+                        {editError}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">First Name *</label>
+                        <input value={editForm.firstName} onChange={(e) => handleEditFieldChange('firstName', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Middle Name</label>
+                        <input value={editForm.middleName} onChange={(e) => handleEditFieldChange('middleName', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Last Name *</label>
+                        <input value={editForm.lastName} onChange={(e) => handleEditFieldChange('lastName', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Date of Birth *</label>
+                        <input type="date" value={editForm.dateOfBirth} onChange={(e) => handleEditFieldChange('dateOfBirth', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Sex *</label>
+                        <select value={editForm.sex} onChange={(e) => handleEditFieldChange('sex', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                          <option value="">Select</option>
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Record Number</label>
+                        <input value={patients.find(p => p.id === editingPatientId)?.record_number || ''} readOnly className="w-full border border-gray-200 dark:border-gray-700 rounded px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 cursor-not-allowed" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Diagnosis</label>
+                        <input value={editForm.diagnosis} onChange={(e) => handleEditFieldChange('diagnosis', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Diet</label>
+                        <input value={editForm.diet} onChange={(e) => handleEditFieldChange('diet', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Allergies</label>
+                      <input value={editForm.allergies} onChange={(e) => handleEditFieldChange('allergies', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Physician/APRN or Clinic</label>
+                        <input value={editForm.physicianName} onChange={(e) => handleEditFieldChange('physicianName', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Physician Phone</label>
+                        <input value={editForm.physicianPhone} onChange={(e) => handleEditFieldChange('physicianPhone', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Facility Name</label>
+                        <input value={userFacilityName || editForm.facilityName} readOnly className="w-full border border-gray-200 dark:border-gray-700 rounded px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 cursor-not-allowed" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={closeEditPatientModal}
+                      disabled={savingEdit}
+                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSavePatientEdits}
+                      disabled={savingEdit}
+                      className="px-4 py-2 bg-lasso-teal text-white rounded text-sm font-medium hover:bg-lasso-blue disabled:opacity-60"
+                    >
+                      {savingEdit ? 'Saving...' : 'Save changes'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
         </main>
       </div>
     </ProtectedRoute>
