@@ -2561,7 +2561,7 @@ export default function ViewMARForm() {
                       className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 text-sm font-medium disabled:opacity-50"
                       title="Fix row order if medications with multiple times got separated"
                     >
-                      🔧 Repair Order
+                      🔧 Repair Table View
                     </button>
                   </>
                 )}
