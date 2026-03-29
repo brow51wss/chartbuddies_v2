@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react'
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -123,12 +123,15 @@ function SortableTableRow({
   className,
   onMouseMove,
   onMouseLeave,
+  sortableDisabled,
 }: { 
   id: string
   children: React.ReactNode
   className?: string
   onMouseMove?: (e: React.MouseEvent<HTMLTableRowElement>) => void
   onMouseLeave?: () => void
+  /** When true, row is not draggable (e.g. MAR table filtered to a subset). */
+  sortableDisabled?: boolean
 }) {
   const {
     attributes,
@@ -138,7 +141,7 @@ function SortableTableRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id })
+  } = useSortable({ id, disabled: sortableDisabled })
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -171,9 +174,9 @@ function useDragHandle() {
 }
 
 // Drag handle button component that uses context
-function DragHandleButton({ medId, readOnly }: { medId: string; readOnly?: boolean }) {
+function DragHandleButton({ medId, readOnly, reorderLocked }: { medId: string; readOnly?: boolean; reorderLocked?: boolean }) {
   const dragContext = useDragHandle()
-  if (readOnly) return null
+  if (readOnly || reorderLocked) return null
   if (!dragContext) return null
   
   const { listeners, attributes, setActivatorNodeRef, isDragging } = dragContext
@@ -209,6 +212,15 @@ export default function ViewMARForm() {
   const patientFormId = Array.isArray(patientId) ? patientId[0] : patientId
   const [marForm, setMarForm] = useState<MARForm | null>(null)
   const [medications, setMedications] = useState<MARMedication[]>([])
+  /** On-screen MAR grid only; print always uses full `medications`. PRN-only filter not implemented yet. */
+  type MarTableViewFilter = 'all' | 'routine_meds' | 'vitals_only'
+  const [marTableViewFilter, setMarTableViewFilter] = useState<MarTableViewFilter>('all')
+  const displayMedications = useMemo(() => {
+    const isVitalsRow = (m: MARMedication) => m.medication_name === 'VITALS' || m.notes === 'Vital Signs Entry'
+    if (marTableViewFilter === 'routine_meds') return medications.filter((m) => !isVitalsRow(m))
+    if (marTableViewFilter === 'vitals_only') return medications.filter((m) => isVitalsRow(m))
+    return medications
+  }, [medications, marTableViewFilter])
   const [administrations, setAdministrations] = useState<{ [medId: string]: { [day: number]: MARAdministration } }>({})
   const [prnRecords, setPrnRecords] = useState<MARPRNRecord[]>([])
   const [prnMedicationList, setPrnMedicationList] = useState<MARPRNMedication[]>([])
@@ -232,6 +244,7 @@ export default function ViewMARForm() {
   const [editingCellValue, setEditingCellValue] = useState<string>('') // Store the value being edited
   const { isReadOnly } = useReadOnly()
   const readOnly = isReadOnly
+  const marRowReorderLocked = readOnly || marTableViewFilter !== 'all'
   // Always allow editing of day cells (unless read-only view)
   const [isEditingBase] = useState(true)
   const isEditing = isEditingBase && !readOnly
@@ -1107,6 +1120,13 @@ export default function ViewMARForm() {
     const lastDay = new Date(y, m, 0).getDate()
     const max = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
     return { min, max }
+  }
+
+  /** Human-readable MAR period; never editable in UI (month/year is fixed when the MAR is created). */
+  const formatMarMonthYearDisplay = (monthYear: string): string => {
+    const parsed = parseMARMonthYear(monthYear)
+    if (!parsed) return monthYear?.trim() || '—'
+    return new Date(parsed.y, parsed.m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
   }
 
   const isPrnDateInMarMonth = (dateStr: string | null | undefined, monthYear: string | undefined): boolean => {
@@ -2679,26 +2699,10 @@ export default function ViewMARForm() {
               {/* Form Header */}
               <div className="mb-6 border-b-2 border-gray-300 dark:border-gray-600 pb-4">
                 <div className="flex justify-between items-start">
-                  <div className="flex items-center space-x-4">
-                    <span className="text-2xl">T</span>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={marForm.month_year}
-                        onChange={(e) => {
-                          // Update month_year
-                          supabase
-                            .from('mar_forms')
-                            .update({ month_year: e.target.value })
-                            .eq('id', marFormId)
-                          setMarForm({ ...marForm, month_year: e.target.value })
-                        }}
-                        placeholder="MO/YR"
-                        className="px-2 py-1 border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                      />
-                    ) : (
-                      <span className="text-lg font-medium">{marForm.month_year}</span>
-                    )}
+                  <div className="flex items-center">
+                    <span className="text-lg font-medium text-gray-800 dark:text-white select-none cursor-default">
+                      {formatMarMonthYearDisplay(marForm.month_year)}
+                    </span>
                   </div>
                   <div>
                     <p className="text-lg font-medium text-gray-800 dark:text-white">
@@ -2706,6 +2710,31 @@ export default function ViewMARForm() {
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">From your profile (assigned facility)</p>
                   </div>
+                </div>
+                <div
+                  className="mt-4 flex flex-wrap items-center gap-2"
+                  role="group"
+                  aria-label="Filter MAR table rows"
+                >
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mr-1">Show</span>
+                  {([
+                    { id: 'all' as const, label: 'All' },
+                    { id: 'routine_meds' as const, label: 'Routine meds' },
+                    { id: 'vitals_only' as const, label: 'Vitals' },
+                  ]).map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setMarTableViewFilter(id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                        marTableViewFilter === id
+                          ? 'bg-lasso-teal text-white border-lasso-teal shadow-sm'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -2760,20 +2789,24 @@ export default function ViewMARForm() {
                     onDragEnd={handleDragEnd}
                   >
                     <SortableContext
-                      items={medications.map(m => m.id)}
+                      items={displayMedications.map(m => m.id)}
                       strategy={verticalListSortingStrategy}
                     >
                       <tbody>
-                    {medications.length === 0 ? (
+                    {displayMedications.length === 0 ? (
                       <tr>
-                        <td colSpan={35} className="border border-gray-300 dark:border-gray-600 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                          No medications recorded. Click "+ Medication" to add one.
+                        <td colSpan={3 + days.length} className="border border-gray-300 dark:border-gray-600 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                          {medications.length === 0
+                            ? 'No medications recorded. Click "+ Medication" to add one.'
+                            : marTableViewFilter === 'routine_meds'
+                              ? 'No routine medications in this view. Choose All or Vitals.'
+                              : 'No vital signs rows in this view. Choose All or Routine meds.'}
                         </td>
                       </tr>
                     ) : (() => {
                       // Group medications by name, dosage, and dates to calculate rowSpan
-                      const medicationGroups: { [key: string]: { meds: typeof medications, rowSpan: number } } = {}
-                      medications.forEach((med) => {
+                      const medicationGroups: { [key: string]: { meds: typeof displayMedications, rowSpan: number } } = {}
+                      displayMedications.forEach((med) => {
                         const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
                         const groupKey = isVitalsEntry 
                           ? `vitals_${med.id}`
@@ -2796,7 +2829,7 @@ export default function ViewMARForm() {
                         }
                       })
                       
-                      return medications.map((med, medIndex) => {
+                      return displayMedications.map((med, medIndex) => {
                         const medAdmin = administrations[med.id] || {}
                         const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
                         const groupKey = isVitalsEntry 
@@ -2811,6 +2844,7 @@ export default function ViewMARForm() {
                           <SortableTableRow 
                             key={med.id}
                             id={med.id}
+                            sortableDisabled={marRowReorderLocked}
                             className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isVitalsEntry ? 'bg-lasso-blue/10 dark:bg-lasso-blue/20' : ''}`}
                             onMouseMove={(e) => {
                               // Use medication cell rect when hovered (spans multiple rows) so Add below triggers only near actual bottom; else use row rect
@@ -2886,7 +2920,7 @@ export default function ViewMARForm() {
                                 <div className="flex gap-2 group/medcell">
                                   {/* Left column: drag handle + action icons (vertically stacked, aligned) */}
                                   <div className="flex flex-col items-start gap-1 shrink-0">
-                                    <DragHandleButton medId={med.id} readOnly={readOnly} />
+                                    <DragHandleButton medId={med.id} readOnly={readOnly} reorderLocked={marRowReorderLocked} />
                                     {!readOnly && (
                                     <div className="flex flex-col items-start gap-1">
                                       {/* Add parameter - first (always showing) */}
@@ -4242,7 +4276,7 @@ export default function ViewMARForm() {
                 <strong>Patient:</strong> {marForm.patient_name}
                 &nbsp;|&nbsp; <strong>DOB:</strong> {formatDOB(marForm.date_of_birth)}
                 &nbsp;|&nbsp; <strong>Sex:</strong> {marForm.sex ?? '—'}
-                &nbsp;|&nbsp; <strong>Month/Year:</strong> {marForm.month_year}
+                &nbsp;|&nbsp; <strong>Month/Year:</strong> {formatMarMonthYearDisplay(marForm.month_year)}
                 &nbsp;|&nbsp; <strong>Facility:</strong> {facilityNameFromProfile ?? marForm.facility_name ?? 'N/A'}
               </p>
             </div>
