@@ -697,14 +697,14 @@ export default function ProgressNotesPage() {
               onClick={() => setActiveTab('page1')}
               className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'page1' ? 'bg-lasso-teal text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}`}
             >
-              Page 1 – Notes & Addendum
+              Notes & Addendum
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('page2')}
               className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'page2' ? 'bg-lasso-teal text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}`}
             >
-              Page 2 – Monthly Summary
+              Monthly Summary
             </button>
           </div>
 
@@ -932,7 +932,7 @@ export default function ProgressNotesPage() {
           {activeTab === 'page2' && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="px-6 py-4 space-y-6">
-              <h2 className="text-center font-bold text-gray-900 dark:text-white">PROGRESS NOTES – Page 2 (Monthly Summary)</h2>
+              <h2 className="text-center font-bold text-gray-900 dark:text-white">MONTHLY SUMMARY</h2>
 
               {/* Month/Year: when viewing a specific month (progress note selected), show read-only; otherwise editable */}
               <div className="flex flex-wrap items-center gap-4">
@@ -1278,7 +1278,7 @@ export default function ProgressNotesPage() {
 
         {/* Print view: Page 2 Monthly Summary. Hidden on screen, shown when printing with body.print-view-page2. */}
         <div className="progress-notes-page2-print-view p-6 text-sm text-gray-900" style={{ display: 'none' }}>
-          <h1 className="text-lg font-bold mb-2">PROGRESS NOTES – Page 2 (Monthly Summary)</h1>
+          <h1 className="text-lg font-bold mb-2">MONTHLY SUMMARY</h1>
           <p className="mb-4"><strong>Month / Year:</strong> {formatMonthYearDisplay(monthFilterKey || summaryMonthYear)}</p>
           <p className="mb-4"><strong>Resident:</strong> {patient?.patient_name ?? '—'} | <strong>ARCH:</strong> {facilityName || '—'} | <strong>Care Giver:</strong> {userProfile?.full_name ?? '—'}</p>
           {(() => {

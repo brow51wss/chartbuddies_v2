@@ -121,7 +121,7 @@ Follow these in order. Do not start the next item until the current item is conf
 3. **[PENDING / MONITORING]** Medication date saves one day early — watch for repro.
 4. **[PENDING]** Multiple administration times per day for a single **vital** row.
 5. **[DONE]** PRN library + PRN records selection workflow (not free-typing every row).
-6. **[PENDING]** PRN activity feeds **Progress Notes**, not only MAR.
+6. **[DONE]** PRN activity feeds **Progress Notes** (signed PRNs only): linked `progress_note_entries` row, sync on save/update; migrations **064**/**065** for column + backfill; PRN **date** constrained to MAR month.
 7. **[DONE]** Stepwise PRN completion guidance (time → result → initials → sign).
 8. **[DONE]** Rename “Repair Order” → clearer label (e.g. **Repair Table View**).
 
@@ -140,7 +140,7 @@ Additional items from team notes. **Not** sequenced with §5 items 1–8 above; 
 7. **Design change:** PRNs as **main MAR rows**, sortable like other rows.
 8. **Add above/below** row insertion for PRNs like meds/vitals.
 9. **Remove** separate PRN record section once integrated.
-10. Auto PRN lines in Progress Notes (**pending**).
+10. Auto PRN lines in Progress Notes (**done** — signed PRNs only; see §5 #6).
 11. **Filters:** PRNs only / vitals only / routine meds only.
 12. **PRN refused** → document in Progress Notes, not as med admin.
 13. **Decide** how PRN auto-entries sort vs. full note timeline.
