@@ -132,10 +132,10 @@ Follow these in order. Do not start the next item until the current item is conf
 Additional items from team notes. **Not** sequenced with §5 items 1–8 above; prioritize as agreed.
 
 1. **DONE** — Standardize **Progress Notes** labels: tab buttons **Notes & Addendum** / **Monthly Summary** (no “Page 1/2”); Monthly Summary screen/print title **MONTHLY SUMMARY**. Shared **PatientStickyBar**: **Name**, **DOB**, **Sex** labels (same accent as Record No.).
-2. **DONE** — Physician/APRN: **+ Add** last in dropdown; custom field **Add New** only when selected; **Physician/APRN** column + print column show `physician_name` per note.
+2. **DONE** — Physician/APRN or Clinic: **+ Add** / **Add New** pattern; column + print use `physician_name` per note; **Existing notes** section has its own header row (Date / Physician/APRN or Clinic / Notes / Signature); TBD shows blank; debounced patient sync uses empty string (NOT NULL). PRN → Progress Notes: new sync omits **Initials** / **Documentation** lines (signature column is enough); UI strips legacy tail for `source_mar_prn_record_id` rows.
 3. Re-test MAR date-edit bug + cache hypothesis; second tester.
 4. Multi-time vitals (same theme as task 4 above).
-5. More **linear** PRN UX: date → med → dose → reason → time → result → initials → signature.
+5. **DONE** — **Linear** PRN UX (MAR PRN Records table): columns ordered **Entry # → Date → Medication → Dosage → Reason/Indication → Time → Result → Initials → Signature** (on-screen + print; print keeps **Note** last). **Rule 1:** if **Time** is not set, **Result** is disabled with same UX as **Initials** / **Signature** prerequisites (`Set Time first`, non-clickable, muted). Further linear nudges (modal order, extra copy) remain optional.
 6. **Prescription/start date** on PRN definitions.
 7. **Design change:** PRNs as **main MAR rows**, sortable like other rows.
 8. **Add above/below** row insertion for PRNs like meds/vitals.

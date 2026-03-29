@@ -3714,13 +3714,13 @@ export default function ViewMARForm() {
                       <tr className="bg-gray-100 dark:bg-gray-700">
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Entry #</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Date</th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Time</th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Initials</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Medication</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Dosage</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Reason/Indication</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Time</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Result</th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Staff Signature</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Initials</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Signature</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3748,6 +3748,7 @@ export default function ViewMARForm() {
                             : hasInitials
                               ? ''
                               : 'Set Initials next'
+                        const resultHelperText = !hasTime ? 'Set Time first' : ''
 
                         return (
                         <tr key={prn.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -3778,136 +3779,6 @@ export default function ViewMARForm() {
                               </div>
                             ) : (
                               new Date(prn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                            )}
-                          </td>
-                          <td 
-                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
-                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'hour', prn.hour) : undefined}
-                          >
-                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'hour' ? (
-                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                <TimeInput
-                                  value={editingPRNValue}
-                                  onChange={async (newTime) => {
-                                    setEditingPRNValue(newTime)
-                                    const valueToSave = newTime.trim() || null
-                                    const ok = await updatePRNRecord(prn.id, 'hour', valueToSave)
-                                    if (ok) {
-                                      setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, hour: valueToSave } as MARPRNRecord : r))
-                                    }
-                                    setEditingPRNField(null)
-                                    setEditingPRNValue('')
-                                  }}
-                                  compact
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handlePRNFieldCancel()}
-                                  className="text-xs text-gray-500 hover:text-gray-700"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ) : (
-                              <span>{prn.hour ? formatTimeDisplay(prn.hour) : '—'}</span>
-                            )}
-                          </td>
-                          <td 
-                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
-                              readOnly ? '' : hasTime && hasResult ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
-                            }`}
-                            onClick={readOnly ? undefined : () => {
-                              if (hasTime && hasResult) {
-                                if (!prn.initials) {
-                                  let userInitials: string | null = null
-                                  const si = userProfile?.staff_initials
-                                  // Never send data URL to DB (initials column is VARCHAR(10)); use text or derive from name
-                                  if (si && typeof si === 'string' && !si.startsWith('data:image') && si.trim().length > 0) {
-                                    userInitials = si.trim().toUpperCase()
-                                  }
-                                  if (!userInitials && userProfile?.full_name) {
-                                    const names = userProfile.full_name.trim().split(/\s+/)
-                                    if (names.length >= 2) {
-                                      userInitials = (names[0][0] + names[names.length - 1][0]).toUpperCase()
-                                    } else if (names.length === 1 && names[0].length > 0) {
-                                      userInitials = names[0][0].toUpperCase()
-                                    }
-                                  }
-                                  const safeInitials = userInitials ? userInitials.slice(0, 10) : null
-                                  if (safeInitials) {
-                                    setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, initials: safeInitials } : r))
-                                    updatePRNRecord(prn.id, 'initials', safeInitials).then(ok => {
-                                      if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, initials: prn.initials } : r))
-                                    })
-                                    return
-                                  }
-                                }
-                                handlePRNFieldEdit(prn.id, 'initials', prn.initials)
-                              }
-                            }}
-                            title={readOnly ? '' : initialsHelperText}
-                          >
-                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'initials' ? (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={editingPRNValue}
-                                  onChange={(e) => setEditingPRNValue(e.target.value.toUpperCase())}
-                                  onBlur={() => handlePRNFieldSave(prn.id, 'initials')}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      handlePRNFieldSave(prn.id, 'initials')
-                                    } else if (e.key === 'Escape') {
-                                      handlePRNFieldCancel()
-                                    }
-                                  }}
-                                  autoFocus
-                                  placeholder={prn.initials?.startsWith('data:image') ? 'Drawn initials (type to replace)' : 'e.g., JD'}
-                                  maxLength={4}
-                                  className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              </div>
-                            ) : prn.initials ? (
-                              <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} />
-                            ) : !readOnly && hasTime && hasResult && (userProfile?.staff_initials || userProfile?.full_name) ? (
-                              <button
-                                type="button"
-                                onClick={async (e) => {
-                                  e.stopPropagation()
-                                  let userInitials: string | null = null
-                                  const si = userProfile?.staff_initials
-                                  // Never send data URL to DB (initials column is VARCHAR(10)); use text or derive from name
-                                  if (si && typeof si === 'string' && !si.startsWith('data:image') && si.trim().length > 0) {
-                                    userInitials = si.trim().toUpperCase()
-                                  }
-                                  if (!userInitials && userProfile?.full_name) {
-                                    const names = userProfile.full_name.trim().split(/\s+/)
-                                    if (names.length >= 2) {
-                                      userInitials = (names[0][0] + names[names.length - 1][0]).toUpperCase()
-                                    } else if (names.length === 1 && names[0].length > 0) {
-                                      userInitials = names[0][0].toUpperCase()
-                                    }
-                                  }
-                                  const safeInitials = userInitials ? userInitials.slice(0, 10) : null
-                                  if (safeInitials) {
-                                    setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, initials: safeInitials } : r))
-                                    const ok = await updatePRNRecord(prn.id, 'initials', safeInitials)
-                                    if (!ok) {
-                                      setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, initials: prn.initials } : r))
-                                    }
-                                  }
-                                }}
-                                className="px-2 py-1 text-sm font-medium text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10 dark:hover:bg-lasso-teal/20"
-                              >
-                                Initial
-                              </button>
-                            ) : hasTime && hasResult ? (
-                              <span className="text-xs text-amber-600 dark:text-amber-400">Set initials in Profile</span>
-                            ) : !readOnly && initialsHelperText ? (
-                              <span className="text-xs text-amber-600 dark:text-amber-400">{initialsHelperText}</span>
-                            ) : (
-                              <span className="text-gray-400">—</span>
                             )}
                           </td>
                           <td 
@@ -4034,9 +3905,44 @@ export default function ViewMARForm() {
                           </td>
                           <td 
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
-                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'result', prn.result) : undefined}
+                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'hour', prn.hour) : undefined}
                           >
-                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'result' ? (
+                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'hour' ? (
+                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                <TimeInput
+                                  value={editingPRNValue}
+                                  onChange={async (newTime) => {
+                                    setEditingPRNValue(newTime)
+                                    const valueToSave = newTime.trim() || null
+                                    const ok = await updatePRNRecord(prn.id, 'hour', valueToSave)
+                                    if (ok) {
+                                      setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, hour: valueToSave } as MARPRNRecord : r))
+                                    }
+                                    setEditingPRNField(null)
+                                    setEditingPRNValue('')
+                                  }}
+                                  compact
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handlePRNFieldCancel()}
+                                  className="text-xs text-gray-500 hover:text-gray-700"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <span>{prn.hour ? formatTimeDisplay(prn.hour) : '—'}</span>
+                            )}
+                          </td>
+                          <td 
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
+                              readOnly ? '' : hasTime ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
+                            }`}
+                            onClick={readOnly || !hasTime ? undefined : () => handlePRNFieldEdit(prn.id, 'result', prn.result)}
+                            title={readOnly ? '' : resultHelperText}
+                          >
+                            {!readOnly && hasTime && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'result' ? (
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
@@ -4056,8 +3962,108 @@ export default function ViewMARForm() {
                                   onClick={(e) => e.stopPropagation()}
                                 />
                               </div>
+                            ) : prn.result?.trim() ? (
+                              <span>{prn.result}</span>
+                            ) : !readOnly && !hasTime ? (
+                              <span className="text-xs text-amber-600 dark:text-amber-400">{resultHelperText}</span>
                             ) : (
-                              <span>{prn.result || '—'}</span>
+                              <span>—</span>
+                            )}
+                          </td>
+                          <td 
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
+                              readOnly ? '' : hasTime && hasResult ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
+                            }`}
+                            onClick={readOnly ? undefined : () => {
+                              if (hasTime && hasResult) {
+                                if (!prn.initials) {
+                                  let userInitials: string | null = null
+                                  const si = userProfile?.staff_initials
+                                  if (si && typeof si === 'string' && !si.startsWith('data:image') && si.trim().length > 0) {
+                                    userInitials = si.trim().toUpperCase()
+                                  }
+                                  if (!userInitials && userProfile?.full_name) {
+                                    const names = userProfile.full_name.trim().split(/\s+/)
+                                    if (names.length >= 2) {
+                                      userInitials = (names[0][0] + names[names.length - 1][0]).toUpperCase()
+                                    } else if (names.length === 1 && names[0].length > 0) {
+                                      userInitials = names[0][0].toUpperCase()
+                                    }
+                                  }
+                                  const safeInitials = userInitials ? userInitials.slice(0, 10) : null
+                                  if (safeInitials) {
+                                    setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, initials: safeInitials } : r))
+                                    updatePRNRecord(prn.id, 'initials', safeInitials).then(ok => {
+                                      if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, initials: prn.initials } : r))
+                                    })
+                                    return
+                                  }
+                                }
+                                handlePRNFieldEdit(prn.id, 'initials', prn.initials)
+                              }
+                            }}
+                            title={readOnly ? '' : initialsHelperText}
+                          >
+                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'initials' ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editingPRNValue}
+                                  onChange={(e) => setEditingPRNValue(e.target.value.toUpperCase())}
+                                  onBlur={() => handlePRNFieldSave(prn.id, 'initials')}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handlePRNFieldSave(prn.id, 'initials')
+                                    } else if (e.key === 'Escape') {
+                                      handlePRNFieldCancel()
+                                    }
+                                  }}
+                                  autoFocus
+                                  placeholder={prn.initials?.startsWith('data:image') ? 'Drawn initials (type to replace)' : 'e.g., JD'}
+                                  maxLength={4}
+                                  className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            ) : prn.initials ? (
+                              <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} />
+                            ) : !readOnly && hasTime && hasResult && (userProfile?.staff_initials || userProfile?.full_name) ? (
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.stopPropagation()
+                                  let userInitials: string | null = null
+                                  const si = userProfile?.staff_initials
+                                  if (si && typeof si === 'string' && !si.startsWith('data:image') && si.trim().length > 0) {
+                                    userInitials = si.trim().toUpperCase()
+                                  }
+                                  if (!userInitials && userProfile?.full_name) {
+                                    const names = userProfile.full_name.trim().split(/\s+/)
+                                    if (names.length >= 2) {
+                                      userInitials = (names[0][0] + names[names.length - 1][0]).toUpperCase()
+                                    } else if (names.length === 1 && names[0].length > 0) {
+                                      userInitials = names[0][0].toUpperCase()
+                                    }
+                                  }
+                                  const safeInitials = userInitials ? userInitials.slice(0, 10) : null
+                                  if (safeInitials) {
+                                    setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, initials: safeInitials } : r))
+                                    const ok = await updatePRNRecord(prn.id, 'initials', safeInitials)
+                                    if (!ok) {
+                                      setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, initials: prn.initials } : r))
+                                    }
+                                  }
+                                }}
+                                className="px-2 py-1 text-sm font-medium text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10 dark:hover:bg-lasso-teal/20"
+                              >
+                                Initial
+                              </button>
+                            ) : hasTime && hasResult ? (
+                              <span className="text-xs text-amber-600 dark:text-amber-400">Set initials in Profile</span>
+                            ) : !readOnly && initialsHelperText ? (
+                              <span className="text-xs text-amber-600 dark:text-amber-400">{initialsHelperText}</span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
                             )}
                           </td>
                           <td 
@@ -4297,13 +4303,13 @@ export default function ViewMARForm() {
                       <tr className="bg-gray-200">
                         <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Entry #</th>
                         <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Date</th>
-                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Time</th>
-                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Initials</th>
                         <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Medication</th>
                         <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Dosage</th>
                         <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Reason/Indication</th>
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Time</th>
                         <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Result</th>
-                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Staff Signature</th>
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Initials</th>
+                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Signature</th>
                         <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Note</th>
                       </tr>
                     </thead>
@@ -4312,7 +4318,11 @@ export default function ViewMARForm() {
                         <tr key={prn.id}>
                           <td className="border border-gray-400 px-2 py-1.5">{prn.entry_number ?? '—'}</td>
                           <td className="border border-gray-400 px-2 py-1.5">{prn.date ? new Date(prn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.medication || '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.dosage || '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.reason || '—'}</td>
                           <td className="border border-gray-400 px-2 py-1.5">{prn.hour ? formatTimeDisplay(prn.hour) : '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.result || '—'}</td>
                           <td className="border border-gray-400 px-2 py-1.5 align-middle">
                             {prn.initials?.startsWith('data:image') ? (
                               <img src={prn.initials} alt="Initials" style={{ maxHeight: '1.25em', maxWidth: '3em', display: 'inline-block', verticalAlign: 'middle' }} />
@@ -4320,10 +4330,6 @@ export default function ViewMARForm() {
                               prn.initials || '—'
                             )}
                           </td>
-                          <td className="border border-gray-400 px-2 py-1.5">{prn.medication || '—'}</td>
-                          <td className="border border-gray-400 px-2 py-1.5">{prn.dosage || '—'}</td>
-                          <td className="border border-gray-400 px-2 py-1.5">{prn.reason || '—'}</td>
-                          <td className="border border-gray-400 px-2 py-1.5">{prn.result || '—'}</td>
                           <td className="border border-gray-400 px-2 py-1.5 align-middle">
                             {prn.staff_signature?.startsWith('data:image') ? (
                               <img src={prn.staff_signature} alt="Signature" style={{ maxHeight: '1.75em', maxWidth: '8em', display: 'inline-block', verticalAlign: 'middle' }} />
