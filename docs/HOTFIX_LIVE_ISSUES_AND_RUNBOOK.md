@@ -116,14 +116,34 @@ Only the homepage (`/`) items shown in screenshots are listed here.
 
 Follow these in order. Do not start the next item until the current item is confirmed complete.
 
-1. Restore the ability to edit patient data, especially patient names/spelling, since that was lost when the admissions form editing was removed.
-2. Add the patient's name in another visible area of the MAR screen so users can more easily see who they are working on while navigating back and forth.
-3. Fix the medication date-editing bug where saved dates shift backward by one day (example: March 23 saves as March 22).
-4. Add support for multiple times per day for a single vital entry, similar to meds having multiple times; each vital should still remain its own item (blood pressure and blood sugar separate), but each can have multiple times in a day.
-5. Rework the PRN workflow so “Add PRN Record” creates a reusable PRN medication list/database instead of separate rows, so users can select existing PRNs (for example, Tylenol) instead of retyping medication and dosage every time.
-6. Ensure PRNs feed into Progress Notes, not just the MAR table.
-7. Add clearer visual guidance/validation for PRN completion, especially when users try to sign before completing required fields (such as time and initials), with feedback indicating they must pick a time first before signing.
-8. Rename the “Repair Order” button to something clearer, because it is not an undo button and “order” is misleading; it is only meant to fix display/order when drag-and-drop gets messed up.
+1. **[DONE]** Restore patient data editing (names/spelling) from dashboard; sync to MAR where applicable.
+2. **[DONE]** Show patient identity prominently on MAR (sticky bar; also **Progress Notes**).
+3. **[PENDING / MONITORING]** Medication date saves one day early — watch for repro.
+4. **[PENDING]** Multiple administration times per day for a single **vital** row.
+5. **[DONE]** PRN library + PRN records selection workflow (not free-typing every row).
+6. **[PENDING]** PRN activity feeds **Progress Notes**, not only MAR.
+7. **[DONE]** Stepwise PRN completion guidance (time → result → initials → sign).
+8. **[DONE]** Rename “Repair Order” → clearer label (e.g. **Repair Table View**).
+
+---
+
+### Extended backlog — MAR / Progress Notes / PRN (13 items, 2026-03-29)
+
+Additional items from team notes. **Not** sequenced with §5 items 1–8 above; prioritize as agreed.
+
+1. Standardize **Progress Notes** labels (drop “page 1/2”; use e.g. Progress Notes, Notes and Addendum, Monthly Summary).
+2. Physician/APRN: **Other** in dropdown + show custom field only when Other.
+3. Re-test MAR date-edit bug + cache hypothesis; second tester.
+4. Multi-time vitals (same theme as task 4 above).
+5. More **linear** PRN UX: date → med → dose → reason → time → result → initials → signature.
+6. **Prescription/start date** on PRN definitions.
+7. **Design change:** PRNs as **main MAR rows**, sortable like other rows.
+8. **Add above/below** row insertion for PRNs like meds/vitals.
+9. **Remove** separate PRN record section once integrated.
+10. Auto PRN lines in Progress Notes (**pending**).
+11. **Filters:** PRNs only / vitals only / routine meds only.
+12. **PRN refused** → document in Progress Notes, not as med admin.
+13. **Decide** how PRN auto-entries sort vs. full note timeline.
 
 ---
 
@@ -242,5 +262,5 @@ Only after all P0/P1 live issues are closed:
 ## 12) Session Notes
 
 - Billing/e-commerce work is intentionally paused until live stability is restored.
-- This doc is the source of truth for hotfix execution and issue status.
+- Live homepage incidents: **§3** tracker + **§4** line-by-line actions. Product work: **§5** (ordered 1–8 + extended backlog). Dev observations: **§6**.
 

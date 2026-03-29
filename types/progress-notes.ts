@@ -6,6 +6,8 @@ export interface ProgressNoteEntry {
   signature: string | null
   physician_name: string | null
   is_addendum: boolean
+  /** When set, body is synced from this MAR PRN row. */
+  source_mar_prn_record_id?: string | null
   created_by: string
   created_at: string
   updated_at: string

@@ -6,6 +6,11 @@ import ProtectedRoute from '../../../../components/ProtectedRoute'
 import AppHeader from '../../../../components/AppHeader'
 import PatientStickyBar from '../../../../components/PatientStickyBar'
 import TimeInput, { formatTimeDisplay } from '../../../../components/TimeInput'
+import {
+  upsertProgressNoteFromPRNRecord,
+  upsertProgressNoteFromMarPrnRecordId,
+  isPrnRecordSignedForProgressNote,
+} from '../../../../lib/prn-progress-notes'
 
 const SIGNATURE_FONTS_LINK_ID = 'mar-signature-fonts-link'
 function ensureSignatureFontsLoaded(font: string) {
@@ -722,6 +727,24 @@ export default function ViewMARForm() {
     }
   }
 
+  /** Keep Progress Notes in sync with MAR PRN table rows (one progress note row per PRN record). */
+  const syncPrnRecordToProgressNotes = async (recordId: string) => {
+    if (!marForm?.patient_id || !userProfile?.id) return
+    try {
+      await upsertProgressNoteFromMarPrnRecordId(supabase, {
+        recordId,
+        patientId: marForm.patient_id,
+        physicianName: marForm.physician_name ?? null,
+        createdBy: userProfile.id,
+      })
+    } catch (e: any) {
+      console.error('PRN → Progress Notes sync failed:', e)
+      const msg = e?.message || 'Progress Notes sync failed'
+      setError(`MAR PRN saved, but ${msg}`)
+      setTimeout(() => setError(''), 8000)
+    }
+  }
+
   const addPRNRecord = async (record: {
     date: string
     hour: string | null
@@ -733,12 +756,18 @@ export default function ViewMARForm() {
     staffSignature: string | null
   }) => {
     if (!userProfile || !marForm || !marFormId) return
-    
+
+    if (!isPrnDateInMarMonth(record.date, marForm.month_year)) {
+      setError('PRN date must fall within this MAR month.')
+      setTimeout(() => setError(''), 5000)
+      return
+    }
+
     try {
       setSaving(true)
       const nextEntryNumber = prnRecords.length + 1
 
-      const { error } = await supabase
+      const { data: inserted, error } = await supabase
         .from('mar_prn_records')
         .insert({
           mar_form_id: marFormId,
@@ -753,8 +782,26 @@ export default function ViewMARForm() {
           signed_by: record.staffSignature ? userProfile.id : null,
           entry_number: nextEntryNumber
         })
+        .select('*')
+        .single()
 
       if (error) throw error
+
+      if (inserted && marForm.patient_id && isPrnRecordSignedForProgressNote(inserted as MARPRNRecord)) {
+        try {
+          await upsertProgressNoteFromPRNRecord(supabase, {
+            patientId: marForm.patient_id,
+            record: inserted as MARPRNRecord,
+            physicianName: marForm.physician_name ?? null,
+            createdBy: userProfile.id,
+          })
+        } catch (e: any) {
+          console.error('PRN → Progress Notes sync failed:', e)
+          const msg = e?.message || 'Progress Notes sync failed'
+          setError(`PRN record added, but ${msg}`)
+          setTimeout(() => setError(''), 8000)
+        }
+      }
 
       // Update staff initials legend only if initials and signature are provided
       if (record.initials && record.staffSignature) {
@@ -820,6 +867,9 @@ export default function ViewMARForm() {
         .update(updates)
         .eq('id', recordId)
       if (error) throw error
+      if (marForm?.patient_id && userProfile?.id) {
+        await syncPrnRecordToProgressNotes(recordId)
+      }
       return true
     } catch (err: any) {
       setError(err.message || 'Failed to update PRN record')
@@ -862,6 +912,10 @@ export default function ViewMARForm() {
         .eq('id', recordId)
 
       if (error) throw error
+
+      if (marForm?.patient_id && userProfile?.id) {
+        await syncPrnRecordToProgressNotes(recordId)
+      }
 
       // Do not refetch MAR form here: it overwrites optimistic state with stale data and makes initials/signature disappear
       setMessage('PRN record updated successfully!')
@@ -1042,6 +1096,36 @@ export default function ViewMARForm() {
       }
     }
     return null
+  }
+
+  /** First/last calendar day of the MAR month as YYYY-MM-DD for `<input type="date">`. */
+  const getMarMonthDateRangeISO = (monthYear: string): { min: string; max: string } | null => {
+    const parsed = parseMARMonthYear(monthYear)
+    if (!parsed) return null
+    const { y, m } = parsed
+    const min = `${y}-${String(m).padStart(2, '0')}-01`
+    const lastDay = new Date(y, m, 0).getDate()
+    const max = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    return { min, max }
+  }
+
+  const isPrnDateInMarMonth = (dateStr: string | null | undefined, monthYear: string | undefined): boolean => {
+    if (!dateStr || !monthYear?.trim()) return false
+    const range = getMarMonthDateRangeISO(monthYear)
+    if (!range) return false
+    const d = dateStr.includes('T') ? dateStr.slice(0, 10) : dateStr.slice(0, 10)
+    if (d.length < 10) return false
+    return d >= range.min && d <= range.max
+  }
+
+  const clampDateToMarMonth = (dateStr: string, monthYear: string | undefined): string => {
+    if (!monthYear?.trim()) return dateStr
+    const range = getMarMonthDateRangeISO(monthYear)
+    if (!range) return dateStr
+    const d = dateStr.slice(0, 10)
+    if (d < range.min) return range.min
+    if (d > range.max) return range.max
+    return d
   }
 
   /** Return plain text for a day cell for print (no buttons/links). */
@@ -1269,6 +1353,13 @@ export default function ViewMARForm() {
     if ((field === 'initials' || field === 'staff_signature') && !valueToSave && record) {
       const existing = field === 'initials' ? record.initials : record.staff_signature
       if (existing?.startsWith('data:image')) valueToSave = existing
+    }
+    if (dbField === 'date' && valueToSave && marForm?.month_year && !isPrnDateInMarMonth(valueToSave, marForm.month_year)) {
+      setError('PRN date must fall within this MAR month.')
+      setTimeout(() => setError(''), 5000)
+      setEditingPRNField(null)
+      setEditingPRNValue('')
+      return
     }
     const ok = await updatePRNRecord(recordId, dbField as 'hour' | 'result' | 'initials' | 'staff_signature' | 'reason' | 'dosage' | 'date' | 'medication', valueToSave)
     if (ok) {
@@ -3634,6 +3725,7 @@ export default function ViewMARForm() {
                     </thead>
                     <tbody>
                       {prnRecords.map((prn) => {
+                        const prnDateBounds = getMarMonthDateRangeISO(marForm?.month_year || '')
                         const hasTime = !!prn.hour
                         const hasResult = !!prn.result?.trim()
                         const hasInitials = !!prn.initials?.trim()
@@ -3671,6 +3763,8 @@ export default function ViewMARForm() {
                                 <input
                                   type="date"
                                   value={editingPRNValue || prn.date}
+                                  min={prnDateBounds?.min}
+                                  max={prnDateBounds?.max}
                                   onChange={(e) => setEditingPRNValue(e.target.value)}
                                   onBlur={() => handlePRNFieldSave(prn.id, 'date')}
                                   onKeyDown={(e) => {
@@ -4655,7 +4749,9 @@ export default function ViewMARForm() {
                 }
               }}
               onCancel={() => setShowAddPRNRecordModal(false)}
-              defaultDate={new Date().toISOString().split('T')[0]}
+              defaultDate={clampDateToMarMonth(new Date().toISOString().split('T')[0], marForm?.month_year)}
+              dateMin={getMarMonthDateRangeISO(marForm?.month_year || '')?.min}
+              dateMax={getMarMonthDateRangeISO(marForm?.month_year || '')?.max}
               prnMedicationList={prnMedicationList}
             />
           </div>
@@ -5760,6 +5856,8 @@ function AddPRNRecordForm({
   onSubmit, 
   onCancel,
   defaultDate,
+  dateMin,
+  dateMax,
   prnMedicationList
 }: { 
   onSubmit: (data: {
@@ -5774,6 +5872,8 @@ function AddPRNRecordForm({
   }) => Promise<void>
   onCancel: () => void
   defaultDate: string
+  dateMin?: string
+  dateMax?: string
   prnMedicationList: MARPRNMedication[]
 }) {
   const [formData, setFormData] = useState({
@@ -5804,6 +5904,14 @@ function AddPRNRecordForm({
     e.preventDefault()
     if (!formData.date || !formData.medication || !formData.reason) {
       alert('Please select a PRN from the list')
+      return
+    }
+    if (dateMin && formData.date < dateMin) {
+      alert('PRN date must fall within this MAR month.')
+      return
+    }
+    if (dateMax && formData.date > dateMax) {
+      alert('PRN date must fall within this MAR month.')
       return
     }
 
@@ -5842,6 +5950,8 @@ function AddPRNRecordForm({
         <input
           type="date"
           value={formData.date}
+          min={dateMin}
+          max={dateMax}
           onChange={(e) => setFormData({ ...formData, date: e.target.value })}
           required
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"

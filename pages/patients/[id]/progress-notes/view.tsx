@@ -304,6 +304,7 @@ export default function ProgressNotesPage() {
         .select('*')
         .eq('patient_id', patientId)
         .order('note_date', { ascending: false })
+        .order('created_at', { ascending: false })
       const entriesList = entriesError ? [] : ((entriesData || []) as ProgressNoteEntry[]).map(e => ({ ...e, is_addendum: e.is_addendum ?? false }))
       setEntries(entriesList)
 
@@ -369,6 +370,7 @@ export default function ProgressNotesPage() {
       .select('*')
       .eq('patient_id', patientId)
       .order('note_date', { ascending: false })
+      .order('created_at', { ascending: false })
     if (!entriesError) setEntries((entriesData || []).map((e: ProgressNoteEntry) => ({ ...e, is_addendum: e.is_addendum ?? false })))
   }
 
@@ -416,6 +418,7 @@ export default function ProgressNotesPage() {
       .select('*')
       .eq('patient_id', patientId)
       .order('note_date', { ascending: false })
+      .order('created_at', { ascending: false })
     setEntries(entriesData || [])
     setSaving(false)
   }
