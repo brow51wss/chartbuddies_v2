@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react'
+import React, { Fragment, useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -93,20 +93,68 @@ import type { MARForm, MARMedication, MARAdministration, MARPRNRecord, MARVitalS
 import {
   DndContext,
   closestCenter,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
   DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
 } from '@dnd-kit/core'
 import {
   arrayMove,
+  defaultAnimateLayoutChanges,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
-  verticalListSortingStrategy,
+  type SortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+
+/**
+ * Do not translate table rows while dragging. Multi-time meds use several `<tr>`s but only one sortable id;
+ * `verticalListSortingStrategy` would shift other groups and visually split rowSpan stacks. Preview is handled
+ * by `DragOverlay` + hidden source rows.
+ */
+const marGroupReorderNoLayoutShiftStrategy: SortingStrategy = () => null
+
+/** One logical MAR row group (shared med cell / rowSpan). Must match grouping in table body and `handleDragEnd`. */
+function getMarMedicationGroupKey(med: MARMedication): string {
+  const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
+  return isVitalsEntry
+    ? `vitals_${med.id}`
+    : `${med.medication_name}|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
+}
+
+/** Floating preview so multi-time meds show all hours while dragging (not just the first `<tr>`). */
+function MarMedicationGroupDragPreview({ meds }: { meds: MARMedication[] }) {
+  if (!meds.length) return null
+  const first = meds[0]
+  const isVitalsEntry = first.medication_name === 'VITALS' || first.notes === 'Vital Signs Entry'
+  const title = isVitalsEntry ? '📊 VITALS' : first.medication_name
+  return (
+    <div className="bg-white dark:bg-gray-800 border-2 border-lasso-teal rounded-lg shadow-2xl p-3 min-w-[300px] max-w-md cursor-grabbing">
+      <div className="font-semibold text-sm text-gray-900 dark:text-white">{title}</div>
+      {first.dosage && !isVitalsEntry && (
+        <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-3">{first.dosage}</div>
+      )}
+      <div className="mt-2 space-y-1 border-t border-gray-200 dark:border-gray-600 pt-2">
+        {meds.map((m) => (
+          <div key={m.id} className="text-xs text-gray-800 dark:text-gray-200 flex justify-between gap-4">
+            <span className="font-medium text-gray-500 dark:text-gray-400">Time</span>
+            <span>{m.hour ? formatTimeDisplay(m.hour) : '—'}</span>
+          </div>
+        ))}
+      </div>
+      {meds.length > 1 && (
+        <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-2 pt-1 border-t border-dashed border-gray-200 dark:border-gray-600">
+          {meds.length} administration time rows — moving as one group
+        </div>
+      )}
+    </div>
+  )
+}
 
 // Context for passing drag handle props to children (declared first)
 const SortableRowContext = React.createContext<{
@@ -141,12 +189,20 @@ function SortableTableRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id, disabled: sortableDisabled })
+  } = useSortable({
+    id,
+    disabled: sortableDisabled,
+    // Avoid shifting only the first `<tr>` of a multi-time med (nested rows stay put) while dragging.
+    animateLayoutChanges: (args) => {
+      if (args.isSorting) return false
+      return defaultAnimateLayoutChanges(args)
+    },
+  })
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0 : 1,
     position: 'relative',
     zIndex: isDragging ? 1000 : 'auto',
   }
@@ -155,7 +211,7 @@ function SortableTableRow({
     <tr
       ref={setNodeRef}
       style={style}
-      className={`${className || ''} ${isDragging ? '!bg-blue-100 dark:!bg-blue-900/50 shadow-lg' : ''}`}
+      className={className || ''}
       onMouseMove={isDragging ? undefined : onMouseMove}
       onMouseLeave={onMouseLeave}
     >
@@ -163,6 +219,45 @@ function SortableTableRow({
       <SortableRowContext.Provider value={{ listeners, attributes, setActivatorNodeRef, isDragging }}>
         {children}
       </SortableRowContext.Provider>
+    </tr>
+  )
+}
+
+/**
+ * Multi-time meds use several `<tr>`s; only the first is a @dnd-kit sortable item so the drop indicator
+ * appears between whole groups, not between nested time rows.
+ */
+function MarMedTableRow({
+  sortableId,
+  sortableDisabled,
+  className,
+  onMouseMove,
+  onMouseLeave,
+  children,
+}: {
+  sortableId: string | null
+  sortableDisabled?: boolean
+  className?: string
+  onMouseMove?: (e: React.MouseEvent<HTMLTableRowElement>) => void
+  onMouseLeave?: () => void
+  children: React.ReactNode
+}) {
+  if (sortableId != null) {
+    return (
+      <SortableTableRow
+        id={sortableId}
+        sortableDisabled={sortableDisabled}
+        className={className}
+        onMouseMove={onMouseMove}
+        onMouseLeave={onMouseLeave}
+      >
+        {children}
+      </SortableTableRow>
+    )
+  }
+  return (
+    <tr className={className || ''} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
+      {children}
     </tr>
   )
 }
@@ -221,6 +316,19 @@ export default function ViewMARForm() {
     if (marTableViewFilter === 'vitals_only') return medications.filter((m) => isVitalsRow(m))
     return medications
   }, [medications, marTableViewFilter])
+  /** First `<tr>` id per medication group — only these register as sortable (extended backlog #14). */
+  const marSortableFirstRowIds = useMemo(() => {
+    const ids: string[] = []
+    let prevKey: string | null = null
+    for (const m of displayMedications) {
+      const gk = getMarMedicationGroupKey(m)
+      if (gk !== prevKey) {
+        ids.push(m.id)
+        prevKey = gk
+      }
+    }
+    return ids
+  }, [displayMedications])
   const [administrations, setAdministrations] = useState<{ [medId: string]: { [day: number]: MARAdministration } }>({})
   const [prnRecords, setPrnRecords] = useState<MARPRNRecord[]>([])
   const [prnMedicationList, setPrnMedicationList] = useState<MARPRNMedication[]>([])
@@ -1780,6 +1888,68 @@ export default function ViewMARForm() {
     }
   }
 
+  /** While dragging, table rows in this group are hidden and `DragOverlay` shows the full block. */
+  const [activeMarDragId, setActiveMarDragId] = useState<string | null>(null)
+  const marDragPreviewGroupMeds = useMemo(() => {
+    if (!activeMarDragId) return [] as MARMedication[]
+    const m = medications.find((x) => x.id === activeMarDragId)
+    if (!m) return []
+    const gk = getMarMedicationGroupKey(m)
+    return medications.filter((x) => getMarMedicationGroupKey(x) === gk)
+  }, [activeMarDragId, medications])
+  const draggingGroupMedIdSet = useMemo(
+    () => new Set(marDragPreviewGroupMeds.map((x) => x.id)),
+    [marDragPreviewGroupMeds]
+  )
+
+  /** Full-width line showing where the dragged parent group will land (no row transforms — avoids splitting rowSpan stacks). */
+  const [marReorderDropIndicator, setMarReorderDropIndicator] = useState<
+    { mode: 'before' | 'after'; medId: string } | null
+  >(null)
+
+  const handleMarDragOver = useCallback(
+    (event: DragOverEvent) => {
+      if (marRowReorderLocked) return
+      const { active, over } = event
+      if (!over?.id) {
+        setMarReorderDropIndicator(null)
+        return
+      }
+      const activeId = String(active.id)
+      const overId = String(over.id)
+      const draggedMed = displayMedications.find((m) => m.id === activeId)
+      const targetMed = displayMedications.find((m) => m.id === overId)
+      if (!draggedMed || !targetMed) {
+        setMarReorderDropIndicator(null)
+        return
+      }
+      const draggedGroupKey = getMarMedicationGroupKey(draggedMed)
+      const targetGroupKey = getMarMedicationGroupKey(targetMed)
+      if (draggedGroupKey === targetGroupKey) {
+        setMarReorderDropIndicator(null)
+        return
+      }
+      const draggedGroupMeds = displayMedications.filter((m) => getMarMedicationGroupKey(m) === draggedGroupKey)
+      const targetGroupMeds = displayMedications.filter((m) => getMarMedicationGroupKey(m) === targetGroupKey)
+      const draggedFirstIndex = displayMedications.findIndex((m) => m.id === draggedGroupMeds[0].id)
+      const targetIndex = displayMedications.findIndex((m) => m.id === overId)
+      if (draggedFirstIndex === -1 || targetIndex === -1) {
+        setMarReorderDropIndicator(null)
+        return
+      }
+      const insertBeforeTargetGroup = draggedFirstIndex > targetIndex
+      if (insertBeforeTargetGroup) {
+        setMarReorderDropIndicator({ mode: 'before', medId: targetGroupMeds[0].id })
+      } else {
+        setMarReorderDropIndicator({
+          mode: 'after',
+          medId: targetGroupMeds[targetGroupMeds.length - 1].id,
+        })
+      }
+    },
+    [displayMedications, marRowReorderLocked]
+  )
+
   // Drag and drop sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1797,25 +1967,18 @@ export default function ViewMARForm() {
     const { active, over } = event
 
     if (over && active.id !== over.id) {
-      // Helper to get group key for a medication
-      const getGroupKey = (med: MARMedication) => {
-        const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
-        return isVitalsEntry 
-          ? `vitals_${med.id}`
-          : `${med.medication_name}|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
-      }
-
       // Find the dragged medication and its group
       const draggedMed = medications.find(m => m.id === active.id)
       const targetMed = medications.find(m => m.id === over.id)
       
       if (!draggedMed || !targetMed) return
 
-      const draggedGroupKey = getGroupKey(draggedMed)
-      const targetGroupKey = getGroupKey(targetMed)
+      const draggedGroupKey = getMarMedicationGroupKey(draggedMed)
+      const targetGroupKey = getMarMedicationGroupKey(targetMed)
 
       // Get all medications in the dragged group
-      const draggedGroupMeds = medications.filter(m => getGroupKey(m) === draggedGroupKey)
+      const draggedGroupMeds = medications.filter(m => getMarMedicationGroupKey(m) === draggedGroupKey)
+      const targetGroupMeds = medications.filter(m => getMarMedicationGroupKey(m) === targetGroupKey)
       
       // Get the indices of the first med in each group
       const draggedFirstIndex = medications.findIndex(m => m.id === draggedGroupMeds[0].id)
@@ -1824,22 +1987,23 @@ export default function ViewMARForm() {
       if (draggedFirstIndex === -1 || targetIndex === -1) return
 
       // Remove all meds from dragged group from the array
-      let newMedications = medications.filter(m => getGroupKey(m) !== draggedGroupKey)
+      let newMedications = medications.filter(m => getMarMedicationGroupKey(m) !== draggedGroupKey)
       
-      // Find where to insert the dragged group
       // If target was in the dragged group, just restore original order
       if (draggedGroupKey === targetGroupKey) return
 
-      // Find the new target index after removal
+      // Find the new target index after removal (`over` is always first row of target group in UI)
       const newTargetIndex = newMedications.findIndex(m => m.id === over.id)
       
       if (newTargetIndex === -1) {
-        // Target was removed (shouldn't happen), restore
         return
       }
 
-      // Determine insert position: before or after target based on drag direction
-      const insertIndex = targetIndex > draggedFirstIndex ? newTargetIndex + 1 : newTargetIndex
+      // Insert before the whole target group, or after all of its rows (never inside multi-time stacks)
+      const insertBeforeTargetGroup = draggedFirstIndex > targetIndex
+      const insertIndex = insertBeforeTargetGroup
+        ? newTargetIndex
+        : newTargetIndex + targetGroupMeds.length
 
       // Insert all dragged group meds at the new position
       newMedications = [
@@ -1885,20 +2049,12 @@ export default function ViewMARForm() {
   const repairDisplayOrder = async () => {
     if (!medications.length) return
 
-    // Helper to get group key for a medication
-    const getGroupKey = (med: MARMedication) => {
-      const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
-      return isVitalsEntry 
-        ? `vitals_${med.id}`
-        : `${med.medication_name}|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
-    }
-
     // Group medications
     const groups: { [key: string]: MARMedication[] } = {}
     const groupOrder: string[] = [] // Track order groups first appeared
     
     medications.forEach(med => {
-      const key = getGroupKey(med)
+      const key = getMarMedicationGroupKey(med)
       if (!groups[key]) {
         groups[key] = []
         groupOrder.push(key)
@@ -2786,11 +2942,24 @@ export default function ViewMARForm() {
                   <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
-                    onDragEnd={handleDragEnd}
+                    onDragStart={(e: DragStartEvent) => {
+                      setActiveMarDragId(String(e.active.id))
+                      setMarReorderDropIndicator(null)
+                    }}
+                    onDragOver={handleMarDragOver}
+                    onDragCancel={() => {
+                      setActiveMarDragId(null)
+                      setMarReorderDropIndicator(null)
+                    }}
+                    onDragEnd={(e) => {
+                      setMarReorderDropIndicator(null)
+                      void handleDragEnd(e)
+                      window.setTimeout(() => setActiveMarDragId(null), 200)
+                    }}
                   >
                     <SortableContext
-                      items={displayMedications.map(m => m.id)}
-                      strategy={verticalListSortingStrategy}
+                      items={marSortableFirstRowIds}
+                      strategy={marGroupReorderNoLayoutShiftStrategy}
                     >
                       <tbody>
                     {displayMedications.length === 0 ? (
@@ -2840,12 +3009,27 @@ export default function ViewMARForm() {
                         const isFirstRow = isFirstInGroup[med.id] || false
                         const isFirstTableRow = medIndex === 0
                         
+                        const marDropLineColSpan = 3 + days.length
+                        const showDropLineBefore =
+                          marReorderDropIndicator?.mode === 'before' && marReorderDropIndicator.medId === med.id
+                        const showDropLineAfter =
+                          marReorderDropIndicator?.mode === 'after' && marReorderDropIndicator.medId === med.id
+
                         return (
-                          <SortableTableRow 
-                            key={med.id}
-                            id={med.id}
+                          <Fragment key={med.id}>
+                            {showDropLineBefore ? (
+                              <tr aria-hidden className="pointer-events-none">
+                                <td colSpan={marDropLineColSpan} className="p-0 border-0 leading-none">
+                                  <div className="h-1.5 w-full bg-sky-500 dark:bg-sky-400 z-[25] shadow-sm rounded-sm" />
+                                </td>
+                              </tr>
+                            ) : null}
+                            <MarMedTableRow 
+                            sortableId={isFirstInGroup[med.id] ? med.id : null}
                             sortableDisabled={marRowReorderLocked}
-                            className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isVitalsEntry ? 'bg-lasso-blue/10 dark:bg-lasso-blue/20' : ''}`}
+                            className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isVitalsEntry ? 'bg-lasso-blue/10 dark:bg-lasso-blue/20' : ''} ${
+                              draggingGroupMedIdSet.has(med.id) ? 'opacity-0 pointer-events-none' : ''
+                            }`}
                             onMouseMove={(e) => {
                               // Use medication cell rect when hovered (spans multiple rows) so Add below triggers only near actual bottom; else use row rect
                               const medCell = (e.target as HTMLElement).closest?.('[data-medication-cell]') as HTMLElement | null
@@ -3484,12 +3668,25 @@ export default function ViewMARForm() {
                                 </td>
                               )
                             })}
-                          </SortableTableRow>
+                          </MarMedTableRow>
+                            {showDropLineAfter ? (
+                              <tr aria-hidden className="pointer-events-none">
+                                <td colSpan={marDropLineColSpan} className="p-0 border-0 leading-none">
+                                  <div className="h-1.5 w-full bg-sky-500 dark:bg-sky-400 z-[25] shadow-sm rounded-sm" />
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
                         )
                       })
                     })()}
                       </tbody>
                     </SortableContext>
+                    <DragOverlay zIndex={2000} dropAnimation={{ duration: 180, easing: 'ease' }}>
+                      {marDragPreviewGroupMeds.length > 0 ? (
+                        <MarMedicationGroupDragPreview meds={marDragPreviewGroupMeds} />
+                      ) : null}
+                    </DragOverlay>
                   </DndContext>
                 </table>
                 </div>

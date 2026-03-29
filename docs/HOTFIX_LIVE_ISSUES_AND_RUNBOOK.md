@@ -144,7 +144,7 @@ Additional items from team notes. **Not** sequenced with §5 items 1–8 above; 
 11. **INCOMPLETE** — **MAR view filters (chips):** **All** / **Routine meds** / **Vitals** shipped on MAR detail (`marTableViewFilter`; PRN Records section always visible). Still needed: **PRNs only** (or equivalent) filter — **intentionally not built yet**; owner will explain rationale before implementation.
 12. **PRN refused** → document in Progress Notes, not as med admin.
 13. **Decide** how PRN auto-entries sort vs. full note timeline.
-14. **Fix** manual **drag-and-drop reordering** of **medication** and **vitals** rows on the MAR chart (reliable DnD / `display_order` persistence and multi-row groups). **Note:** **Repair Table View** (§5 #8) is a separate recovery action when order breaks; this item is the primary row-reorder experience.
+14. **DONE** — **MAR row reorder (DnD):** Only the **first `<tr>` of each medication group** is sortable; extra administration-time rows are plain `<tr>`s so drops occur **between whole groups**, not inside multi-time stacks. **`handleDragEnd`** inserts **before** or **after** the full target group (`targetGroupMeds.length`). Shared **`getMarMedicationGroupKey`**. **Repair Table View** (§5 #8) remains a separate recovery action.
 
 ---
 
