@@ -2045,75 +2045,6 @@ export default function ViewMARForm() {
     }
   }
 
-  // Repair display order to ensure medication groups are consecutive
-  const repairDisplayOrder = async () => {
-    if (!medications.length) return
-
-    // Group medications
-    const groups: { [key: string]: MARMedication[] } = {}
-    const groupOrder: string[] = [] // Track order groups first appeared
-    
-    medications.forEach(med => {
-      const key = getMarMedicationGroupKey(med)
-      if (!groups[key]) {
-        groups[key] = []
-        groupOrder.push(key)
-      }
-      groups[key].push(med)
-    })
-
-    // Flatten groups back into array (groups stay together)
-    const reorderedMeds: MARMedication[] = []
-    groupOrder.forEach(key => {
-      // Sort within group by hour to keep times in order
-      groups[key].sort((a, b) => {
-        if (!a.hour && !b.hour) return 0
-        if (!a.hour) return 1
-        if (!b.hour) return -1
-        return a.hour.localeCompare(b.hour)
-      })
-      reorderedMeds.push(...groups[key])
-    })
-
-    // Check if order changed
-    const orderChanged = reorderedMeds.some((med, idx) => med.id !== medications[idx]?.id)
-    
-    if (!orderChanged) {
-      console.log('Display order is already correct')
-      return
-    }
-
-    console.log('Repairing display order...')
-    
-    // Update local state
-    setMedications(reorderedMeds)
-
-    // Update database
-    try {
-      setSaving(true)
-      const updates = reorderedMeds.map((med, index) => ({
-        id: med.id,
-        display_order: (index + 1) * 10
-      }))
-
-      for (const update of updates) {
-        await supabase
-          .from('mar_medications')
-          .update({ display_order: update.display_order })
-          .eq('id', update.id)
-      }
-
-      setMessage('Row order repaired!')
-      setTimeout(() => setMessage(''), 2000)
-    } catch (err: any) {
-      console.error('Error repairing display order:', err)
-      setError('Failed to repair row order')
-      setTimeout(() => setError(''), 3000)
-    } finally {
-      setSaving(false)
-    }
-  }
-
   // Handle moving row up or down (backup for arrow buttons)
   const handleMoveRow = async (medId: string, direction: 'up' | 'down') => {
     const currentIndex = medications.findIndex((med) => med.id === medId)
@@ -2821,14 +2752,6 @@ export default function ViewMARForm() {
                       className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
                     >
                       + PRN
-                    </button>
-                    <button
-                      onClick={repairDisplayOrder}
-                      disabled={saving}
-                      className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 text-sm font-medium disabled:opacity-50"
-                      title="Fix row order if medications with multiple times got separated"
-                    >
-                      🔧 Repair Table View
                     </button>
                   </>
                 )}

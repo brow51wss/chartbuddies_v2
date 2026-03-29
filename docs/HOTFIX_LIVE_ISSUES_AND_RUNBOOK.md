@@ -123,7 +123,7 @@ Follow these in order. Do not start the next item until the current item is conf
 5. **[DONE]** PRN library + PRN records selection workflow (not free-typing every row).
 6. **[DONE]** PRN activity feeds **Progress Notes** (signed PRNs only): linked `progress_note_entries` row, sync on save/update; migrations **064**/**065** for column + backfill; PRN **date** constrained to MAR month.
 7. **[DONE]** Stepwise PRN completion guidance (time → result → initials → sign).
-8. **[DONE]** Rename “Repair Order” → clearer label (e.g. **Repair Table View**).
+8. **[DONE]** Rename “Repair Order” → clearer label (**Repair Table View**); button later **removed** once DnD parent-row reorder shipped (extended #14).
 
 ---
 
@@ -143,8 +143,8 @@ Additional items from team notes. **Not** sequenced with §5 items 1–8 above; 
 10. Auto PRN lines in Progress Notes (**done** — signed PRNs only; see §5 #6).
 11. **INCOMPLETE** — **MAR view filters (chips):** **All** / **Routine meds** / **Vitals** shipped on MAR detail (`marTableViewFilter`; PRN Records section always visible). Still needed: **PRNs only** (or equivalent) filter — **intentionally not built yet**; owner will explain rationale before implementation.
 12. **PRN refused** → document in Progress Notes, not as med admin.
-13. **Decide** how PRN auto-entries sort vs. full note timeline.
-14. **DONE** — **MAR row reorder (DnD):** Only the **first `<tr>` of each medication group** is sortable; extra administration-time rows are plain `<tr>`s so drops occur **between whole groups**, not inside multi-time stacks. **`handleDragEnd`** inserts **before** or **after** the full target group (`targetGroupMeds.length`). Shared **`getMarMedicationGroupKey`**. **Repair Table View** (§5 #8) remains a separate recovery action.
+13. **DONE** — How PRN auto-entries **sort vs. the full note timeline** was settled during **signed PRN → Progress Notes** sync work (§5 #6; `progress_note_entries` / `source_mar_prn_record_id`). No separate “decide” task remains.
+14. **DONE** — **MAR row reorder (DnD):** Only the **first `<tr>` of each medication group** is sortable; extra administration-time rows are plain `<tr>`s so drops occur **between whole groups**, not inside multi-time stacks. **`handleDragEnd`** inserts **before** or **after** the full target group (`targetGroupMeds.length`). Shared **`getMarMedicationGroupKey`**. Drop indicator + `DragOverlay` for multi-time groups. **Repair Table View** UI button removed (2026-03-29); group reorder + persisted `display_order` replace that workflow.
 
 ---
 
