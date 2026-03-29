@@ -2865,6 +2865,7 @@ export default function ViewMARForm() {
                     </button>
                   ))}
                   </div>
+                  {/* Hidden for now - will be re-enabled when PRN records are integrated into MAR chart
                   <button
                     type="button"
                     onClick={() => setShowAddPRNRecordModal(true)}
@@ -2872,6 +2873,7 @@ export default function ViewMARForm() {
                   >
                     + Add PRN Record
                   </button>
+                  */}
                 </div>
               </div>
 
