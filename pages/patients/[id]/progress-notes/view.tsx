@@ -111,6 +111,49 @@ function formatMonthYearDisplay(monthKey: string): string {
   return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
+/** Sentinel `<select>` value: show custom physician field (extended backlog #2). */
+const PHYSICIAN_SELECT_ADD_OTHER = '__ADD_OTHER__'
+
+function isTbdOrEmptyPhysician(v: string | null | undefined): boolean {
+  const t = (v || '').trim()
+  return !t || t.toUpperCase() === 'TBD'
+}
+
+/** For table cells / print: hide TBD and empty (no placeholder words). */
+function physicianDisplayText(raw: string | null | undefined): string {
+  if (isTbdOrEmptyPhysician(raw)) return ''
+  return (raw || '').trim()
+}
+
+/** PRN-synced bodies may still end with Initials/Documentation from older syncs; signature column covers that. */
+function stripPrnProgressNoteRedundantTail(notes: string): string {
+  if (!notes) return notes
+  const lines = notes.split('\n')
+  let end = lines.length
+  while (end > 0) {
+    const t = lines[end - 1].trim()
+    if (/^Documentation:\s*Signed\s*$/i.test(t) || /^Initials:\s*/i.test(t)) {
+      end--
+    } else break
+  }
+  return lines.slice(0, end).join('\n')
+}
+
+function page1EntryNotesDisplay(entry: ProgressNoteEntry): string {
+  return entry.source_mar_prn_record_id
+    ? stripPrnProgressNoteRedundantTail(entry.notes)
+    : entry.notes
+}
+
+function effectivePhysicianName(selectedPhysician: string, customPhysician: string): string {
+  let raw: string
+  if (selectedPhysician === PHYSICIAN_SELECT_ADD_OTHER) raw = customPhysician.trim()
+  else if (selectedPhysician.trim()) raw = selectedPhysician.trim()
+  else raw = customPhysician.trim()
+  if (isTbdOrEmptyPhysician(raw)) return ''
+  return raw.trim()
+}
+
 /** Y/N radio group styled as a switch (pill with two segments) */
 function YnSwitch({
   value,
@@ -293,7 +336,11 @@ export default function ProgressNotesPage() {
         .select('physician_name')
         .eq('hospital_id', patientData.hospital_id)
         .not('physician_name', 'is', null)
-      const distinct = Array.from(new Set((physData || []).map((p: any) => p.physician_name?.trim()).filter(Boolean))).sort() as string[]
+      const distinct = Array.from(
+        new Set((physData || []).map((p: any) => p.physician_name?.trim()).filter(Boolean))
+      )
+        .filter((p) => !isTbdOrEmptyPhysician(p))
+        .sort() as string[]
       setPhysicians(distinct)
       if (patientData.physician_name && distinct.includes(patientData.physician_name)) {
         setSelectedPhysician(patientData.physician_name)
@@ -311,15 +358,20 @@ export default function ProgressNotesPage() {
       // Pre-fill Physician/APRN: localStorage (most reliable) > last note > patient record
       const storageKey = `progress-notes-physician-${patientId}`
       const stored = (typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null)?.trim() || ''
-      const lastPhysician = entriesList.find(e => e.physician_name?.trim())?.physician_name?.trim()
-      const patientPhysician = patientData.physician_name?.trim() || ''
-      const physicianToUse = (stored && stored !== 'TBD') ? stored : (lastPhysician || (patientPhysician !== 'TBD' ? patientPhysician : ''))
+      const lastPhysician =
+        entriesList.find((e) => !isTbdOrEmptyPhysician(e.physician_name))?.physician_name?.trim() || ''
+      const patientPhysician = isTbdOrEmptyPhysician(patientData.physician_name)
+        ? ''
+        : patientData.physician_name!.trim()
+      const physicianToUse = !isTbdOrEmptyPhysician(stored)
+        ? stored
+        : lastPhysician || patientPhysician
       if (physicianToUse) {
         if (distinct.includes(physicianToUse)) {
           setSelectedPhysician(physicianToUse)
           setCustomPhysician('')
         } else {
-          setSelectedPhysician('')
+          setSelectedPhysician(PHYSICIAN_SELECT_ADD_OTHER)
           setCustomPhysician(physicianToUse)
         }
       } else if (patientData.physician_name && distinct.includes(patientData.physician_name)) {
@@ -333,21 +385,28 @@ export default function ProgressNotesPage() {
 
   // Debounced save of Physician/APRN to patient record so typed value persists
   useEffect(() => {
-    const physician = (selectedPhysician || customPhysician.trim() || '').trim()
-    if (!patientId || typeof patientId !== 'string' || !physician) return
-    const currentPatientPhysician = patient?.physician_name?.trim() || ''
-    if (physician === currentPatientPhysician) return
+    if (!patientId || typeof patientId !== 'string' || !patient) return
+    const physician = effectivePhysicianName(selectedPhysician, customPhysician)
+    const prevRaw = patient.physician_name?.trim() || ''
+    const prevNorm = isTbdOrEmptyPhysician(prevRaw) ? '' : prevRaw
+    if (physician === prevNorm) return
     if (savePhysicianTimeoutRef.current) clearTimeout(savePhysicianTimeoutRef.current)
     savePhysicianTimeoutRef.current = setTimeout(async () => {
       savePhysicianTimeoutRef.current = null
       const storageKey = `progress-notes-physician-${patientId}`
-      if (typeof window !== 'undefined') localStorage.setItem(storageKey, physician || 'TBD')
+      if (typeof window !== 'undefined') {
+        if (physician) localStorage.setItem(storageKey, physician)
+        else localStorage.removeItem(storageKey)
+      }
       const { error: updateErr } = await supabase
         .from('patients')
-        .update({ physician_name: physician || 'TBD', updated_at: new Date().toISOString() })
+        .update({
+          physician_name: physician || '',
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', patientId)
       if (!updateErr) {
-        setPatient(prev => prev ? { ...prev, physician_name: physician } : null)
+        setPatient((prev) => (prev ? { ...prev, physician_name: physician || '' } : null))
       }
       setMessage('Saved')
       setTimeout(() => setMessage(''), 2000)
@@ -385,7 +444,8 @@ export default function ProgressNotesPage() {
     }
     setSaving(true)
     setError('')
-    const physician = selectedPhysician || customPhysician.trim() || null
+    const physicianRaw = effectivePhysicianName(selectedPhysician, customPhysician)
+    const physician = physicianRaw || null
     const { error: insertError } = await supabase
       .from('progress_note_entries')
       .insert({
@@ -742,31 +802,32 @@ export default function ProgressNotesPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Physician/APRN or Clinic</label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2">
                     <select
                       value={selectedPhysician}
                       onChange={(e) => {
-                        setSelectedPhysician(e.target.value)
-                        if (e.target.value) setCustomPhysician('')
+                        const v = e.target.value
+                        setSelectedPhysician(v)
+                        if (!v || v !== PHYSICIAN_SELECT_ADD_OTHER) setCustomPhysician('')
                       }}
                       disabled={readOnly}
-                      className={`flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal ${readOnly ? 'cursor-not-allowed opacity-90' : ''}`}
+                      className={`w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal ${readOnly ? 'cursor-not-allowed opacity-90' : ''}`}
                     >
-                      <option value="">Select or type below</option>
+                      <option value="">Select</option>
                       {physicians.map(p => (
                         <option key={p} value={p}>{p}</option>
                       ))}
+                      <option value={PHYSICIAN_SELECT_ADD_OTHER}>+ Add</option>
                     </select>
-                    {!readOnly && (
+                    {!readOnly && selectedPhysician === PHYSICIAN_SELECT_ADD_OTHER && (
                       <input
                         type="text"
-                        placeholder="Or type custom"
+                        placeholder="Add New"
                         value={customPhysician}
                         onChange={(e) => {
                           setCustomPhysician(e.target.value)
-                          if (e.target.value) setSelectedPhysician('')
                         }}
-                        className="flex-1 min-w-0 text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
+                        className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
                       />
                     )}
                   </div>
@@ -779,6 +840,7 @@ export default function ProgressNotesPage() {
                 <thead>
                   <tr className="bg-gray-100 dark:bg-gray-700">
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-28">Date</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-40">Physician/APRN or Clinic</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Notes</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-32">Signature</th>
                   </tr>
@@ -798,6 +860,9 @@ export default function ProgressNotesPage() {
                         onChange={(e) => setNewDate(e.target.value)}
                         className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
+                    </td>
+                    <td className="px-4 py-2 align-top text-xs text-gray-700 dark:text-gray-300">
+                      {physicianDisplayText(effectivePhysicianName(selectedPhysician, customPhysician))}
                     </td>
                     <td className="px-4 py-2 align-top">
                       <textarea
@@ -840,7 +905,7 @@ export default function ProgressNotesPage() {
                   )}
                   {!readOnly && (
                   <tr>
-                    <td colSpan={3} className="px-4 py-2">
+                    <td colSpan={4} className="px-4 py-2">
                       <button
                         type="button"
                         onClick={handleAddEntry}
@@ -853,7 +918,7 @@ export default function ProgressNotesPage() {
                   </tr>
                   )}
                   <tr className="border-t-2 border-gray-300 dark:border-gray-600">
-                    <td colSpan={3} className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
+                    <td colSpan={4} className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Existing notes</h3>
                         <div className="flex items-center gap-2">
@@ -875,26 +940,35 @@ export default function ProgressNotesPage() {
                       </div>
                     </td>
                   </tr>
+                  <tr className="bg-gray-100 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-28">Date</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-40">Physician/APRN or Clinic</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Notes</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-32">Signature</th>
+                  </tr>
                   {mainEntries.map((entry) => (
                     <tr key={entry.id} className="border-t border-gray-200 dark:border-gray-600">
                       <td className="px-4 py-2 align-top text-sm text-gray-900 dark:text-white whitespace-nowrap">
                         {new Date(entry.note_date).toLocaleDateString('en-US')}
                       </td>
+                      <td className="px-4 py-2 align-top text-sm text-gray-900 dark:text-white whitespace-nowrap">
+                        {physicianDisplayText(entry.physician_name)}
+                      </td>
                       <td className="px-4 py-2 align-top">
                         {readOnly ? (
                           <div className="w-full text-sm text-gray-900 dark:text-white whitespace-pre-wrap py-2">
-                            {entry.notes}
+                            {page1EntryNotesDisplay(entry)}
                           </div>
                         ) : (
                           <textarea
-                            value={entry.notes}
+                            value={page1EntryNotesDisplay(entry)}
                             onChange={(e) => {
                               const v = e.target.value
                               entryNotesRef.current[entry.id] = v
                               setEntries(prev => prev.map(ex => ex.id === entry.id ? { ...ex, notes: v } : ex))
                               schedulePage1EntrySave(entry.id, entry.note_date)
                             }}
-                            rows={Math.max(2, entry.notes.split('\n').length)}
+                            rows={Math.max(2, page1EntryNotesDisplay(entry).split('\n').length)}
                             className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
                           />
                         )}
@@ -1413,12 +1487,16 @@ export default function ProgressNotesPage() {
             <div><strong>Name of ARCH:</strong> {facilityName || '—'}</div>
             <div><strong>Primary Care Giver:</strong> {userProfile?.full_name ?? '—'}</div>
             <div><strong>Resident:</strong> {patient?.patient_name ?? '—'}</div>
-            <div><strong>Physician/APRN or Clinic:</strong> {selectedPhysician || customPhysician?.trim() || '—'}</div>
+            <div>
+              <strong>Physician/APRN or Clinic:</strong>{' '}
+              {physicianDisplayText(effectivePhysicianName(selectedPhysician, customPhysician))}
+            </div>
           </div>
           <table className="w-full border border-gray-400" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr className="bg-gray-200">
                 <th className="border border-gray-400 px-3 py-2 text-left font-semibold">Date</th>
+                <th className="border border-gray-400 px-3 py-2 text-left font-semibold">Physician/APRN or Clinic</th>
                 <th className="border border-gray-400 px-3 py-2 text-left font-semibold">Notes</th>
                 <th className="border border-gray-400 px-3 py-2 text-left font-semibold w-40">Signature</th>
               </tr>
@@ -1426,13 +1504,14 @@ export default function ProgressNotesPage() {
             <tbody>
               {allMainEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="border border-gray-400 px-3 py-4 text-gray-500">No progress notes.</td>
+                  <td colSpan={4} className="border border-gray-400 px-3 py-4 text-gray-500">No progress notes.</td>
                 </tr>
               ) : (
                 allMainEntries.map((entry) => (
                   <tr key={entry.id}>
                     <td className="border border-gray-400 px-3 py-2 whitespace-nowrap">{new Date(entry.note_date).toLocaleDateString('en-US')}</td>
-                    <td className="border border-gray-400 px-3 py-2 whitespace-pre-wrap align-top">{entry.notes}</td>
+                    <td className="border border-gray-400 px-3 py-2 whitespace-nowrap align-top">{physicianDisplayText(entry.physician_name)}</td>
+                    <td className="border border-gray-400 px-3 py-2 whitespace-pre-wrap align-top">{page1EntryNotesDisplay(entry)}</td>
                     <td className="border border-gray-400 px-3 py-2 align-top">
                       {(entry.signature || (entry.created_by === userProfile?.id && userProfile?.staff_signature)) ? (
                         <InitialsOrSignatureDisplay

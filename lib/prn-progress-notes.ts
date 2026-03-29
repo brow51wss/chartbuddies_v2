@@ -27,8 +27,6 @@ export function formatPRNProgressNoteBody(record: MARPRNRecord): string {
     lines.push(`Additional note: ${(record.note || '').trim()}`)
   }
   lines.push(`Result: ${(record.result || '').trim() || '—'}`)
-  lines.push(`Initials: ${(record.initials || '').trim() || '—'}`)
-  lines.push('Documentation: Signed')
   return lines.join('\n')
 }
 

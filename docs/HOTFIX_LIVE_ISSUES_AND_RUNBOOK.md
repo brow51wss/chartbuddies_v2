@@ -131,8 +131,8 @@ Follow these in order. Do not start the next item until the current item is conf
 
 Additional items from team notes. **Not** sequenced with §5 items 1–8 above; prioritize as agreed.
 
-1. Standardize **Progress Notes** labels (drop “page 1/2”; use e.g. Progress Notes, Notes and Addendum, Monthly Summary).
-2. Physician/APRN: **Other** in dropdown + show custom field only when Other.
+1. **DONE** — Standardize **Progress Notes** labels: tab buttons **Notes & Addendum** / **Monthly Summary** (no “Page 1/2”); Monthly Summary screen/print title **MONTHLY SUMMARY**. Shared **PatientStickyBar**: **Name**, **DOB**, **Sex** labels (same accent as Record No.).
+2. **DONE** — Physician/APRN: **+ Add** last in dropdown; custom field **Add New** only when selected; **Physician/APRN** column + print column show `physician_name` per note.
 3. Re-test MAR date-edit bug + cache hypothesis; second tester.
 4. Multi-time vitals (same theme as task 4 above).
 5. More **linear** PRN UX: date → med → dose → reason → time → result → initials → signature.
