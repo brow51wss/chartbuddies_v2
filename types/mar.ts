@@ -54,6 +54,7 @@ export interface MARAdministration {
 export interface MARPRNRecord {
   id: string
   mar_form_id: string
+  start_date: string | null
   date: string
   hour: string | null
   initials: string | null
@@ -72,7 +73,7 @@ export interface MARPRNRecord {
 export interface MARPRNMedication {
   id: string
   mar_form_id: string
-  date_added: string
+  start_date: string
   medication: string
   dosage: string | null
   reason: string
