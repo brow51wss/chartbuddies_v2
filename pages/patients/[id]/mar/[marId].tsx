@@ -826,7 +826,8 @@ export default function ViewMARForm() {
       })
   }, [marFormId, marForm?.id, facilityNameFromProfile, marForm?.facility_name])
 
-  // Scroll MAR table so the last filled day (or today) is in view when the chart loads
+  // Scroll MAR table so "today" (for current MAR month) is first visible day after Hour.
+  // For non-current MAR months, fall back to last filled day (or day 1).
   useEffect(() => {
     if (loading || !marForm) return
     let lastFilledDay = 0
@@ -836,12 +837,14 @@ export default function ViewMARForm() {
         if (d > lastFilledDay) lastFilledDay = d
       }
     }
-    const dayToScroll = lastFilledDay > 0
-      ? Math.min(31, lastFilledDay)
-      : Math.min(31, Math.max(1, new Date().getDate()))
-    const fixedColsWidth = MAR_COL.med + MAR_COL.startStop + (readOnly ? 90 : MAR_COL.hour)
-    const dayColWidth = MAR_COL.day
-    const scrollLeft = Math.max(0, fixedColsWidth + (dayToScroll - 1) * dayColWidth - 80)
+    const parsed = parseMARMonthYear(marForm.month_year)
+    const now = new Date()
+    const todayInThisMarMonth =
+      parsed && parsed.y === now.getFullYear() && parsed.m === now.getMonth() + 1
+        ? Math.min(31, now.getDate())
+        : null
+    const dayToScroll = todayInThisMarMonth ?? (lastFilledDay > 0 ? Math.min(31, lastFilledDay) : 1)
+    const scrollLeft = Math.max(0, (dayToScroll - 1) * MAR_COL.day)
     const applyScroll = () => {
       if (marTableScrollRef.current) marTableScrollRef.current.scrollLeft = scrollLeft
       if (marHeaderScrollRef.current) marHeaderScrollRef.current.scrollLeft = scrollLeft
@@ -1466,6 +1469,16 @@ export default function ViewMARForm() {
     if (d > range.max) return range.max
     return d
   }
+
+  /** Day number for "today" only when the viewed MAR is the current month; otherwise null. */
+  const todayDayInViewedMar = React.useMemo(() => {
+    if (!marForm?.month_year) return null
+    const parsed = parseMARMonthYear(marForm.month_year)
+    if (!parsed) return null
+    const now = new Date()
+    if (parsed.y !== now.getFullYear() || parsed.m !== now.getMonth() + 1) return null
+    return Math.min(31, now.getDate())
+  }, [marForm?.month_year])
 
   /** Return plain text for a day cell for print (no buttons/links). */
   const getDayCellPrintText = (
@@ -3112,7 +3125,11 @@ export default function ViewMARForm() {
                         {days.map(day => (
                           <th
                             key={day}
-                            className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300"
+                            className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs font-medium ${
+                              day === todayDayInViewedMar
+                                ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100'
+                                : 'text-gray-700 dark:text-gray-300'
+                            }`}
                             style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day }}
                           >
                             {day}
@@ -3546,7 +3563,13 @@ export default function ViewMARForm() {
                                     isDiscontinued ? 'bg-red-50 dark:bg-red-900/20' : ''
                                   } ${
                                     isEditing && isMedActive && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
-                                  } ${!isMedActive ? 'bg-gray-100 dark:bg-gray-800' : ''} ${isDiscontinued ? 'cursor-not-allowed' : ''}`}
+                                  } ${
+                                    day === todayDayInViewedMar
+                                      ? 'bg-amber-50 dark:bg-amber-900/20'
+                                      : !isMedActive
+                                        ? 'bg-gray-100 dark:bg-gray-800'
+                                        : ''
+                                  } ${isDiscontinued ? 'cursor-not-allowed' : ''}`}
                                   onDoubleClick={isEditing && isMedActive && !isVitalsEntry && !isDiscontinued ? () => {
                                     if (isGiven) {
                                       updateAdministration(med.id, day, 'Not Given', initials)
