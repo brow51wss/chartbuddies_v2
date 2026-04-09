@@ -176,7 +176,7 @@ Captured from product review notes/screenshots; default status is **TODO** unles
 
 #### Navigation & UI Polish
 
-1. **TODO** — Grey out inactive modules/features not yet active.
+1. **DONE** — Grey out inactive modules/features not yet active.
 2. **TODO** — Refine multi-form print view for cleaner audit printing.
 3. **TODO** — Add quick status/table view for per-patient activity status (e.g., active, draft).
 4. **TODO** — Add hover legend showing code meanings.
