@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import ProtectedRoute from '../components/ProtectedRoute'
@@ -39,6 +39,7 @@ export default function Admissions() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitMessage, setSubmitMessage] = useState('')
   const [error, setError] = useState('')
+  const submitUnlockAtRef = useRef(0)
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -115,12 +116,15 @@ export default function Admissions() {
       setError(`Please complete: ${missing.join(', ')}.`)
       return
     }
+    // Prevent the same click that advances to step 2 from immediately triggering submit.
+    submitUnlockAtRef.current = Date.now() + 500
     setStep(2)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (step !== 2) return
+    if (Date.now() < submitUnlockAtRef.current) return
 
     const refreshedProfile = await getCurrentUserProfile()
     if (!refreshedProfile) {
@@ -373,6 +377,7 @@ export default function Admissions() {
                       className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 mr-auto sm:mr-0"
                       onClick={() => {
                         setError('')
+                        submitUnlockAtRef.current = 0
                         setStep(1)
                       }}
                       disabled={isSubmitting}
@@ -387,6 +392,7 @@ export default function Admissions() {
                       setFormData(emptyForm())
                       setAge('')
                       setStep(1)
+                      submitUnlockAtRef.current = 0
                       setSubmitMessage('')
                       setError('')
                     }}
