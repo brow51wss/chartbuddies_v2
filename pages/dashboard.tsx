@@ -46,6 +46,7 @@ export default function Dashboard() {
   const [editPatientStep, setEditPatientStep] = useState<1 | 2>(1)
   const [editTouchedFields, setEditTouchedFields] = useState<Partial<Record<keyof PatientProfileFormValues, boolean>>>({})
   const nameSortRef = useRef<HTMLTableCellElement>(null)
+  const saveEditInFlightRef = useRef(false)
   const { isReadOnly } = useReadOnly()
 
   // Close dropdown when clicking outside
@@ -395,6 +396,7 @@ export default function Dashboard() {
 
   const handleSavePatientEdits = async () => {
     if (!editingPatientId || !editForm || !userProfile) return
+    if (saveEditInFlightRef.current) return
     if (userProfile.role !== 'head_nurse' && userProfile.role !== 'superadmin') {
       setEditError('You do not have permission to edit patient details.')
       return
@@ -419,6 +421,7 @@ export default function Dashboard() {
       setEditPatientStep(1)
       return
     }
+    saveEditInFlightRef.current = true
     setSavingEdit(true)
     setEditError('')
     try {
@@ -479,6 +482,7 @@ export default function Dashboard() {
       setEditError(err.message || 'Failed to update patient.')
     } finally {
       setSavingEdit(false)
+      saveEditInFlightRef.current = false
     }
   }
 
@@ -770,6 +774,7 @@ export default function Dashboard() {
                       onChange={handleEditPatientInputChange}
                       ageDisplay={editPatientAge}
                       mode={{ type: 'wizard', step: editPatientStep }}
+                      disabled={savingEdit}
                       recordNumber={patients.find((p) => p.id === editingPatientId)?.record_number || ''}
                       facilityDisplayName={userFacilityName || null}
                       showCompletionChecks

@@ -413,6 +413,7 @@ export default function ViewMARForm() {
   const [showCustomLegendModal, setShowCustomLegendModal] = useState(false)
   const [editingCustomLegend, setEditingCustomLegend] = useState<{ id: string | null; code: string; description: string } | null>(null)
   const allowNavigationRef = useRef(false)
+  const editPatientSaveInFlightRef = useRef(false)
   const marTableScrollRef = useRef<HTMLDivElement>(null)
   const marHeaderScrollRef = useRef<HTMLDivElement>(null)
   const [printRowHeights, setPrintRowHeights] = useState<number[]>([])
@@ -517,6 +518,7 @@ export default function ViewMARForm() {
 
   const handleSaveMarPatientEdits = async () => {
     if (!marForm?.patient_id || !editPatientFormDraft) return
+    if (editPatientSaveInFlightRef.current) return
     const form = editPatientFormDraft
 
     const firstName = form.firstName.trim()
@@ -539,6 +541,7 @@ export default function ViewMARForm() {
       return
     }
 
+    editPatientSaveInFlightRef.current = true
     setEditPatientSaving(true)
     setEditPatientModalError('')
     try {
@@ -607,6 +610,7 @@ export default function ViewMARForm() {
       setEditPatientModalError(msg)
     } finally {
       setEditPatientSaving(false)
+      editPatientSaveInFlightRef.current = false
     }
   }
 
@@ -5044,6 +5048,7 @@ export default function ViewMARForm() {
                   onChange={handleMarEditPatientInputChange}
                   ageDisplay={editPatientAge}
                   mode={{ type: 'wizard', step: editPatientStep }}
+                  disabled={editPatientSaving}
                   recordNumber={marForm.record_number || ''}
                   facilityDisplayName={facilityNameFromProfile}
                   showCompletionChecks

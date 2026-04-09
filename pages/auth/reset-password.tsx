@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -12,6 +12,7 @@ export default function ResetPassword() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [ready, setReady] = useState(false)
+  const inFlightRef = useRef(false)
 
   useEffect(() => {
     // Supabase recovers session from URL hash (access_token, type=recovery) automatically.
@@ -30,6 +31,7 @@ export default function ResetPassword() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (inFlightRef.current) return
     if (password !== confirmPassword) {
       setError('Passwords do not match')
       return
@@ -38,6 +40,7 @@ export default function ResetPassword() {
       setError('Password must be at least 6 characters')
       return
     }
+    inFlightRef.current = true
     setLoading(true)
     setError('')
     try {
@@ -45,6 +48,7 @@ export default function ResetPassword() {
       if (updateError) {
         setError(updateError.message)
         setLoading(false)
+        inFlightRef.current = false
         return
       }
       setSuccess(true)
@@ -53,6 +57,7 @@ export default function ResetPassword() {
       setError(err.message || 'Something went wrong.')
     }
     setLoading(false)
+    inFlightRef.current = false
   }
 
   return (

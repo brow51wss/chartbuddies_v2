@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
@@ -8,9 +8,12 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [sent, setSent] = useState(false)
+  const inFlightRef = useRef(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (inFlightRef.current) return
+    inFlightRef.current = true
     setLoading(true)
     setError('')
     try {
@@ -26,6 +29,7 @@ export default function ForgotPassword() {
       if (resetError) {
         setError(resetError.message)
         setLoading(false)
+        inFlightRef.current = false
         return
       }
       setSent(true)
@@ -33,6 +37,7 @@ export default function ForgotPassword() {
       setError(err.message || 'Something went wrong.')
     }
     setLoading(false)
+    inFlightRef.current = false
   }
 
   return (

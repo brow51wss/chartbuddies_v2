@@ -40,6 +40,8 @@ export default function Admissions() {
   const [submitMessage, setSubmitMessage] = useState('')
   const [error, setError] = useState('')
   const submitUnlockAtRef = useRef(0)
+  const submitInFlightRef = useRef(false)
+  const [duplicateWarning, setDuplicateWarning] = useState('')
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -69,6 +71,53 @@ export default function Admissions() {
       setResolvedFacilityName(data?.name ?? null)
     })()
   }, [userProfile?.hospital_id])
+
+  useEffect(() => {
+    const first = formData.firstName.trim()
+    const last = formData.lastName.trim()
+    const dob = formData.dateOfBirth
+    const phoneDigits = formData.homePhone.replace(/\D/g, '')
+    const hospitalId = userProfile?.hospital_id
+
+    if (!hospitalId || !dob || first.length < 2 || last.length < 2) {
+      setDuplicateWarning('')
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      const fullName = `${first} ${last}`.toLowerCase()
+      const { data, error: dupError } = await supabase
+        .from('patients')
+        .select('id, patient_name, date_of_birth, home_phone, record_number')
+        .eq('hospital_id', hospitalId)
+        .eq('date_of_birth', dob)
+        .limit(8)
+
+      if (dupError || !data) {
+        setDuplicateWarning('')
+        return
+      }
+
+      const maybeDuplicate = data.find((p: any) => {
+        const existingName = (p.patient_name || '').trim().toLowerCase()
+        const existingPhoneDigits = (p.home_phone || '').replace(/\D/g, '')
+        const sameName = existingName === fullName
+        const samePhone = phoneDigits.length >= 10 && existingPhoneDigits !== '' && existingPhoneDigits === phoneDigits
+        return sameName || samePhone
+      })
+
+      if (!maybeDuplicate) {
+        setDuplicateWarning('')
+        return
+      }
+
+      setDuplicateWarning(
+        `Potential duplicate found: ${maybeDuplicate.patient_name} (${maybeDuplicate.record_number || 'no record number'}). Please verify before submitting.`
+      )
+    }, 450)
+
+    return () => clearTimeout(timer)
+  }, [formData.firstName, formData.lastName, formData.dateOfBirth, formData.homePhone, userProfile?.hospital_id])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -125,6 +174,12 @@ export default function Admissions() {
     e.preventDefault()
     if (step !== 2) return
     if (Date.now() < submitUnlockAtRef.current) return
+    if (submitInFlightRef.current) return
+
+    if (duplicateWarning) {
+      const proceed = window.confirm(`${duplicateWarning}\n\nDo you still want to submit this patient?`)
+      if (!proceed) return
+    }
 
     const refreshedProfile = await getCurrentUserProfile()
     if (!refreshedProfile) {
@@ -201,6 +256,7 @@ export default function Admissions() {
 
     const activeProfile = refreshedProfile
 
+    submitInFlightRef.current = true
     setIsSubmitting(true)
     setSubmitMessage('')
     setError('')
@@ -276,6 +332,7 @@ export default function Admissions() {
       setFormData(emptyForm())
       setAge('')
       setStep(1)
+      setDuplicateWarning('')
 
       setTimeout(() => {
         router.push('/dashboard?module=mar')
@@ -284,6 +341,7 @@ export default function Admissions() {
       setError(err.message || 'Failed to register patient')
     } finally {
       setIsSubmitting(false)
+      submitInFlightRef.current = false
     }
   }
 
@@ -349,6 +407,12 @@ export default function Admissions() {
                 </div>
               )}
 
+              {duplicateWarning && (
+                <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
+                  <p className="text-amber-800 dark:text-amber-200">{duplicateWarning}</p>
+                </div>
+              )}
+
               {submitMessage && (
                 <div
                   className={`mb-6 p-4 rounded-md ${
@@ -367,6 +431,7 @@ export default function Admissions() {
                   onChange={handleInputChange}
                   ageDisplay={age}
                   mode={{ type: 'wizard', step }}
+                  disabled={isSubmitting}
                   facilityDisplayName={resolvedFacilityName}
                   showCompletionChecks
                 />

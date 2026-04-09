@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -94,9 +94,12 @@ export default function Signup() {
     formData.email.trim().toLowerCase() !== inviteLookup.invitedEmailFromInvite.trim().toLowerCase()
 
   const [checkingEmail, setCheckingEmail] = useState(false)
+  const step1InFlightRef = useRef(false)
+  const signupInFlightRef = useRef(false)
 
   const handleStep1Submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (step1InFlightRef.current || checkingEmail) return
     if (inviteEmailMismatch) {
       setError('This invite was sent to a different email address. Please use the signup link from that email.')
       return
@@ -114,6 +117,7 @@ export default function Signup() {
       return
     }
     setError('')
+    step1InFlightRef.current = true
     setCheckingEmail(true)
     try {
       const { data: exists, error: rpcError } = await supabase.rpc('check_email_exists', {
@@ -123,6 +127,7 @@ export default function Signup() {
         console.error('Email check error:', rpcError)
         setError('Could not verify email. Please try again.')
         setCheckingEmail(false)
+        step1InFlightRef.current = false
         return
       }
       if (exists) {
@@ -134,16 +139,20 @@ export default function Signup() {
           setError('This email is already registered. Please sign in or use a different email.')
         }
         setCheckingEmail(false)
+        step1InFlightRef.current = false
         return
       }
       setStep(2)
     } finally {
       setCheckingEmail(false)
+      step1InFlightRef.current = false
     }
   }
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (signupInFlightRef.current || loading) return
+    signupInFlightRef.current = true
     setLoading(true)
     setError('')
 
@@ -390,6 +399,7 @@ export default function Signup() {
               setEmailSent(formData.email)
               setSuccess(true)
               setLoading(false)
+              signupInFlightRef.current = false
             }
             return
           }
@@ -452,6 +462,7 @@ export default function Signup() {
           // User can update their profile later
           setError('Facility created successfully! However, we could not set your admin role. Please contact support or try logging in.')
           setLoading(false)
+          signupInFlightRef.current = false
           return
         }
       }
@@ -465,12 +476,14 @@ export default function Signup() {
         setEmailSent(formData.email)
         setSuccess(true)
         setLoading(false)
+        signupInFlightRef.current = false
         // Don't redirect - show the success message
       }
     } catch (err: any) {
       console.error('Signup error:', err)
       setError(err.message || 'Database error saving new user')
       setLoading(false)
+      signupInFlightRef.current = false
     }
   }
 

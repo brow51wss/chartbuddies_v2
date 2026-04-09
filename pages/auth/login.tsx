@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -14,6 +14,7 @@ export default function Login() {
   const [message, setMessage] = useState('')
   const [resendLoading, setResendLoading] = useState(false)
   const [resendSent, setResendSent] = useState(false)
+  const loginInFlightRef = useRef(false)
 
   useEffect(() => {
     // Redirect if already logged in
@@ -28,6 +29,8 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loginInFlightRef.current) return
+    loginInFlightRef.current = true
     setLoading(true)
     setError('')
     setMessage('')
@@ -41,6 +44,7 @@ export default function Login() {
       setError(loginError.message)
       setResendSent(false)
       setLoading(false)
+      loginInFlightRef.current = false
       return
     }
 
@@ -125,6 +129,7 @@ export default function Login() {
       }
     }
     setLoading(false)
+    loginInFlightRef.current = false
   }
 
   return (

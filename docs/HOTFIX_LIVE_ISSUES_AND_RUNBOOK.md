@@ -170,9 +170,9 @@ Captured from product review notes/screenshots; default status is **TODO** unles
 
 #### Technical / Bug Fixes
 
-1. **TODO (critical)** — Fix submit-button collision bug (prevent duplicate submissions from multiple clicks during server lag).
-2. **TODO** — Add loading state (disable inputs + show progress indicator during save) to prevent duplicate records.
-3. **TODO** — Add debounce + input masking to reduce duplicate patient profiles.
+1. **DONE (critical)** — Fix submit-button collision bug (prevent duplicate submissions from multiple clicks during server lag).
+2. **DONE** — Add loading state (disable inputs + show progress indicator during save) to prevent duplicate records.
+3. **PARTIAL** — Add debounce + input masking to reduce duplicate patient profiles (debounced duplicate warning implemented in admissions; placeholders/check thresholds in shared patient form. Full centralized masking + cross-flow duplicate strategy still open).
 
 #### Navigation & UI Polish
 

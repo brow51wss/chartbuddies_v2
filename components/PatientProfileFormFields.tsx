@@ -29,6 +29,8 @@ type Props = {
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void
   ageDisplay: string
   mode: Mode
+  /** Disable all editable controls while saving. */
+  disabled?: boolean
   /** Show green check indicator when required fields are completed. */
   showCompletionChecks?: boolean
   /**
@@ -65,6 +67,7 @@ export function PatientProfileFormFields({
   onChange,
   ageDisplay,
   mode,
+  disabled = false,
   showCompletionChecks = false,
   editedFields,
   recordNumber,
@@ -109,7 +112,7 @@ export function PatientProfileFormFields({
     showCompletionChecks && isComplete(field) && (editedFields == null || !!editedFields[field])
 
   return (
-    <div className="space-y-10">
+    <fieldset disabled={disabled} className={`space-y-10 ${disabled ? 'opacity-75' : ''}`}>
       {showBasicContact && (
         <>
           <div>
@@ -469,6 +472,6 @@ export function PatientProfileFormFields({
           </div>
         </div>
       )}
-    </div>
+    </fieldset>
   )
 }

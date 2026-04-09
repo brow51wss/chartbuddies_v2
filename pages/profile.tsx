@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -21,6 +21,7 @@ export default function Profile() {
   const [signatureLinkSending, setSignatureLinkSending] = useState(false)
   const [signatureLinkMessage, setSignatureLinkMessage] = useState('')
   const [signatureLinkError, setSignatureLinkError] = useState('')
+  const saveInFlightRef = useRef(false)
   const [formData, setFormData] = useState({
     first_name: '',
     middle_name: '',
@@ -84,6 +85,8 @@ export default function Profile() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!userProfile) return
+    if (saveInFlightRef.current) return
+    saveInFlightRef.current = true
     setSaving(true)
     setError('')
     setMessage('')
@@ -120,6 +123,7 @@ export default function Profile() {
       setTimeout(() => setError(''), 5000)
     } finally {
       setSaving(false)
+      saveInFlightRef.current = false
     }
   }
 
@@ -190,6 +194,7 @@ export default function Profile() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
+              <fieldset disabled={saving} className={saving ? 'opacity-80' : ''}>
               {/* Email (Read-only) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -371,6 +376,7 @@ export default function Profile() {
                   {saving ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
+              </fieldset>
             </form>
           </div>
         </main>

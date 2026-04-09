@@ -171,7 +171,16 @@ export default function PatientHub() {
                   />
                   <div className="p-6">
                     <div className="flex items-start justify-between mb-4">
-                      <div className="text-4xl">{module.icon}</div>
+                      <div
+                        className={`text-4xl ${
+                          module.status === 'coming_soon'
+                            ? 'grayscale opacity-70'
+                            : ''
+                        }`}
+                        aria-hidden="true"
+                      >
+                        {module.icon}
+                      </div>
                       {module.status === 'coming_soon' && (
                         <span className="px-2 py-1 text-xs font-semibold text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-full">
                           Coming Soon

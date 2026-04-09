@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -32,6 +32,8 @@ export default function InvitesPage() {
   const [sendMessage, setSendMessage] = useState('')
   const [sendError, setSendError] = useState('')
   const [resendAllowedEmail, setResendAllowedEmail] = useState<string | null>(null)
+  const createInviteInFlightRef = useRef(false)
+  const sendInviteInFlightRef = useRef(false)
 
   useEffect(() => {
     const load = async () => {
@@ -74,6 +76,8 @@ export default function InvitesPage() {
   const handleCreateInvite = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedHospitalId || !userProfile) return
+    if (createInviteInFlightRef.current) return
+    createInviteInFlightRef.current = true
     setCreating(true)
     setError('')
     setMessage('')
@@ -107,12 +111,15 @@ export default function InvitesPage() {
       setError((err as Error).message || 'Failed to create invite')
     } finally {
       setCreating(false)
+      createInviteInFlightRef.current = false
     }
   }
 
   const handleSendInviteEmail = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!inviteEmail.trim() || !lastCode || !lastInviteId || !lastFacilityName) return
+    if (sendInviteInFlightRef.current) return
+    sendInviteInFlightRef.current = true
     setSending(true)
     setSendError('')
     setSendMessage('')
@@ -152,6 +159,7 @@ export default function InvitesPage() {
       setSendError((err as Error).message || 'Failed to send invite')
     } finally {
       setSending(false)
+      sendInviteInFlightRef.current = false
     }
   }
 
@@ -196,6 +204,7 @@ export default function InvitesPage() {
         )}
 
         <form onSubmit={handleCreateInvite} className="space-y-6 bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-200 dark:border-gray-700">
+          <fieldset disabled={creating} className={creating ? 'opacity-80' : ''}>
           <div>
             <label htmlFor="hospital" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Facility
@@ -254,6 +263,7 @@ export default function InvitesPage() {
           >
             {creating ? 'Creating...' : 'Create Invite Code'}
           </button>
+          </fieldset>
         </form>
 
         {lastCode && (
@@ -296,6 +306,7 @@ export default function InvitesPage() {
                 </div>
               )}
               <form onSubmit={handleSendInviteEmail} className="flex flex-wrap items-end gap-3">
+                <fieldset disabled={sending} className={`contents ${sending ? 'opacity-80' : ''}`}>
                 <div className="flex-1 min-w-[200px]">
                   <label htmlFor="invite-email" className="sr-only">Email address</label>
                   <input
@@ -315,6 +326,7 @@ export default function InvitesPage() {
                 >
                   {sending ? 'Sending...' : 'Send invite'}
                 </button>
+                </fieldset>
               </form>
             </div>
           </>
