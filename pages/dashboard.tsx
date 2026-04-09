@@ -8,6 +8,9 @@ import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
 import { useReadOnly } from '../contexts/ReadOnlyContext'
 import type { UserProfile, Patient } from '../types/auth'
+import { parsePatientNameParts, computeAgeFromISODate } from '../lib/patientName'
+import { PatientProfileFormFields, type PatientProfileFormValues } from '../components/PatientProfileFormFields'
+import { missingFieldsForPatientProfileWizardStep1 } from '../lib/patientProfileWizardValidation'
 
 type SortColumn = 'date_of_birth' | 'created_at' | 'first_name' | 'last_name' | null
 type SortDirection = 'asc' | 'desc'
@@ -20,30 +23,8 @@ const parsePatientName = (fullName: string) => {
   return { firstName, lastName }
 }
 
-const parsePatientNameParts = (fullName: string) => {
-  const parts = fullName.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return { firstName: '', middleName: '', lastName: '' }
-  if (parts.length === 1) return { firstName: parts[0], middleName: '', lastName: '' }
-  if (parts.length === 2) return { firstName: parts[0], middleName: '', lastName: parts[1] }
-  return {
-    firstName: parts[0],
-    middleName: parts.slice(1, -1).join(' '),
-    lastName: parts[parts.length - 1]
-  }
-}
-
-interface EditPatientFormState {
-  firstName: string
-  middleName: string
-  lastName: string
-  dateOfBirth: string
+interface EditPatientFormState extends PatientProfileFormValues {
   sex: Patient['sex'] | ''
-  diagnosis: string
-  diet: string
-  allergies: string
-  physicianName: string
-  physicianPhone: string
-  facilityName: string
 }
 
 export default function Dashboard() {
@@ -61,6 +42,8 @@ export default function Dashboard() {
   const [editForm, setEditForm] = useState<EditPatientFormState | null>(null)
   const [editError, setEditError] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
+  const [editPatientAge, setEditPatientAge] = useState('')
+  const [editPatientStep, setEditPatientStep] = useState<1 | 2>(1)
   const nameSortRef = useRef<HTMLTableCellElement>(null)
   const { isReadOnly } = useReadOnly()
 
@@ -353,13 +336,21 @@ export default function Dashboard() {
       lastName: nameParts.lastName,
       dateOfBirth: patient.date_of_birth?.slice(0, 10) || '',
       sex: patient.sex,
+      dateOfAdmission:
+        patient.admission_date?.slice(0, 10) || patient.date_of_birth?.slice(0, 10) || '',
+      streetAddress: patient.street_address || '',
+      city: patient.city || '',
+      state: patient.state || '',
+      homePhone: patient.home_phone || '',
+      email: patient.email || '',
       diagnosis: patient.diagnosis || '',
       diet: patient.diet || '',
       allergies: patient.allergies || '',
       physicianName: patient.physician_name || '',
       physicianPhone: patient.physician_phone || '',
-      facilityName: userFacilityName || patient.facility_name || ''
     })
+    setEditPatientAge(computeAgeFromISODate(patient.date_of_birth?.slice(0, 10) || ''))
+    setEditPatientStep(1)
   }
 
   const closeEditPatientModal = () => {
@@ -367,10 +358,35 @@ export default function Dashboard() {
     setEditingPatientId(null)
     setEditForm(null)
     setEditError('')
+    setEditPatientAge('')
+    setEditPatientStep(1)
+  }
+
+  const goToEditPatientStep2 = () => {
+    if (!editForm) return
+    setEditError('')
+    const missing = missingFieldsForPatientProfileWizardStep1(editForm as PatientProfileFormValues)
+    if (missing.length) {
+      setEditError(`Please complete: ${missing.join(', ')}.`)
+      return
+    }
+    setEditPatientStep(2)
   }
 
   const handleEditFieldChange = (field: keyof EditPatientFormState, value: string) => {
-    setEditForm(prev => (prev ? { ...prev, [field]: value } : prev))
+    setEditForm((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, [field]: value }
+      if (field === 'dateOfBirth') {
+        setEditPatientAge(computeAgeFromISODate(value))
+      }
+      return next
+    })
+  }
+
+  const handleEditPatientInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    handleEditFieldChange(name as keyof EditPatientFormState, value)
   }
 
   const handleSavePatientEdits = async () => {
@@ -393,12 +409,10 @@ export default function Dashboard() {
       setEditError('Patient name cannot be blank.')
       return
     }
-    if (!editForm.dateOfBirth) {
-      setEditError('Date of birth is required.')
-      return
-    }
-    if (!editForm.sex) {
-      setEditError('Sex is required.')
+    const missingStep1 = missingFieldsForPatientProfileWizardStep1(editForm as PatientProfileFormValues)
+    if (missingStep1.length) {
+      setEditError(`Please complete: ${missingStep1.join(', ')}.`)
+      setEditPatientStep(1)
       return
     }
     setSavingEdit(true)
@@ -413,7 +427,13 @@ export default function Dashboard() {
         allergies: editForm.allergies.trim() || 'None',
         physician_name: editForm.physicianName.trim() || 'TBD',
         physician_phone: editForm.physicianPhone.trim() || null,
-        facility_name: editForm.facilityName.trim() || null
+        facility_name: userFacilityName?.trim() || null,
+        street_address: editForm.streetAddress.trim() || null,
+        city: editForm.city.trim() || null,
+        state: editForm.state.trim() || null,
+        home_phone: editForm.homePhone.trim() || null,
+        email: editForm.email.trim() || null,
+        admission_date: editForm.dateOfAdmission || null,
       }
 
       const { data, error: updateError } = await supabase
@@ -696,14 +716,36 @@ export default function Dashboard() {
 
             {editingPatientId && editForm && (
               <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="edit-patient-title">
-                <div className="w-full max-w-3xl bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-                  <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                    <h3 id="edit-patient-title" className="text-lg font-semibold text-gray-900 dark:text-white">Edit Patient Details</h3>
+                <div className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+                  <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-4">
+                    <h3 id="edit-patient-title" className="text-lg font-semibold text-gray-900 dark:text-white shrink-0">
+                      Edit Patient Details
+                    </h3>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 sm:justify-end min-w-0">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap" aria-live="polite">
+                        Step {editPatientStep} of 2
+                      </p>
+                      <div
+                        className="flex gap-1.5 w-full sm:w-44 shrink-0"
+                        role="progressbar"
+                        aria-valuemin={1}
+                        aria-valuemax={2}
+                        aria-valuenow={editPatientStep}
+                        aria-label="Edit progress"
+                      >
+                        <div
+                          className={`h-2.5 flex-1 rounded-sm transition-colors ${editPatientStep >= 1 ? 'bg-lasso-navy' : 'bg-gray-200 dark:bg-gray-600'}`}
+                        />
+                        <div
+                          className={`h-2.5 flex-1 rounded-sm transition-colors ${editPatientStep >= 2 ? 'bg-lasso-navy' : 'bg-gray-200 dark:bg-gray-600'}`}
+                        />
+                      </div>
+                    </div>
                     <button
                       type="button"
                       onClick={closeEditPatientModal}
                       disabled={savingEdit}
-                      className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-50"
+                      className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-50 shrink-0"
                       aria-label="Close"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -712,81 +754,37 @@ export default function Dashboard() {
                     </button>
                   </div>
 
-                  <div className="px-6 py-4 max-h-[70vh] overflow-y-auto space-y-4">
+                  <div className="px-6 py-4 max-h-[75vh] overflow-y-auto">
                     {editError && (
-                      <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">
+                      <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">
                         {editError}
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">First Name *</label>
-                        <input value={editForm.firstName} onChange={(e) => handleEditFieldChange('firstName', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Middle Name</label>
-                        <input value={editForm.middleName} onChange={(e) => handleEditFieldChange('middleName', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Last Name *</label>
-                        <input value={editForm.lastName} onChange={(e) => handleEditFieldChange('lastName', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Date of Birth *</label>
-                        <input type="date" value={editForm.dateOfBirth} onChange={(e) => handleEditFieldChange('dateOfBirth', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Sex *</label>
-                        <select value={editForm.sex} onChange={(e) => handleEditFieldChange('sex', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                          <option value="">Select</option>
-                          <option value="Male">Male</option>
-                          <option value="Female">Female</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Record Number</label>
-                        <input value={patients.find(p => p.id === editingPatientId)?.record_number || ''} readOnly className="w-full border border-gray-200 dark:border-gray-700 rounded px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 cursor-not-allowed" />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Diagnosis</label>
-                        <input value={editForm.diagnosis} onChange={(e) => handleEditFieldChange('diagnosis', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Diet</label>
-                        <input value={editForm.diet} onChange={(e) => handleEditFieldChange('diet', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Allergies</label>
-                      <input value={editForm.allergies} onChange={(e) => handleEditFieldChange('allergies', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Physician/APRN or Clinic</label>
-                        <input value={editForm.physicianName} onChange={(e) => handleEditFieldChange('physicianName', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Physician Phone</label>
-                        <input value={editForm.physicianPhone} onChange={(e) => handleEditFieldChange('physicianPhone', e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Facility Name</label>
-                        <input value={userFacilityName || editForm.facilityName} readOnly className="w-full border border-gray-200 dark:border-gray-700 rounded px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 cursor-not-allowed" />
-                      </div>
-                    </div>
+                    <PatientProfileFormFields
+                      values={editForm as PatientProfileFormValues}
+                      onChange={handleEditPatientInputChange}
+                      ageDisplay={editPatientAge}
+                      mode={{ type: 'wizard', step: editPatientStep }}
+                      recordNumber={patients.find((p) => p.id === editingPatientId)?.record_number || ''}
+                      facilityDisplayName={userFacilityName || null}
+                    />
                   </div>
 
-                  <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
+                  <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-end gap-2">
+                    {editPatientStep === 2 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditError('')
+                          setEditPatientStep(1)
+                        }}
+                        disabled={savingEdit}
+                        className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 mr-auto sm:mr-0"
+                      >
+                        Back
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={closeEditPatientModal}
@@ -795,14 +793,25 @@ export default function Dashboard() {
                     >
                       Cancel
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleSavePatientEdits}
-                      disabled={savingEdit}
-                      className="px-4 py-2 bg-lasso-teal text-white rounded text-sm font-medium hover:bg-lasso-blue disabled:opacity-60"
-                    >
-                      {savingEdit ? 'Saving...' : 'Save changes'}
-                    </button>
+                    {editPatientStep === 1 ? (
+                      <button
+                        type="button"
+                        onClick={goToEditPatientStep2}
+                        disabled={savingEdit}
+                        className="px-4 py-2 bg-lasso-navy text-white rounded text-sm font-medium hover:bg-lasso-teal disabled:opacity-60"
+                      >
+                        Next
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleSavePatientEdits}
+                        disabled={savingEdit}
+                        className="px-4 py-2 bg-lasso-teal text-white rounded text-sm font-medium hover:bg-lasso-blue disabled:opacity-60"
+                      >
+                        {savingEdit ? 'Saving...' : 'Save changes'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

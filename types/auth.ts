@@ -47,6 +47,14 @@ export interface Patient {
   physician_name: string
   physician_phone: string | null
   facility_name: string | null
+  /** Optional columns from migration 067; present after admissions / profile sync. */
+  street_address?: string | null
+  city?: string | null
+  state?: string | null
+  zip_code?: string | null
+  home_phone?: string | null
+  email?: string | null
+  admission_date?: string | null
   created_by: string
   created_at: string
   updated_at: string

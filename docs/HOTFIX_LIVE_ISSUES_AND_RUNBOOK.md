@@ -36,9 +36,9 @@ Suggested branch name:
 | LIVE-001 | new | critical | TODO | TODO | TODO | TODO | TODO | Collect exact production route + stack trace |
 | LIVE-002 | new | high | TODO | TODO | TODO | TODO | TODO | Add only if confirmed in live |
 | LIVE-003 | new | medium | TODO | TODO | TODO | TODO | TODO | Add only if confirmed in live |
-| LIVE-004 | new | high | `/` (homepage) | Editorial placeholder copy is visible (`Remove:` / `Replace with:` instructions shown to users). | All homepage visitors | 2026-03-19 | TODO | Source: screenshot evidence provided by team |
-| LIVE-005 | new | high | `/` (homepage) | Unfinished placeholder text visible (`Need a sentence here`). | All homepage visitors | 2026-03-19 | TODO | Content not production-ready |
-| LIVE-006 | new | high | `/` (homepage) | Draft/internal content exposed (raw replacement bullets and headings like `replace existing quote with:`). | All homepage visitors | 2026-03-19 | TODO | Includes quote replacement note with attribution draft |
+| LIVE-004 | closed | high | `/` (homepage) | Editorial placeholder copy is visible (`Remove:` / `Replace with:` instructions shown to users). | All homepage visitors | 2026-03-19 | TODO | Closed after manual production verification (private window + hard refresh): no visible `Remove:`/`Replace with:` strings. |
+| LIVE-005 | closed | high | `/` (homepage) | Unfinished placeholder text visible (`Need a sentence here`). | All homepage visitors | 2026-03-19 | TODO | Closed after manual production verification: placeholder text no longer visible on homepage. |
+| LIVE-006 | closed | high | `/` (homepage) | Draft/internal content exposed (raw replacement bullets and headings like `replace existing quote with:`). | All homepage visitors | 2026-03-19 | TODO | Closed after manual production verification: draft helper/instruction copy not present on homepage. |
 
 ---
 
@@ -136,7 +136,7 @@ Additional items from team notes. **Not** sequenced with §5 items 1–8 above; 
 3. Re-test MAR date-edit bug + cache hypothesis; second tester.
 4. Multi-time vitals (same theme as task 4 above).
 5. **DONE** — **Linear** PRN UX (MAR PRN Records table): columns ordered **Entry # → Date → Medication → Dosage → Reason/Indication → Time → Result → Initials → Signature** (on-screen + print; print keeps **Note** last). **Rule 1:** if **Time** is not set, **Result** is disabled with same UX as **Initials** / **Signature** prerequisites (`Set Time first`, non-clickable, muted). Further linear nudges (modal order, extra copy) remain optional.
-6. **Prescription/start date** on PRN definitions.
+6. **DONE** — **Prescription/start date** on PRN definitions shipped: `mar_prn_medications.start_date` (rename from `date_added`) and PRN record `start_date` support via migration **066**; MAR PRN flows read/write this field.
 7. **Design change:** PRNs as **main MAR rows**, sortable like other rows.
 8. **Add above/below** row insertion for PRNs like meds/vitals.
 9. **Remove** separate PRN record section once integrated.
@@ -145,6 +145,46 @@ Additional items from team notes. **Not** sequenced with §5 items 1–8 above; 
 12. **PRN refused** → document in Progress Notes, not as med admin.
 13. **DONE** — How PRN auto-entries **sort vs. the full note timeline** was settled during **signed PRN → Progress Notes** sync work (§5 #6; `progress_note_entries` / `source_mar_prn_record_id`). No separate “decide” task remains.
 14. **DONE** — **MAR row reorder (DnD):** Only the **first `<tr>` of each medication group** is sortable; extra administration-time rows are plain `<tr>`s so drops occur **between whole groups**, not inside multi-time stacks. **`handleDragEnd`** inserts **before** or **after** the full target group (`targetGroupMeds.length`). Shared **`getMarMedicationGroupKey`**. Drop indicator + `DragOverlay` for multi-time groups. **Repair Table View** UI button removed (2026-03-29); group reorder + persisted `display_order` replace that workflow.
+
+---
+
+### New backlog intake — Patient Binder & MAR review (2026-04-09)
+
+Captured from product review notes/screenshots; default status is **TODO** unless noted otherwise.
+
+#### Admissions Form
+
+1. **TODO** — Default admission date to today (auto-fill current date, allow editing to prior date).
+2. **TODO** — Consolidate name fields: first/middle/last on one row; reduce widths for DOB/age/sex fields.
+3. **TODO** — Extend success confirmation visibility duration after save ("Admission Recorded Successfully").
+4. **TODO** — Add real-time validation (green checkmarks on required fields as users type).
+5. **TODO** — Add phone number formatting/placeholders on phone number fields and MAR inputs.
+6. **TODO** — Add diagnosis autocomplete (combo box with curated suggestions).
+
+#### MAR (Medication Administration Record)
+
+1. **TODO** — Sticky allergy header: move allergies to top of MAR and keep visible while scrolling.
+2. **TODO** — Highlight today's date in the 31-day medication grid.
+3. **TODO (spike/prototype)** — Medication-allergy conflict pop-up; evaluate AI vs internal rules/database check (include reliability/cost assessment).
+4. **TODO** — Alerts for missed dates with jump-to-entry + edit flow.
+
+#### Technical / Bug Fixes
+
+1. **TODO (critical)** — Fix submit-button collision bug (prevent duplicate submissions from multiple clicks during server lag).
+2. **TODO** — Add loading state (disable inputs + show progress indicator during save) to prevent duplicate records.
+3. **TODO** — Add debounce + input masking to reduce duplicate patient profiles.
+
+#### Navigation & UI Polish
+
+1. **TODO** — Grey out inactive modules/features not yet active.
+2. **TODO** — Refine multi-form print view for cleaner audit printing.
+3. **TODO** — Add quick status/table view for per-patient activity status (e.g., active, draft).
+4. **TODO** — Add hover legend showing code meanings.
+5. **TODO** — PRN UI clarity: clarify that recent doses are shown, not a required "doses per day" count.
+
+#### Testing & QA
+
+1. **TODO (assigned: team)** — Tab order and keyboard navigation QA across all forms.
 
 ---
 
