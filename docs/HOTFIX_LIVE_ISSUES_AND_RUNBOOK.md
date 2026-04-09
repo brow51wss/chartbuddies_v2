@@ -163,7 +163,7 @@ Captured from product review notes/screenshots; default status is **TODO** unles
 
 #### MAR (Medication Administration Record)
 
-1. **TODO** — Sticky allergy header: move allergies to top of MAR and keep visible while scrolling.
+1. **DONE** — Sticky allergy header: move allergies to top of MAR and keep visible while scrolling.
 2. **TODO** — Highlight today's date in the 31-day medication grid.
 3. **TODO (spike/prototype)** — Medication-allergy conflict pop-up; evaluate AI vs internal rules/database check (include reliability/cost assessment).
 4. **TODO** — Alerts for missed dates with jump-to-entry + edit flow.

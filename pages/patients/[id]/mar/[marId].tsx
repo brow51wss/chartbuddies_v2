@@ -2961,6 +2961,7 @@ export default function ViewMARForm() {
           patientName={marForm?.patient_name}
           dateOfBirth={marForm?.date_of_birth}
           sex={marForm?.sex}
+          allergies={marForm?.allergies}
           recordNumber={marForm?.record_number}
         />
 
