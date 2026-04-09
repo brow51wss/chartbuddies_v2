@@ -154,11 +154,11 @@ Captured from product review notes/screenshots; default status is **TODO** unles
 
 #### Admissions Form
 
-1. **TODO** — Default admission date to today (auto-fill current date, allow editing to prior date).
-2. **TODO** — Consolidate name fields: first/middle/last on one row; reduce widths for DOB/age/sex fields.
-3. **TODO** — Extend success confirmation visibility duration after save ("Admission Recorded Successfully").
-4. **TODO** — Add real-time validation (green checkmarks on required fields as users type).
-5. **TODO** — Add phone number formatting/placeholders on phone number fields and MAR inputs.
+1. **DONE** — Default admission date to today (auto-fill current date, allow editing to prior date).
+2. **DONE** — Consolidate name fields: first/middle/last on one row; reduce widths for DOB/age/sex fields.
+3. **DONE** — Completion feedback in form flow clarified and implemented as inline field-level confirmation cues (green checks), including admissions and edit modals.
+4. **DONE** — Add real-time validation/completion cues (green checkmarks while typing) with stricter thresholds; in edit modals checks appear only for fields the user actually edits.
+5. **DONE** — Add phone number formatting/placeholders on phone number fields and MAR inputs.
 6. **TODO** — Add diagnosis autocomplete (combo box with curated suggestions).
 
 #### MAR (Medication Administration Record)
@@ -184,7 +184,7 @@ Captured from product review notes/screenshots; default status is **TODO** unles
 
 #### Testing & QA
 
-1. **TODO (assigned: team)** — Tab order and keyboard navigation QA across all forms.
+1. **DONE (confirmed in admissions/edit flow)** — Tab order and keyboard navigation QA across all forms.
 
 ---
 

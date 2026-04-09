@@ -368,6 +368,7 @@ export default function Admissions() {
                   ageDisplay={age}
                   mode={{ type: 'wizard', step }}
                   facilityDisplayName={resolvedFacilityName}
+                  showCompletionChecks
                 />
 
                 <div className="flex flex-wrap justify-end gap-4 pt-2">

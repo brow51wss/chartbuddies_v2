@@ -44,6 +44,7 @@ export default function Dashboard() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [editPatientAge, setEditPatientAge] = useState('')
   const [editPatientStep, setEditPatientStep] = useState<1 | 2>(1)
+  const [editTouchedFields, setEditTouchedFields] = useState<Partial<Record<keyof PatientProfileFormValues, boolean>>>({})
   const nameSortRef = useRef<HTMLTableCellElement>(null)
   const { isReadOnly } = useReadOnly()
 
@@ -351,6 +352,7 @@ export default function Dashboard() {
     })
     setEditPatientAge(computeAgeFromISODate(patient.date_of_birth?.slice(0, 10) || ''))
     setEditPatientStep(1)
+    setEditTouchedFields({})
   }
 
   const closeEditPatientModal = () => {
@@ -360,6 +362,7 @@ export default function Dashboard() {
     setEditError('')
     setEditPatientAge('')
     setEditPatientStep(1)
+    setEditTouchedFields({})
   }
 
   const goToEditPatientStep2 = () => {
@@ -382,6 +385,7 @@ export default function Dashboard() {
       }
       return next
     })
+    setEditTouchedFields((prev) => ({ ...prev, [field as keyof PatientProfileFormValues]: true }))
   }
 
   const handleEditPatientInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -768,6 +772,8 @@ export default function Dashboard() {
                       mode={{ type: 'wizard', step: editPatientStep }}
                       recordNumber={patients.find((p) => p.id === editingPatientId)?.record_number || ''}
                       facilityDisplayName={userFacilityName || null}
+                      showCompletionChecks
+                      editedFields={editTouchedFields}
                     />
                   </div>
 

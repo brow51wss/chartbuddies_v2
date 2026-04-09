@@ -359,6 +359,7 @@ export default function ViewMARForm() {
   const [editPatientSaving, setEditPatientSaving] = useState(false)
   const [editPatientModalError, setEditPatientModalError] = useState('')
   const [editPatientStep, setEditPatientStep] = useState<1 | 2>(1)
+  const [editPatientTouchedFields, setEditPatientTouchedFields] = useState<Partial<Record<keyof PatientProfileFormValues, boolean>>>({})
   const [showVitalSignsModal, setShowVitalSignsModal] = useState(false)
   const [editingCell, setEditingCell] = useState<{ medId: string; day: number } | null>(null)
   const [editingCellValue, setEditingCellValue] = useState<string>('') // Store the value being edited
@@ -425,6 +426,7 @@ export default function ViewMARForm() {
     setEditPatientModalError('')
     setEditPatientLoading(false)
     setEditPatientStep(1)
+    setEditPatientTouchedFields({})
   }, [])
 
   const closeMarEditPatientInfoModal = useCallback(() => {
@@ -446,6 +448,7 @@ export default function ViewMARForm() {
     setEditPatientFormDraft(null)
     setEditPatientAge('')
     setEditPatientStep(1)
+    setEditPatientTouchedFields({})
     try {
       const { data: p, error } = await supabase
         .from('patients')
@@ -493,6 +496,7 @@ export default function ViewMARForm() {
       }
       return next
     })
+    setEditPatientTouchedFields((prev) => ({ ...prev, [field]: true }))
   }
 
   const handleMarEditPatientInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -5042,6 +5046,8 @@ export default function ViewMARForm() {
                   mode={{ type: 'wizard', step: editPatientStep }}
                   recordNumber={marForm.record_number || ''}
                   facilityDisplayName={facilityNameFromProfile}
+                  showCompletionChecks
+                  editedFields={editPatientTouchedFields}
                 />
               ) : !editPatientModalError ? (
                 <p className="text-sm text-gray-600 dark:text-gray-400">Could not load patient record.</p>
