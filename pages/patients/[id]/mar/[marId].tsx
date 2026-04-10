@@ -95,6 +95,11 @@ import {
 } from '../../../../components/PatientProfileFormFields'
 import { parsePatientNameParts, computeAgeFromISODate } from '../../../../lib/patientName'
 import { missingFieldsForPatientProfileWizardStep1 } from '../../../../lib/patientProfileWizardValidation'
+import {
+  computeMissedMarDocumentation,
+  getMarDiscontinuedBeforeDayInfo,
+  isMarRowActiveOnDayColumn,
+} from '../../../../lib/marMissedDocumentation'
 import type { MARForm, MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns, MARCustomLegend, MARPRNMedication } from '../../../../types/mar'
 import {
   DndContext,
@@ -304,6 +309,15 @@ function DragHandleButton({ medId, readOnly, reorderLocked }: { medId: string; r
   )
 }
 
+/** Day column indices 1–31; stable reference for memo dependencies. */
+const MAR_GRID_DAY_NUMBERS: readonly number[] = Array.from({ length: 31 }, (_, i) => i + 1)
+
+/**
+ * Horizontal scroll step for day columns (must match `MAR_COL.day` below).
+ * Used on load (scroll to today) and when jumping to a missed cell so day N sits just after the Hour column.
+ */
+const MAR_DAY_COL_WIDTH_PX = 100
+
 export default function ViewMARForm() {
   const router = useRouter()
   const { id: patientId, marId } = router.query
@@ -363,6 +377,13 @@ export default function ViewMARForm() {
   const [showVitalSignsModal, setShowVitalSignsModal] = useState(false)
   const [editingCell, setEditingCell] = useState<{ medId: string; day: number } | null>(null)
   const [editingCellValue, setEditingCellValue] = useState<string>('') // Store the value being edited
+  const [showMissedDocAlerts, setShowMissedDocAlerts] = useState(true)
+  /** Recompute missed-documentation when the scheduled “past due” window changes (e.g. crossing a row’s hour). */
+  const [missedDocClock, setMissedDocClock] = useState(0)
+  useEffect(() => {
+    const id = window.setInterval(() => setMissedDocClock((n) => n + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
   const { isReadOnly } = useReadOnly()
   const readOnly = isReadOnly
   const marRowReorderLocked = readOnly || marTableViewFilter !== 'all'
@@ -844,7 +865,7 @@ export default function ViewMARForm() {
         ? Math.min(31, now.getDate())
         : null
     const dayToScroll = todayInThisMarMonth ?? (lastFilledDay > 0 ? Math.min(31, lastFilledDay) : 1)
-    const scrollLeft = Math.max(0, (dayToScroll - 1) * MAR_COL.day)
+    const scrollLeft = Math.max(0, (dayToScroll - 1) * MAR_DAY_COL_WIDTH_PX)
     const applyScroll = () => {
       if (marTableScrollRef.current) marTableScrollRef.current.scrollLeft = scrollLeft
       if (marHeaderScrollRef.current) marHeaderScrollRef.current.scrollLeft = scrollLeft
@@ -953,50 +974,54 @@ export default function ViewMARForm() {
         return
       }
 
+      const initialsToSave = initials || userProfile.staff_initials || ''
+
       if (existingAdmin) {
-        // Update existing
-        const { error } = await supabase
+        const { data: adminData, error } = await supabase
           .from('mar_administrations')
           .update({
             status,
-            initials: initials || userProfile.staff_initials || '',
+            initials: initialsToSave,
             administered_at: status === 'Given' ? new Date().toISOString() : null,
             updated_at: new Date().toISOString()
           })
           .eq('id', existingAdmin.id)
+          .select('*')
+          .single()
 
         if (error) throw error
+        if (adminData) {
+          setAdministrations(prev => ({
+            ...prev,
+            [medId]: {
+              ...prev[medId],
+              [day]: adminData
+            }
+          }))
+        }
       } else {
-        // Create new
-        const { error } = await supabase
+        const { data: adminData, error } = await supabase
           .from('mar_administrations')
           .insert({
             mar_medication_id: medId,
             day_number: day,
             status,
-            initials: initials || userProfile.staff_initials || '',
+            initials: initialsToSave,
             administered_at: status === 'Given' ? new Date().toISOString() : null
           })
+          .select('*')
+          .single()
 
         if (error) throw error
-      }
-
-      // Refresh data
-      const { data: adminData, error: adminError } = await supabase
-        .from('mar_administrations')
-        .select('*')
-        .eq('mar_medication_id', medId)
-        .eq('day_number', day)
-        .single()
-
-      if (!adminError && adminData) {
-        setAdministrations(prev => ({
-          ...prev,
-          [medId]: {
-            ...prev[medId],
-            [day]: adminData
-          }
-        }))
+        if (adminData) {
+          setAdministrations(prev => ({
+            ...prev,
+            [medId]: {
+              ...prev[medId],
+              [day]: adminData
+            }
+          }))
+        }
       }
 
       // If DC (Discontinued) was selected, mark all future days as discontinued
@@ -1479,6 +1504,58 @@ export default function ViewMARForm() {
     if (parsed.y !== now.getFullYear() || parsed.m !== now.getMonth() + 1) return null
     return Math.min(31, now.getDate())
   }, [marForm?.month_year])
+
+  const missedMarDocumentation = React.useMemo(() => {
+    if (!marForm?.month_year) return []
+    const parsed = parseMARMonthYear(marForm.month_year)
+    if (!parsed) return []
+    return computeMissedMarDocumentation(
+      displayMedications,
+      administrations,
+      parsed.y,
+      parsed.m,
+      MAR_GRID_DAY_NUMBERS,
+      (h) => (h ? formatTimeDisplay(h) : ''),
+      new Date()
+    )
+  }, [marForm?.month_year, displayMedications, administrations, missedDocClock, saving])
+
+  const missedDocKeySet = React.useMemo(
+    () => new Set(missedMarDocumentation.map((x) => `${x.medId}|${x.day}`)),
+    [missedMarDocumentation]
+  )
+
+  const jumpToMissedMarCell = useCallback(
+    (medId: string, day: number) => {
+      const container = marTableScrollRef.current
+      if (!container) return
+      // Same target as instant load scroll; smooth so the day column animates into place. Header follows via scroll listener.
+      const targetScrollLeft = Math.max(0, (day - 1) * MAR_DAY_COL_WIDTH_PX)
+      requestAnimationFrame(() => {
+        container.scrollTo({ left: targetScrollLeft, behavior: 'smooth' })
+      })
+      if (!readOnly) {
+        const openEditor = () => {
+          setEditingCell({ medId, day })
+          setEditingCellValue('')
+        }
+        const fallbackMs = 550
+        let opened = false
+        const openOnce = () => {
+          if (opened) return
+          opened = true
+          openEditor()
+        }
+        const t = window.setTimeout(openOnce, fallbackMs)
+        const onScrollEnd = () => {
+          window.clearTimeout(t)
+          openOnce()
+        }
+        container.addEventListener('scrollend', onScrollEnd, { once: true })
+      }
+    },
+    [readOnly]
+  )
 
   /** Return plain text for a day cell for print (no buttons/links). */
   const getDayCellPrintText = (
@@ -2564,7 +2641,9 @@ export default function ViewMARForm() {
           if (!adminMap[admin.mar_medication_id]) {
             adminMap[admin.mar_medication_id] = {}
           }
-          adminMap[admin.mar_medication_id][admin.day_number] = admin
+          const dn =
+            typeof admin.day_number === 'number' ? admin.day_number : Number(admin.day_number)
+          adminMap[admin.mar_medication_id][dn] = admin
         })
         setAdministrations(adminMap)
       }
@@ -2628,8 +2707,8 @@ export default function ViewMARForm() {
     }
   }
 
-  const days = Array.from({ length: 31 }, (_, i) => i + 1)
-  const MAR_COL = { med: 200, startStop: 120, hour: 150, day: 100 } as const
+  const days = MAR_GRID_DAY_NUMBERS
+  const MAR_COL = { med: 200, startStop: 120, hour: 150, day: MAR_DAY_COL_WIDTH_PX } as const
   const hourColWidth = readOnly ? 90 : MAR_COL.hour
 
   /** Key so print view remounts when MAR data changes and shows current state in print preview. */
@@ -3099,6 +3178,61 @@ export default function ViewMARForm() {
                 </div>
               </div>
 
+              {missedMarDocumentation.length > 0 && (
+                <div className="mb-4 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/35 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowMissedDocAlerts((v) => !v)}
+                    className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-red-100/90 dark:hover:bg-red-950/50 transition-colors"
+                    aria-expanded={showMissedDocAlerts}
+                    aria-controls="mar-missed-doc-panel"
+                  >
+                    <div>
+                      <span className="text-sm font-semibold text-red-900 dark:text-red-100">
+                        Missed documentation ({missedMarDocumentation.length})
+                      </span>
+                      <p className="text-xs text-red-800/95 dark:text-red-200/85 mt-0.5 pr-2">
+                        Empty cells in each row&apos;s start/stop range. For today, only times that have already passed
+                        (row hour) are counted; past days count for the whole day.
+                      </p>
+                    </div>
+                    <svg
+                      className={`w-5 h-5 shrink-0 text-red-700 dark:text-red-300 transition-transform ${
+                        showMissedDocAlerts ? 'rotate-180' : ''
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {showMissedDocAlerts && (
+                    <ul
+                      id="mar-missed-doc-panel"
+                      className="border-t border-red-200 dark:border-red-900/60 max-h-52 overflow-y-auto divide-y divide-red-200/90 dark:divide-red-900/50"
+                    >
+                      {missedMarDocumentation.map((item) => (
+                        <li key={`${item.medId}-${item.day}`}>
+                          <button
+                            type="button"
+                            onClick={() => jumpToMissedMarCell(item.medId, item.day)}
+                            className="w-full text-left px-4 py-2.5 text-sm text-red-950 dark:text-red-50 hover:bg-red-100 dark:hover:bg-red-950/55 transition-colors"
+                          >
+                            <span className="font-medium">Day {item.day}</span>
+                            <span className="text-red-800/95 dark:text-red-200/90"> · {item.dateLabel}</span>
+                            <span className="block text-xs text-red-900/90 dark:text-red-200/75 mt-0.5">
+                              {item.rowLabel}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
               {/* Medication Administration Table - sticky header OUTSIDE overflow so it sticks to viewport; body has overflow-x for horizontal scroll */}
               <div className="relative overflow-visible">
                 {/* Sticky header: no overflow on sticky div so it sticks to viewport; inner div handles horizontal scroll sync */}
@@ -3206,6 +3340,7 @@ export default function ViewMARForm() {
                       
                       return displayMedications.map((med, medIndex) => {
                         const medAdmin = administrations[med.id] || {}
+                        const parsedMarMonthForRow = parseMARMonthYear(marForm.month_year)
                         const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
                         const groupKey = getMarMedicationGroupKey(med)
                         const group = medicationGroups[groupKey]
@@ -3506,58 +3641,19 @@ export default function ViewMARForm() {
                               const isHeld = initialsForLogic === 'H'
                               const hasParameter = !!med.parameter
 
-                              // Check if this day is after a DC (Discontinued) day
-                              let isDiscontinued = false
-                              let dcDay = null
-                              if (!isVitalsEntry) {
-                                // Find the earliest day with DC for this medication
-                                for (let checkDay = 1; checkDay < day; checkDay++) {
-                                  const checkAdmin = medAdmin[checkDay]
-                                  const checkRaw = checkAdmin?.initials ?? ''
-                                  if (!checkRaw.startsWith('data:image') && checkRaw.trim().toUpperCase() === 'DC') {
-                                    dcDay = checkDay
-                                    isDiscontinued = true
-                                    break
-                                  }
-                                }
-                              }
-                              
-                              let isMedActive = false
-                              
-                              if (isVitalsEntry) {
-                                isMedActive = true
-                              } else {
-                                const medStartDate = new Date(med.start_date)
-                                const medStopDate = med.stop_date ? new Date(med.stop_date) : null
-                                const parsed = parseMARMonthYear(marForm.month_year)
-                                if (parsed) {
-                                  const { y: formYear, m: formM } = parsed
-                                  const formMonthIndex = formM - 1
-                                  const startDayOfMonth = medStartDate.getDate()
-                                  const isStartInFormMonth = medStartDate.getMonth() === formMonthIndex && medStartDate.getFullYear() === formYear
-                                  const isStartBeforeFormMonth = medStartDate.getFullYear() < formYear || (medStartDate.getFullYear() === formYear && medStartDate.getMonth() < formMonthIndex)
-                                  try {
-                                    const currentDayDate = new Date(formYear, formMonthIndex, day)
-                                    if (currentDayDate.getDate() !== day || currentDayDate.getMonth() !== formMonthIndex) {
-                                      // skip invalid day
-                                    } else if (isStartInFormMonth) {
-                                      if (day >= startDayOfMonth && (!medStopDate || currentDayDate <= medStopDate)) {
-                                        isMedActive = true
-                                      }
-                                    } else if (isStartBeforeFormMonth) {
-                                      if (!medStopDate || currentDayDate <= medStopDate) {
-                                        isMedActive = true
-                                      }
-                                    }
-                                  } catch (e) {
-                                    isMedActive = false
-                                  }
-                                }
-                              }
+                              const { isDiscontinued, dcDay } = getMarDiscontinuedBeforeDayInfo(
+                                medAdmin,
+                                day,
+                                isVitalsEntry
+                              )
+                              const isMedActive =
+                                !!parsedMarMonthForRow &&
+                                isMarRowActiveOnDayColumn(med, day, parsedMarMonthForRow.y, parsedMarMonthForRow.m)
 
                               return (
                                 <td
                                   key={day}
+                                  data-mar-cell={`${med.id}|${day}`}
                                   style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day }}
                                   className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs relative ${
                                     isDiscontinued ? 'bg-red-50 dark:bg-red-900/20' : ''
@@ -3569,7 +3665,11 @@ export default function ViewMARForm() {
                                       : !isMedActive
                                         ? 'bg-gray-100 dark:bg-gray-800'
                                         : ''
-                                  } ${isDiscontinued ? 'cursor-not-allowed' : ''}`}
+                                  } ${isDiscontinued ? 'cursor-not-allowed' : ''} ${
+                                    missedDocKeySet.has(`${med.id}|${day}`)
+                                      ? 'ring-2 ring-red-500/90 dark:ring-red-500/80 ring-inset'
+                                      : ''
+                                  }`}
                                   onDoubleClick={isEditing && isMedActive && !isVitalsEntry && !isDiscontinued ? () => {
                                     if (isGiven) {
                                       updateAdministration(med.id, day, 'Not Given', initials)
