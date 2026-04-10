@@ -7,6 +7,9 @@ interface PatientStickyBarProps {
   recordNumber?: string | null
   allergies?: string | null
   className?: string
+  /** When set, shows a control that opens the host page’s edit-patient flow (e.g. MAR “Edit Patient Details” modal). */
+  onEditPatient?: () => void
+  editPatientLabel?: string
 }
 
 /**
@@ -20,6 +23,8 @@ export default function PatientStickyBar({
   recordNumber,
   allergies,
   className = '',
+  onEditPatient,
+  editPatientLabel = 'Edit patient',
 }: PatientStickyBarProps) {
   const formattedDob = dateOfBirth ? new Date(dateOfBirth).toLocaleDateString() : '—'
   const [showAllergiesModal, setShowAllergiesModal] = useState(false)
@@ -61,9 +66,21 @@ export default function PatientStickyBar({
               )}
             </span>
           </div>
-          <div className="text-xs font-semibold">
-            <span className="uppercase tracking-wide text-lasso-blue/90 mr-2">Record No.</span>
-            <span>{recordNumber || '—'}</span>
+          <div className="text-xs font-semibold flex items-center gap-3 sm:gap-4 shrink-0">
+            {onEditPatient && (
+              <button
+                type="button"
+                onClick={onEditPatient}
+                className="text-lasso-blue/90 hover:text-lasso-blue underline underline-offset-2 whitespace-nowrap"
+              >
+                {editPatientLabel}
+              </button>
+            )}
+            <div className="h-4 w-px bg-white/25 hidden sm:block" aria-hidden />
+            <span>
+              <span className="uppercase tracking-wide text-lasso-blue/90 mr-2">Record No.</span>
+              <span>{recordNumber || '—'}</span>
+            </span>
           </div>
         </div>
       </div>
