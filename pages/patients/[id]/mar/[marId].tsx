@@ -9,8 +9,9 @@ import TimeInput, { formatTimeDisplay } from '../../../../components/TimeInput'
 import {
   upsertProgressNoteFromPRNRecord,
   upsertProgressNoteFromMarPrnRecordId,
-  isPrnRecordSignedForProgressNote,
+  shouldSyncMarPrnRecordToProgressNotes,
 } from '../../../../lib/prn-progress-notes'
+import type { UserProfile } from '../../../../types/auth'
 
 const SIGNATURE_FONTS_LINK_ID = 'mar-signature-fonts-link'
 function ensureSignatureFontsLoaded(font: string) {
@@ -21,6 +22,32 @@ function ensureSignatureFontsLoaded(font: string) {
   link.href = 'https://fonts.googleapis.com/css2?family=Allura&family=Caveat:wght@400;700&family=Dancing+Script:wght@400;700&family=Great+Vibes&family=Sacramento&display=swap'
   link.rel = 'stylesheet'
   document.head.appendChild(link)
+}
+
+/**
+ * When MAR/PRN stores plain-text initials but the viewer profile uses drawn initials (data URL), return that image src
+ * so grid cells match medication rows that store the image in the cell value.
+ */
+function profileDrawnInitialsSrcForPlainTextValue(
+  value: string,
+  userProfile: UserProfile | null,
+): string | null {
+  const raw = (value || '').trim()
+  if (!raw || raw.startsWith('data:image') || !userProfile?.staff_initials?.startsWith('data:image')) return null
+  const v = raw.toUpperCase()
+  const text = userProfile.staff_initials_text?.trim().toUpperCase()
+  if (text && v === text) return userProfile.staff_initials
+  const first = (userProfile as { first_name?: string }).first_name?.trim()?.[0] || ''
+  const last = (userProfile as { last_name?: string }).last_name?.trim()?.[0] || ''
+  if (first && last && v === `${first}${last}`.toUpperCase()) return userProfile.staff_initials
+  const full = userProfile.full_name?.trim().split(/\s+/) || []
+  if (full.length >= 2 && v === (full[0][0] + full[full.length - 1][0]).toUpperCase()) {
+    return userProfile.staff_initials
+  }
+  if (full.length === 1 && full[0].length >= 2 && v === full[0].slice(0, 2).toUpperCase()) {
+    return userProfile.staff_initials
+  }
+  return null
 }
 
 /** Renders initials or signature: text with chosen font when available, else image or plain text. Used on MAR. */
@@ -60,6 +87,23 @@ function InitialsOrSignatureDisplay({
       </span>
     )
   }
+  if (variant === 'initials' && userProfile) {
+    const drawnSrc = profileDrawnInitialsSrcForPlainTextValue(value, userProfile)
+    if (drawnSrc) {
+      return (
+        <img
+          src={drawnSrc}
+          alt="Initials"
+          style={{
+            maxHeight: '3em',
+            maxWidth: '7em',
+            verticalAlign: 'middle',
+            display: 'inline-block',
+          }}
+        />
+      )
+    }
+  }
   if (value.startsWith('data:image')) {
     return (
       <img
@@ -88,7 +132,7 @@ function currentUserInitialsForMatch(userProfile: UserProfile | null): string {
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../../../../lib/auth'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
-import type { UserProfile, Patient } from '../../../../types/auth'
+import type { Patient } from '../../../../types/auth'
 import {
   PatientProfileFormFields,
   type PatientProfileFormValues,
@@ -100,7 +144,16 @@ import {
   getMarDiscontinuedBeforeDayInfo,
   isMarRowActiveOnDayColumn,
 } from '../../../../lib/marMissedDocumentation'
-import type { MARForm, MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns, MARCustomLegend, MARPRNMedication } from '../../../../types/mar'
+import type {
+  MARForm,
+  MARMedication,
+  MARAdministration,
+  MARPRNRecord,
+  MARVitalSigns,
+  MARCustomLegend,
+  MARPRNMedication,
+  MarChartRowRef,
+} from '../../../../types/mar'
 import {
   DndContext,
   closestCenter,
@@ -138,6 +191,120 @@ function getMarMedicationGroupKey(med: MARMedication): string {
     : `${med.medication_name}|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
 }
 
+const MAR_PRN_CHART_SORT_PREFIX = 'mar-prn-chart:'
+
+function marPrnChartSortableId(prnId: string) {
+  return `${MAR_PRN_CHART_SORT_PREFIX}${prnId}`
+}
+
+function isMarPrnChartSortableId(id: string) {
+  return id.startsWith(MAR_PRN_CHART_SORT_PREFIX)
+}
+
+function marPrnIdFromChartSortableId(id: string) {
+  return id.slice(MAR_PRN_CHART_SORT_PREFIX.length)
+}
+
+type MedGroupSeg = { kind: 'med'; firstMedId: string; meds: MARMedication[] }
+type PrnChartSeg = { kind: 'prn'; prn: MARPRNRecord }
+type MarChartSegment = MedGroupSeg | PrnChartSeg
+
+function medGroupsInDisplayOrder(displayMeds: MARMedication[]): MedGroupSeg[] {
+  const groups: MedGroupSeg[] = []
+  let prevKey: string | null = null
+  for (const m of displayMeds) {
+    const gk = getMarMedicationGroupKey(m)
+    if (gk !== prevKey) {
+      groups.push({ kind: 'med', firstMedId: m.id, meds: [m] })
+      prevKey = gk
+    } else {
+      groups[groups.length - 1]!.meds.push(m)
+    }
+  }
+  return groups
+}
+
+function segmentSortableId(s: MarChartSegment): string {
+  return s.kind === 'med' ? s.meds[0]!.id : marPrnChartSortableId(s.prn.id)
+}
+
+function buildMarChartSegments(
+  displayMeds: MARMedication[],
+  prns: MARPRNRecord[],
+  chartOrder: MarChartRowRef[] | null | undefined,
+  includePrnInChart: boolean,
+): MarChartSegment[] {
+  const medGroups = medGroupsInDisplayOrder(displayMeds)
+  const medGroupByFirstId = new Map(medGroups.map((g) => [g.firstMedId, g]))
+  const prnById = new Map(prns.map((p) => [p.id, p]))
+  const usedMed = new Set<string>()
+  const usedPrn = new Set<string>()
+  const result: MarChartSegment[] = []
+
+  if (includePrnInChart && chartOrder && Array.isArray(chartOrder) && chartOrder.length > 0) {
+    for (const ref of chartOrder) {
+      if (ref?.type === 'med' && ref.firstMedId && medGroupByFirstId.has(ref.firstMedId)) {
+        const g = medGroupByFirstId.get(ref.firstMedId)!
+        if (!usedMed.has(g.firstMedId)) {
+          result.push(g)
+          usedMed.add(g.firstMedId)
+        }
+      } else if (includePrnInChart && ref?.type === 'prn' && ref.prnId && prnById.has(ref.prnId)) {
+        const p = prnById.get(ref.prnId)!
+        if (!usedPrn.has(p.id)) {
+          result.push({ kind: 'prn', prn: p })
+          usedPrn.add(p.id)
+        }
+      }
+    }
+  }
+
+  for (const g of medGroups) {
+    if (!usedMed.has(g.firstMedId)) {
+      result.push(g)
+      usedMed.add(g.firstMedId)
+    }
+  }
+  if (includePrnInChart) {
+    for (const p of prns) {
+      if (!usedPrn.has(p.id)) {
+        result.push({ kind: 'prn', prn: p })
+        usedPrn.add(p.id)
+      }
+    }
+  }
+  return result
+}
+
+function segmentsToChartOrder(segments: MarChartSegment[]): MarChartRowRef[] {
+  return segments.map((s) =>
+    s.kind === 'med'
+      ? { type: 'med', firstMedId: s.firstMedId }
+      : { type: 'prn', prnId: s.prn.id },
+  )
+}
+
+function flattenMedsFromChartSegments(segments: MarChartSegment[]): MARMedication[] {
+  const out: MARMedication[] = []
+  for (const s of segments) {
+    if (s.kind === 'med') out.push(...s.meds)
+  }
+  return out
+}
+
+/** MAR chart “Show” bar: multi-select categories (Routine meds, Vitals, PRN). */
+type MarTableCategory = 'routine_meds' | 'vitals' | 'prn'
+
+const MAR_TABLE_DEFAULT_VISIBILITY: Record<MarTableCategory, boolean> = {
+  routine_meds: true,
+  vitals: true,
+  prn: true,
+}
+
+function isMarVitalsMedicationRow(m: MARMedication): boolean {
+  return m.medication_name === 'VITALS' || m.notes === 'Vital Signs Entry'
+}
+
 /** Floating preview so multi-time meds show all hours while dragging (not just the first `<tr>`). */
 function MarMedicationGroupDragPreview({ meds }: { meds: MARMedication[] }) {
   if (!meds.length) return null
@@ -163,6 +330,17 @@ function MarMedicationGroupDragPreview({ meds }: { meds: MARMedication[] }) {
           {meds.length} administration time rows — moving as one group
         </div>
       )}
+    </div>
+  )
+}
+
+function MarPrnChartRowDragPreview({ prn }: { prn: MARPRNRecord }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 border-2 border-emerald-600 rounded-lg shadow-2xl p-3 min-w-[280px] max-w-md cursor-grabbing">
+      <div className="font-semibold text-sm text-emerald-900 dark:text-emerald-100">💊 PRN</div>
+      <div className="text-sm text-gray-900 dark:text-white mt-1 font-medium">{prn.medication}</div>
+      {prn.dosage && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{prn.dosage}</div>}
+      {prn.reason && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 line-clamp-2">{prn.reason}</div>}
     </div>
   )
 }
@@ -327,15 +505,20 @@ export default function ViewMARForm() {
   const patientFormId = Array.isArray(patientId) ? patientId[0] : patientId
   const [marForm, setMarForm] = useState<MARForm | null>(null)
   const [medications, setMedications] = useState<MARMedication[]>([])
-  /** On-screen MAR grid only; print always uses full `medications`. PRN-only filter not implemented yet. */
-  type MarTableViewFilter = 'all' | 'routine_meds' | 'vitals_only'
-  const [marTableViewFilter, setMarTableViewFilter] = useState<MarTableViewFilter>('all')
+  /** On-screen MAR grid only; print always uses full `medications`. Multi-select: routine / vitals / PRN chart rows. */
+  const [marTableCategoryVisible, setMarTableCategoryVisible] =
+    useState<Record<MarTableCategory, boolean>>(MAR_TABLE_DEFAULT_VISIBILITY)
+  const marTableShowFullChart =
+    marTableCategoryVisible.routine_meds &&
+    marTableCategoryVisible.vitals &&
+    marTableCategoryVisible.prn
   const displayMedications = useMemo(() => {
-    const isVitalsRow = (m: MARMedication) => m.medication_name === 'VITALS' || m.notes === 'Vital Signs Entry'
-    if (marTableViewFilter === 'routine_meds') return medications.filter((m) => !isVitalsRow(m))
-    if (marTableViewFilter === 'vitals_only') return medications.filter((m) => isVitalsRow(m))
-    return medications
-  }, [medications, marTableViewFilter])
+    return medications.filter((m) => {
+      const vit = isMarVitalsMedicationRow(m)
+      if (vit) return marTableCategoryVisible.vitals
+      return marTableCategoryVisible.routine_meds
+    })
+  }, [medications, marTableCategoryVisible])
   /** First `<tr>` id per medication group — only these register as sortable (extended backlog #14). */
   const marSortableFirstRowIds = useMemo(() => {
     const ids: string[] = []
@@ -351,6 +534,22 @@ export default function ViewMARForm() {
   }, [displayMedications])
   const [administrations, setAdministrations] = useState<{ [medId: string]: { [day: number]: MARAdministration } }>({})
   const [prnRecords, setPrnRecords] = useState<MARPRNRecord[]>([])
+  /** Medication groups + optional PRN chart rows in on-screen order (All view = interleaved with saved `mar_chart_row_order`). */
+  const marChartSegmentsForTable = useMemo((): MarChartSegment[] => {
+    if (!marTableCategoryVisible.prn) {
+      return medGroupsInDisplayOrder(displayMedications)
+    }
+    return buildMarChartSegments(
+      displayMedications,
+      prnRecords,
+      marForm?.mar_chart_row_order,
+      true,
+    )
+  }, [marTableCategoryVisible.prn, displayMedications, prnRecords, marForm?.mar_chart_row_order])
+  const marUnifiedSortableIds = useMemo(
+    () => marChartSegmentsForTable.map(segmentSortableId),
+    [marChartSegmentsForTable],
+  )
   const [prnMedicationList, setPrnMedicationList] = useState<MARPRNMedication[]>([])
   const [vitalSigns, setVitalSigns] = useState<{ [day: number]: MARVitalSigns }>({})
   const [staffInitials, setStaffInitials] = useState<{ [initials: string]: string }>({})
@@ -366,6 +565,12 @@ export default function ViewMARForm() {
   const [showAddMedModal, setShowAddMedModal] = useState(false)
   const [showAddPRNModal, setShowAddPRNModal] = useState(false)
   const [showAddPRNRecordModal, setShowAddPRNRecordModal] = useState(false)
+  const [showManagePRNListModal, setShowManagePRNListModal] = useState(false)
+  const [prnListDeleteTarget, setPrnListDeleteTarget] = useState<MARPRNMedication | null>(null)
+  const [prnListEditTarget, setPrnListEditTarget] = useState<MARPRNMedication | null>(null)
+  const [deletingPrnLibraryItem, setDeletingPrnLibraryItem] = useState(false)
+  const [savingPrnLibraryEdit, setSavingPrnLibraryEdit] = useState(false)
+  const [prnActionsMenuOpen, setPrnActionsMenuOpen] = useState(false)
   const [showEditPatientInfoModal, setShowEditPatientInfoModal] = useState(false)
   const [editPatientFormDraft, setEditPatientFormDraft] = useState<PatientProfileFormValues | null>(null)
   const [editPatientAge, setEditPatientAge] = useState('')
@@ -386,11 +591,16 @@ export default function ViewMARForm() {
   }, [])
   const { isReadOnly } = useReadOnly()
   const readOnly = isReadOnly
-  const marRowReorderLocked = readOnly || marTableViewFilter !== 'all'
+  const marRowReorderLocked = readOnly || !marTableShowFullChart
   // Always allow editing of day cells (unless read-only view)
   const [isEditingBase] = useState(true)
   const isEditing = isEditingBase && !readOnly
-  const [editingPRNField, setEditingPRNField] = useState<{ recordId: string; field: string } | null>(null)
+  /** `surface` avoids two PRN inputs (chart + table) mounting with autoFocus — browser would focus the lower one and jump scroll. */
+  const [editingPRNField, setEditingPRNField] = useState<{
+    recordId: string
+    field: string
+    surface: 'chart' | 'table'
+  } | null>(null)
   const [editingPRNValue, setEditingPRNValue] = useState<string>('')
   const [showLeaveConfirmModal, setShowLeaveConfirmModal] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
@@ -438,6 +648,7 @@ export default function ViewMARForm() {
   const [printRowHeights, setPrintRowHeights] = useState<number[]>([])
   const marMeasureTbodyRef = useRef<HTMLTableSectionElement>(null)
   const marMeasureTbodyRef2 = useRef<HTMLTableSectionElement>(null)
+  const prnActionsMenuRef = useRef<HTMLDivElement>(null)
 
   const resetMarEditPatientModal = useCallback(() => {
     setShowEditPatientInfoModal(false)
@@ -753,6 +964,10 @@ export default function ViewMARForm() {
   useEffect(() => {
     const handleEscKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (prnActionsMenuOpen) {
+          setPrnActionsMenuOpen(false)
+          return
+        }
         if (showAddMedModal) {
           setShowAddMedModal(false)
         } else if (showEditPatientInfoModal) {
@@ -763,6 +978,12 @@ export default function ViewMARForm() {
           setShowAddPRNModal(false)
         } else if (showAddPRNRecordModal) {
           setShowAddPRNRecordModal(false)
+        } else if (prnListEditTarget) {
+          setPrnListEditTarget(null)
+        } else if (prnListDeleteTarget) {
+          setPrnListDeleteTarget(null)
+        } else if (showManagePRNListModal) {
+          setShowManagePRNListModal(false)
         } else if (showPRNNoteModal) {
           setShowPRNNoteModal(false)
           setEditingPRNNote(null)
@@ -791,7 +1012,35 @@ export default function ViewMARForm() {
     return () => {
       window.removeEventListener('keydown', handleEscKey)
     }
-  }, [showAddMedModal, showEditPatientInfoModal, showVitalSignsModal, showAddPRNModal, showAddPRNRecordModal, showPRNNoteModal, showMedicationParameterModal, showMedicationNotesModal, showAdministrationNoteModal, showCustomLegendModal, showDeleteConfirmModal, showLeaveConfirmModal, closeMarEditPatientInfoModal])
+  }, [
+    prnActionsMenuOpen,
+    showAddMedModal,
+    showEditPatientInfoModal,
+    showVitalSignsModal,
+    showAddPRNModal,
+    showAddPRNRecordModal,
+    showManagePRNListModal,
+    prnListDeleteTarget,
+    prnListEditTarget,
+    showPRNNoteModal,
+    showMedicationParameterModal,
+    showMedicationNotesModal,
+    showAdministrationNoteModal,
+    showCustomLegendModal,
+    showDeleteConfirmModal,
+    showLeaveConfirmModal,
+    closeMarEditPatientInfoModal,
+  ])
+
+  useEffect(() => {
+    if (!prnActionsMenuOpen) return
+    const onPointerDown = (e: MouseEvent | PointerEvent) => {
+      const el = prnActionsMenuRef.current
+      if (el && !el.contains(e.target as Node)) setPrnActionsMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [prnActionsMenuOpen])
 
   const loadUserProfile = async () => {
     const profile = await getCurrentUserProfile()
@@ -1108,7 +1357,6 @@ export default function ViewMARForm() {
     dosage: string | null
     reason: string
     result: string | null
-    staffSignature: string | null
     startDate: string | null
   }) => {
     if (!userProfile || !marForm || !marFormId) return
@@ -1135,8 +1383,8 @@ export default function ViewMARForm() {
           dosage: record.dosage?.trim() || null,
           reason: record.reason,
           result: record.result,
-          staff_signature: record.staffSignature,
-          signed_by: record.staffSignature ? userProfile.id : null,
+          staff_signature: null,
+          signed_by: null,
           entry_number: nextEntryNumber
         })
         .select('*')
@@ -1144,7 +1392,7 @@ export default function ViewMARForm() {
 
       if (error) throw error
 
-      if (inserted && marForm.patient_id && isPrnRecordSignedForProgressNote(inserted as MARPRNRecord)) {
+      if (inserted && marForm.patient_id && shouldSyncMarPrnRecordToProgressNotes(inserted as MARPRNRecord)) {
         try {
           await upsertProgressNoteFromPRNRecord(supabase, {
             patientId: marForm.patient_id,
@@ -1158,14 +1406,6 @@ export default function ViewMARForm() {
           setError(`PRN record added, but ${msg}`)
           setTimeout(() => setError(''), 8000)
         }
-      }
-
-      // Update staff initials legend only if initials and signature are provided
-      if (record.initials && record.staffSignature) {
-      setStaffInitials(prev => ({
-        ...prev,
-          [record.initials!]: record.staffSignature!
-      }))
       }
 
       await loadMARForm()
@@ -1216,6 +1456,55 @@ export default function ViewMARForm() {
     }
   }
 
+  const deletePRNMedicationFromList = async (item: MARPRNMedication) => {
+    if (!marFormId) return
+    try {
+      setDeletingPrnLibraryItem(true)
+      setError('')
+      const { error } = await supabase.from('mar_prn_medications').delete().eq('id', item.id)
+      if (error) throw error
+      setPrnListDeleteTarget(null)
+      await loadMARForm()
+      setMessage('PRN removed from list.')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to remove PRN from list')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setDeletingPrnLibraryItem(false)
+    }
+  }
+
+  const updatePRNMedicationInList = async (
+    id: string,
+    data: { start_date: string; medication: string; dosage: string | null; reason: string }
+  ) => {
+    if (!marFormId) return
+    try {
+      setSavingPrnLibraryEdit(true)
+      setError('')
+      const { error } = await supabase
+        .from('mar_prn_medications')
+        .update({
+          start_date: data.start_date,
+          medication: data.medication.trim(),
+          dosage: data.dosage?.trim() || null,
+          reason: data.reason.trim(),
+        })
+        .eq('id', id)
+      if (error) throw error
+      setPrnListEditTarget(null)
+      await loadMARForm()
+      setMessage('PRN list entry updated.')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to update PRN list entry')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setSavingPrnLibraryEdit(false)
+    }
+  }
+
   const updatePRNRecordBatch = async (recordId: string, updates: Partial<MARPRNRecord>) => {
     try {
       setSaving(true)
@@ -1254,15 +1543,7 @@ export default function ViewMARForm() {
       if (field === 'initials' && typeof value === 'string') {
         updateData.initials = value.startsWith('data:image') ? '' : value.slice(0, 10)
       }
-      
-      // If updating initials, also update staff_signature from legend if available
-      if (field === 'initials' && updateData.initials) {
-        const initialsUpper = updateData.initials.trim().toUpperCase()
-        if (staffInitials[initialsUpper]) {
-          updateData.staff_signature = staffInitials[initialsUpper]
-        }
-      }
-      
+
       const { error } = await supabase
         .from('mar_prn_records')
         .update(updateData)
@@ -1523,16 +1804,22 @@ export default function ViewMARForm() {
     [missedMarDocumentation]
   )
 
+  /** Horizontal scroll so day N aligns just after the fixed med / start-stop / hour columns (same math as initial load + missed-doc jumps). */
+  const scrollMarTableToDayColumn = useCallback((day: number) => {
+    const container = marTableScrollRef.current
+    if (!container) return
+    const targetScrollLeft = Math.max(0, (day - 1) * MAR_DAY_COL_WIDTH_PX)
+    requestAnimationFrame(() => {
+      container.scrollTo({ left: targetScrollLeft, behavior: 'smooth' })
+    })
+  }, [])
+
   const jumpToMissedMarCell = useCallback(
     (medId: string, day: number) => {
-      const container = marTableScrollRef.current
-      if (!container) return
-      // Same target as instant load scroll; smooth so the day column animates into place. Header follows via scroll listener.
-      const targetScrollLeft = Math.max(0, (day - 1) * MAR_DAY_COL_WIDTH_PX)
-      requestAnimationFrame(() => {
-        container.scrollTo({ left: targetScrollLeft, behavior: 'smooth' })
-      })
+      scrollMarTableToDayColumn(day)
       if (!readOnly) {
+        const container = marTableScrollRef.current
+        if (!container) return
         const openEditor = () => {
           setEditingCell({ medId, day })
           setEditingCellValue('')
@@ -1552,7 +1839,7 @@ export default function ViewMARForm() {
         container.addEventListener('scrollend', onScrollEnd, { once: true })
       }
     },
-    [readOnly]
+    [readOnly, scrollMarTableToDayColumn]
   )
 
   /** Return plain text for a day cell for print (no buttons/links). */
@@ -1716,8 +2003,13 @@ export default function ViewMARForm() {
     }
   }
 
-  const handlePRNFieldEdit = (recordId: string, field: string, currentValue: string | null) => {
-    setEditingPRNField({ recordId, field })
+  const handlePRNFieldEdit = (
+    recordId: string,
+    field: string,
+    currentValue: string | null,
+    surface: 'chart' | 'table' = 'table',
+  ) => {
+    setEditingPRNField({ recordId, field, surface })
     
     // Date input expects YYYY-MM-DD
     if (field === 'date' && currentValue) {
@@ -2208,12 +2500,17 @@ export default function ViewMARForm() {
   /** While dragging, table rows in this group are hidden and `DragOverlay` shows the full block. */
   const [activeMarDragId, setActiveMarDragId] = useState<string | null>(null)
   const marDragPreviewGroupMeds = useMemo(() => {
-    if (!activeMarDragId) return [] as MARMedication[]
+    if (!activeMarDragId || isMarPrnChartSortableId(activeMarDragId)) return [] as MARMedication[]
     const m = medications.find((x) => x.id === activeMarDragId)
     if (!m) return []
     const gk = getMarMedicationGroupKey(m)
     return medications.filter((x) => getMarMedicationGroupKey(x) === gk)
   }, [activeMarDragId, medications])
+  const marDragPreviewPrn = useMemo(() => {
+    if (!activeMarDragId || !isMarPrnChartSortableId(activeMarDragId)) return null
+    const pid = marPrnIdFromChartSortableId(activeMarDragId)
+    return prnRecords.find((p) => p.id === pid) ?? null
+  }, [activeMarDragId, prnRecords])
   const draggingGroupMedIdSet = useMemo(
     () => new Set(marDragPreviewGroupMeds.map((x) => x.id)),
     [marDragPreviewGroupMeds]
@@ -2221,7 +2518,9 @@ export default function ViewMARForm() {
 
   /** Full-width line showing where the dragged parent group will land (no row transforms — avoids splitting rowSpan stacks). */
   const [marReorderDropIndicator, setMarReorderDropIndicator] = useState<
-    { mode: 'before' | 'after'; medId: string } | null
+    | { mode: 'before'; sortableId: string }
+    | { mode: 'after'; lastMedRowId?: string; prnId?: string }
+    | null
   >(null)
 
   const handleMarDragOver = useCallback(
@@ -2234,37 +2533,61 @@ export default function ViewMARForm() {
       }
       const activeId = String(active.id)
       const overId = String(over.id)
-      const draggedMed = displayMedications.find((m) => m.id === activeId)
-      const targetMed = displayMedications.find((m) => m.id === overId)
-      if (!draggedMed || !targetMed) {
+
+      if (!marTableShowFullChart) {
+        const draggedMed = displayMedications.find((m) => m.id === activeId)
+        const targetMed = displayMedications.find((m) => m.id === overId)
+        if (!draggedMed || !targetMed) {
+          setMarReorderDropIndicator(null)
+          return
+        }
+        const draggedGroupKey = getMarMedicationGroupKey(draggedMed)
+        const targetGroupKey = getMarMedicationGroupKey(targetMed)
+        if (draggedGroupKey === targetGroupKey) {
+          setMarReorderDropIndicator(null)
+          return
+        }
+        const draggedGroupMeds = displayMedications.filter((m) => getMarMedicationGroupKey(m) === draggedGroupKey)
+        const targetGroupMeds = displayMedications.filter((m) => getMarMedicationGroupKey(m) === targetGroupKey)
+        const draggedFirstIndex = displayMedications.findIndex((m) => m.id === draggedGroupMeds[0].id)
+        const targetIndex = displayMedications.findIndex((m) => m.id === overId)
+        if (draggedFirstIndex === -1 || targetIndex === -1) {
+          setMarReorderDropIndicator(null)
+          return
+        }
+        const insertBeforeTargetGroup = draggedFirstIndex > targetIndex
+        if (insertBeforeTargetGroup) {
+          setMarReorderDropIndicator({ mode: 'before', sortableId: targetGroupMeds[0].id })
+        } else {
+          setMarReorderDropIndicator({
+            mode: 'after',
+            lastMedRowId: targetGroupMeds[targetGroupMeds.length - 1].id,
+          })
+        }
+        return
+      }
+
+      const segs = marChartSegmentsForTable
+      const activeIdx = segs.findIndex((s) => segmentSortableId(s) === activeId)
+      const overIdx = segs.findIndex((s) => segmentSortableId(s) === overId)
+      if (activeIdx === -1 || overIdx === -1 || activeIdx === overIdx) {
         setMarReorderDropIndicator(null)
         return
       }
-      const draggedGroupKey = getMarMedicationGroupKey(draggedMed)
-      const targetGroupKey = getMarMedicationGroupKey(targetMed)
-      if (draggedGroupKey === targetGroupKey) {
-        setMarReorderDropIndicator(null)
-        return
-      }
-      const draggedGroupMeds = displayMedications.filter((m) => getMarMedicationGroupKey(m) === draggedGroupKey)
-      const targetGroupMeds = displayMedications.filter((m) => getMarMedicationGroupKey(m) === targetGroupKey)
-      const draggedFirstIndex = displayMedications.findIndex((m) => m.id === draggedGroupMeds[0].id)
-      const targetIndex = displayMedications.findIndex((m) => m.id === overId)
-      if (draggedFirstIndex === -1 || targetIndex === -1) {
-        setMarReorderDropIndicator(null)
-        return
-      }
-      const insertBeforeTargetGroup = draggedFirstIndex > targetIndex
+      const insertBeforeTargetGroup = activeIdx > overIdx
+      const targetSeg = segs[overIdx]!
       if (insertBeforeTargetGroup) {
-        setMarReorderDropIndicator({ mode: 'before', medId: targetGroupMeds[0].id })
-      } else {
+        setMarReorderDropIndicator({ mode: 'before', sortableId: segmentSortableId(targetSeg) })
+      } else if (targetSeg.kind === 'med') {
         setMarReorderDropIndicator({
           mode: 'after',
-          medId: targetGroupMeds[targetGroupMeds.length - 1].id,
+          lastMedRowId: targetSeg.meds[targetSeg.meds.length - 1]!.id,
         })
+      } else {
+        setMarReorderDropIndicator({ mode: 'after', prnId: targetSeg.prn.id })
       }
     },
-    [displayMedications, marRowReorderLocked]
+    [displayMedications, marRowReorderLocked, marTableShowFullChart, marChartSegmentsForTable]
   )
 
   // Drag and drop sensors
@@ -2279,68 +2602,60 @@ export default function ViewMARForm() {
     })
   )
 
-  // Handle drag end for row reordering
+  // Handle drag end for row reordering (filtered view: medications only; All view: meds + PRN chart rows)
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
+    setMarReorderDropIndicator(null)
 
-    if (over && active.id !== over.id) {
-      // Find the dragged medication and its group
-      const draggedMed = medications.find(m => m.id === active.id)
-      const targetMed = medications.find(m => m.id === over.id)
-      
+    if (!over || active.id === over.id) return
+
+    if (!marTableShowFullChart) {
+      const draggedMed = medications.find((m) => m.id === active.id)
+      const targetMed = medications.find((m) => m.id === over.id)
+
       if (!draggedMed || !targetMed) return
 
       const draggedGroupKey = getMarMedicationGroupKey(draggedMed)
       const targetGroupKey = getMarMedicationGroupKey(targetMed)
 
-      // Get all medications in the dragged group
-      const draggedGroupMeds = medications.filter(m => getMarMedicationGroupKey(m) === draggedGroupKey)
-      const targetGroupMeds = medications.filter(m => getMarMedicationGroupKey(m) === targetGroupKey)
-      
-      // Get the indices of the first med in each group
-      const draggedFirstIndex = medications.findIndex(m => m.id === draggedGroupMeds[0].id)
-      const targetIndex = medications.findIndex(m => m.id === over.id)
+      const draggedGroupMeds = medications.filter((m) => getMarMedicationGroupKey(m) === draggedGroupKey)
+      const targetGroupMeds = medications.filter((m) => getMarMedicationGroupKey(m) === targetGroupKey)
+
+      const draggedFirstIndex = medications.findIndex((m) => m.id === draggedGroupMeds[0].id)
+      const targetIndex = medications.findIndex((m) => m.id === over.id)
 
       if (draggedFirstIndex === -1 || targetIndex === -1) return
 
-      // Remove all meds from dragged group from the array
-      let newMedications = medications.filter(m => getMarMedicationGroupKey(m) !== draggedGroupKey)
-      
-      // If target was in the dragged group, just restore original order
+      let newMedications = medications.filter((m) => getMarMedicationGroupKey(m) !== draggedGroupKey)
+
       if (draggedGroupKey === targetGroupKey) return
 
-      // Find the new target index after removal (`over` is always first row of target group in UI)
-      const newTargetIndex = newMedications.findIndex(m => m.id === over.id)
-      
+      const newTargetIndex = newMedications.findIndex((m) => m.id === over.id)
+
       if (newTargetIndex === -1) {
         return
       }
 
-      // Insert before the whole target group, or after all of its rows (never inside multi-time stacks)
       const insertBeforeTargetGroup = draggedFirstIndex > targetIndex
       const insertIndex = insertBeforeTargetGroup
         ? newTargetIndex
         : newTargetIndex + targetGroupMeds.length
 
-      // Insert all dragged group meds at the new position
       newMedications = [
         ...newMedications.slice(0, insertIndex),
         ...draggedGroupMeds,
-        ...newMedications.slice(insertIndex)
+        ...newMedications.slice(insertIndex),
       ]
 
-      // Update local state for immediate UI feedback
       setMedications(newMedications)
 
-      // Update display_order in database for all rows
       try {
         setSaving(true)
         const updates = newMedications.map((med, index) => ({
           id: med.id,
-          display_order: (index + 1) * 10
+          display_order: (index + 1) * 10,
         }))
 
-        // Update all medications with their new display_order
         for (const update of updates) {
           await supabase
             .from('mar_medications')
@@ -2354,11 +2669,65 @@ export default function ViewMARForm() {
         console.error('Error updating row order:', err)
         setError('Failed to save row order')
         setTimeout(() => setError(''), 3000)
-        // Reload to restore original order
         await loadMARForm()
       } finally {
         setSaving(false)
       }
+      return
+    }
+
+    if (!marFormId) return
+
+    const activeId = String(active.id)
+    const overId = String(over.id)
+    const segs = [...marChartSegmentsForTable]
+    const activeIdx = segs.findIndex((s) => segmentSortableId(s) === activeId)
+    const overIdx = segs.findIndex((s) => segmentSortableId(s) === overId)
+    if (activeIdx === -1 || overIdx === -1 || activeIdx === overIdx) return
+
+    const insertBeforeTargetGroup = activeIdx > overIdx
+    const [moved] = segs.splice(activeIdx, 1)
+    let overIdx2 = segs.findIndex((s) => segmentSortableId(s) === overId)
+    if (overIdx2 === -1) return
+    const insertAt = insertBeforeTargetGroup ? overIdx2 : overIdx2 + 1
+    segs.splice(insertAt, 0, moved)
+
+    const newOrderJson = segmentsToChartOrder(segs)
+    const newMedsFlat = flattenMedsFromChartSegments(segs)
+    const newPrnOrder = segs.filter((s): s is PrnChartSeg => s.kind === 'prn').map((s) => s.prn)
+
+    setMedications(newMedsFlat)
+    setPrnRecords(newPrnOrder)
+    setMarForm((prev) => (prev ? { ...prev, mar_chart_row_order: newOrderJson } : null))
+
+    try {
+      setSaving(true)
+      const { error: formErr } = await supabase
+        .from('mar_forms')
+        .update({ mar_chart_row_order: newOrderJson })
+        .eq('id', marFormId)
+      if (formErr) throw formErr
+
+      const updates = newMedsFlat.map((med, index) => ({
+        id: med.id,
+        display_order: (index + 1) * 10,
+      }))
+      for (const update of updates) {
+        await supabase
+          .from('mar_medications')
+          .update({ display_order: update.display_order })
+          .eq('id', update.id)
+      }
+
+      setMessage('Row order updated!')
+      setTimeout(() => setMessage(''), 2000)
+    } catch (err: any) {
+      console.error('Error updating row order:', err)
+      setError('Failed to save row order')
+      setTimeout(() => setError(''), 3000)
+      await loadMARForm()
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -3066,12 +3435,70 @@ export default function ViewMARForm() {
                     >
                       + Vital Signs
                     </button>
-                    <button
-                      onClick={() => setShowAddPRNModal(true)}
-                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
-                    >
-                      + PRN
-                    </button>
+                    <div className="relative" ref={prnActionsMenuRef}>
+                      <button
+                        type="button"
+                        aria-expanded={prnActionsMenuOpen}
+                        aria-haspopup="menu"
+                        aria-controls="mar-prn-actions-menu"
+                        onClick={() => setPrnActionsMenuOpen((open) => !open)}
+                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium inline-flex items-center gap-1.5"
+                      >
+                        PRN
+                        <svg
+                          className="w-4 h-4 shrink-0"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          aria-hidden
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {prnActionsMenuOpen && (
+                        <div
+                          id="mar-prn-actions-menu"
+                          role="menu"
+                          className="absolute right-0 mt-1 z-[100] min-w-[16rem] rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg py-1"
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full text-left px-4 py-2 text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            onClick={() => {
+                              setPrnActionsMenuOpen(false)
+                              setShowAddPRNModal(true)
+                            }}
+                          >
+                            Add PRN to List
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full text-left px-4 py-2 text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            onClick={() => {
+                              setPrnActionsMenuOpen(false)
+                              setShowAddPRNRecordModal(true)
+                            }}
+                          >
+                            Add PRN Record
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full text-left px-4 py-2 text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            onClick={() => {
+                              setPrnActionsMenuOpen(false)
+                              setPrnListDeleteTarget(null)
+                              setPrnListEditTarget(null)
+                              setShowManagePRNListModal(true)
+                            }}
+                          >
+                            View/Manage PRN List
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -3116,24 +3543,47 @@ export default function ViewMARForm() {
                     aria-label="Filter MAR table rows"
                   >
                   <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mr-1">Show</span>
-                  {([
-                    { id: 'all' as const, label: 'All' },
-                    { id: 'routine_meds' as const, label: 'Routine meds' },
-                    { id: 'vitals_only' as const, label: 'Vitals' },
-                  ]).map(({ id, label }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setMarTableViewFilter(id)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                        marTableViewFilter === id
-                          ? 'bg-lasso-teal text-white border-lasso-teal shadow-sm'
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setMarTableCategoryVisible({ ...MAR_TABLE_DEFAULT_VISIBILITY })}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                      marTableShowFullChart
+                        ? 'bg-lasso-teal text-white border-lasso-teal shadow-sm'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                    aria-pressed={marTableShowFullChart}
+                  >
+                    All
+                  </button>
+                  {(
+                    [
+                      { id: 'routine_meds' as const, label: 'Routine meds' },
+                      { id: 'vitals' as const, label: 'Vitals' },
+                      { id: 'prn' as const, label: 'PRN' },
+                    ] as const
+                  ).map(({ id, label }) => {
+                    const on = marTableCategoryVisible[id]
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() =>
+                          setMarTableCategoryVisible((prev) => ({
+                            ...prev,
+                            [id]: !prev[id],
+                          }))
+                        }
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                          on
+                            ? 'bg-lasso-teal text-white border-lasso-teal shadow-sm'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
+                        }`}
+                        aria-pressed={on}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
                   </div>
                   {/* Hidden for now - will be re-enabled when PRN records are integrated into MAR chart
                   <button
@@ -3266,58 +3716,511 @@ export default function ViewMARForm() {
                     }}
                   >
                     <SortableContext
-                      items={marSortableFirstRowIds}
+                      items={marUnifiedSortableIds}
                       strategy={marGroupReorderNoLayoutShiftStrategy}
                     >
                       <tbody>
-                    {displayMedications.length === 0 ? (
+                    <>
+                    {marChartSegmentsForTable.length === 0 ? (
                       <tr>
                         <td colSpan={3 + days.length} className="border border-gray-300 dark:border-gray-600 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                          {medications.length === 0
-                            ? 'No medications recorded. Click "+ Medication" to add one.'
-                            : marTableViewFilter === 'routine_meds'
-                              ? 'No routine medications in this view. Choose All or Vitals.'
-                              : 'No vital signs rows in this view. Choose All or Routine meds.'}
+                          {!marTableCategoryVisible.routine_meds &&
+                          !marTableCategoryVisible.vitals &&
+                          !marTableCategoryVisible.prn
+                            ? 'Select at least one category under Show (Routine meds, Vitals, or PRN).'
+                            : medications.length === 0 && prnRecords.length === 0
+                              ? 'No medications recorded. Click "+ Medication" to add one.'
+                              : 'Nothing matches the current Show filters. Turn on more categories or add medications / PRN records.'}
                         </td>
                       </tr>
                     ) : (() => {
-                      // Group medications by name, dosage, and dates to calculate rowSpan
-                      const medicationGroups: { [key: string]: { meds: typeof displayMedications, rowSpan: number } } = {}
-                      displayMedications.forEach((med) => {
-                        const groupKey = getMarMedicationGroupKey(med)
-                        
-                        if (!medicationGroups[groupKey]) {
-                          medicationGroups[groupKey] = { meds: [], rowSpan: 0 }
+                      let globalRowIndex = 0
+                      return marChartSegmentsForTable.flatMap((seg, segIndex) => {
+                        if (seg.kind === 'prn') {
+                          const prn = seg.prn
+                          const prnChartStickyMed =
+                            'sticky left-0 z-10 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]'
+                          const prnChartStickyStart =
+                            'sticky z-10 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]'
+                          const prnChartBg =
+                            'bg-[#d8f0e0] dark:bg-[#14532d]/35 hover:brightness-[0.97] dark:hover:brightness-110'
+                          const startLabel = prn.start_date
+                            ? new Date(
+                                prn.start_date.includes('T') ? prn.start_date : `${prn.start_date}T12:00:00`,
+                              ).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : '—'
+                          const parsedMarForPrnRow = parseMARMonthYear(marForm?.month_year || '')
+                          let prnAdminDayInMonth: number | null = null
+                          if (parsedMarForPrnRow && prn.date) {
+                            const iso = (prn.date.includes('T') ? prn.date.slice(0, 10) : prn.date).slice(0, 10)
+                            if (iso.length >= 10) {
+                              const [yStr, mStr, dStr] = iso.split('-')
+                              const y = parseInt(yStr, 10)
+                              const mNum = parseInt(mStr, 10)
+                              const dNum = parseInt(dStr, 10)
+                              if (
+                                y === parsedMarForPrnRow.y &&
+                                mNum === parsedMarForPrnRow.m &&
+                                dNum >= 1 &&
+                                dNum <= 31
+                              ) {
+                                prnAdminDayInMonth = dNum
+                              }
+                            }
+                          }
+                          const prnHasTime = !!prn.hour
+                          const prnHasResult = !!prn.result?.trim()
+                          const prnHasInitials = !!prn.initials?.trim()
+                          const prnResultHelper = !prnHasTime ? 'Set time first' : ''
+                          const prnInitialsHelper = !prnHasTime
+                            ? 'Set time first'
+                            : !prnHasResult
+                              ? 'Set result next'
+                              : prnHasInitials
+                                ? ''
+                                : 'Set initials'
+                          const marDropLineColSpan = 3 + days.length
+                          const prnSortableId = marPrnChartSortableId(prn.id)
+                          const showPrnDropBefore =
+                            marReorderDropIndicator?.mode === 'before' &&
+                            marReorderDropIndicator.sortableId === prnSortableId
+                          const showPrnDropAfter =
+                            marReorderDropIndicator?.mode === 'after' && marReorderDropIndicator.prnId === prn.id
+                          globalRowIndex += 1
+                          return [
+                            <Fragment key={`mar-prn-chart-wrap-${prn.id}`}>
+                              {showPrnDropBefore ? (
+                                <tr aria-hidden className="pointer-events-none">
+                                  <td colSpan={marDropLineColSpan} className="p-0 border-0 leading-none">
+                                    <div className="h-1.5 w-full bg-sky-500 dark:bg-sky-400 z-[25] shadow-sm rounded-sm" />
+                                  </td>
+                                </tr>
+                              ) : null}
+                              <SortableTableRow
+                                id={prnSortableId}
+                                sortableDisabled={marRowReorderLocked}
+                                className={`${segIndex > 0 ? 'border-t border-emerald-800/15 dark:border-emerald-400/20' : ''}`}
+                              >
+                                <td
+                                  className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top ${prnChartStickyMed} ${prnChartBg}`}
+                                  style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}
+                                >
+                                  <div className="flex gap-2">
+                                    <div className="flex flex-col items-start gap-1 shrink-0">
+                                      <DragHandleButton medId={prn.id} readOnly={readOnly} reorderLocked={marRowReorderLocked} />
+                                    </div>
+                                    <div className="flex flex-col gap-0.5 min-w-0 flex-1 pl-1" aria-label={`PRN chart row: ${prn.medication}`}>
+                                      <div className="font-medium text-sm text-emerald-900 dark:text-emerald-100">💊 PRN</div>
+                                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
+                                        {prn.medication || '—'}
+                                      </div>
+                                      <div className="text-xs text-gray-700 dark:text-gray-300">
+                                        {prn.dosage?.trim() ? prn.dosage : '—'}
+                                      </div>
+                                      <div
+                                        className={`text-xs text-gray-600 dark:text-gray-400 break-words ${!readOnly ? 'cursor-pointer hover:underline' : ''}`}
+                                        onClick={
+                                          !readOnly
+                                            ? (e) => {
+                                                e.stopPropagation()
+                                                handlePRNFieldEdit(prn.id, 'reason', prn.reason, 'chart')
+                                              }
+                                            : undefined
+                                        }
+                                      >
+                                        {!readOnly &&
+                                        editingPRNField?.recordId === prn.id &&
+                                        editingPRNField?.field === 'reason' &&
+                                        editingPRNField.surface === 'chart' ? (
+                                          <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
+                                            <div className="font-medium text-gray-500 dark:text-gray-400 text-[10px] uppercase tracking-wide">
+                                              Reason
+                                            </div>
+                                            <input
+                                              type="text"
+                                              value={editingPRNValue}
+                                              onChange={(e) => setEditingPRNValue(e.target.value)}
+                                              onBlur={() => handlePRNFieldSave(prn.id, 'reason')}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handlePRNFieldSave(prn.id, 'reason')
+                                                else if (e.key === 'Escape') handlePRNFieldCancel()
+                                              }}
+                                              autoFocus
+                                              placeholder="Reason / indication"
+                                              className="w-full px-2 py-1 border border-lasso-teal rounded text-xs dark:bg-gray-700 dark:text-white"
+                                            />
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <div className="font-medium text-gray-500 dark:text-gray-400 text-[10px] uppercase tracking-wide mb-0.5">
+                                              Reason
+                                            </div>
+                                            <span>{prn.reason || '—'}</span>
+                                          </>
+                                        )}
+                                      </div>
+                                      {!(
+                                        editingPRNField?.recordId === prn.id &&
+                                        editingPRNField?.field === 'reason' &&
+                                        editingPRNField.surface === 'chart'
+                                      ) &&
+                                      (!readOnly || prn.note?.trim()) ? (
+                                        <div className="mt-1 pt-1 border-t border-emerald-800/20 dark:border-emerald-400/25">
+                                          <div className="flex items-start justify-between gap-1">
+                                            <span className="font-medium text-gray-500 dark:text-gray-400 text-[10px] uppercase tracking-wide">
+                                              Notes
+                                            </span>
+                                            {!readOnly ? (
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  setEditingPRNNote({ recordId: prn.id, note: prn.note })
+                                                  setShowPRNNoteModal(true)
+                                                }}
+                                                className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue shrink-0"
+                                                title={prn.note ? 'Edit note' : 'Add note'}
+                                              >
+                                                {prn.note ? '📝' : '+'} note
+                                              </button>
+                                            ) : null}
+                                          </div>
+                                          {prn.note?.trim() ? (
+                                            <div className="text-[11px] text-gray-600 dark:text-gray-400 italic mt-0.5 break-words">
+                                              {prn.note}
+                                            </div>
+                                          ) : !readOnly ? (
+                                            <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                                              Optional — appears on Progress Notes as additional note
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
+                                      {prn.date && marForm?.month_year && !isPrnDateInMarMonth(prn.date, marForm.month_year) ? (
+                                        <div className="text-[10px] text-amber-800 dark:text-amber-200 mt-1 leading-snug">
+                                          Admin date is outside this MAR month — adjust in the PRN table below so this row lines up with a
+                                          day column.
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td
+                                  className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs ${prnChartStickyStart} ${prnChartBg}`}
+                                  style={{
+                                    width: MAR_COL.startStop,
+                                    minWidth: MAR_COL.startStop,
+                                    maxWidth: MAR_COL.startStop,
+                                    left: MAR_COL.med,
+                                  }}
+                                >
+                                  {startLabel}
+                                </td>
+                                <td
+                                  className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs ${prnChartStickyStart} ${prnChartBg}`}
+                                  style={{
+                                    width: hourColWidth,
+                                    minWidth: hourColWidth,
+                                    maxWidth: hourColWidth,
+                                    left: MAR_COL.med + MAR_COL.startStop,
+                                  }}
+                                >
+                                  {prnAdminDayInMonth != null ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        scrollMarTableToDayColumn(prnAdminDayInMonth)
+                                      }}
+                                      className="w-full text-gray-500 dark:text-gray-400 leading-tight block px-0.5 py-0.5 rounded-md hover:bg-white/70 dark:hover:bg-black/20 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors cursor-pointer text-center"
+                                      title={`Scroll chart so day ${prnAdminDayInMonth} sits after the Hour column (same as Missed documentation)`}
+                                      aria-label={`Scroll to day ${prnAdminDayInMonth} column`}
+                                    >
+                                      <span className="font-medium text-emerald-900/80 dark:text-emerald-100/90">Day {prnAdminDayInMonth}</span>
+                                      <span className="block text-[10px] mt-0.5 font-normal text-gray-500 dark:text-gray-400">column →</span>
+                                    </button>
+                                  ) : (
+                                    <span
+                                      className="text-gray-500 dark:text-gray-400 select-none leading-tight block px-0.5"
+                                      title="Time of administration is entered in the day column that matches Date administered"
+                                    >
+                                      —
+                                    </span>
+                                  )}
+                                </td>
+                                {days.map((day) => {
+                                  const isPrnAdminDay = prnAdminDayInMonth === day
+                                  const dayCellHighlight =
+                                    day === todayDayInViewedMar ? 'bg-amber-50/90 dark:bg-amber-900/25' : ''
+                                  return (
+                                    <td
+                                      key={`prn-chart-${prn.id}-d${day}`}
+                                      style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day }}
+                                      className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs align-top bg-[#eef8f1] dark:bg-[#14532d]/20 ${dayCellHighlight}`}
+                                    >
+                                      {isPrnAdminDay ? (
+                                        <div className="flex flex-col gap-1 items-stretch text-center min-w-0">
+                                          <div
+                                            className={
+                                              readOnly ? '' : 'cursor-pointer rounded px-0.5 py-0.5 hover:bg-white/60 dark:hover:bg-black/25'
+                                            }
+                                            onClick={
+                                              !readOnly
+                                                ? (e) => {
+                                                    e.stopPropagation()
+                                                    handlePRNFieldEdit(prn.id, 'hour', prn.hour, 'chart')
+                                                  }
+                                                : undefined
+                                            }
+                                            title="Time administered"
+                                          >
+                                            {!readOnly &&
+                                            editingPRNField?.recordId === prn.id &&
+                                            editingPRNField?.field === 'hour' &&
+                                            editingPRNField.surface === 'chart' ? (
+                                              <div onClick={(e) => e.stopPropagation()} className="w-full">
+                                                <TimeInput
+                                                  value={editingPRNValue}
+                                                  onChange={async (newTime) => {
+                                                    setEditingPRNValue(newTime)
+                                                    const valueToSave = newTime.trim() || null
+                                                    const ok = await updatePRNRecord(prn.id, 'hour', valueToSave)
+                                                    if (ok) {
+                                                      setPrnRecords((prev) =>
+                                                        prev.map((r) =>
+                                                          r.id === prn.id ? { ...r, hour: valueToSave } as MARPRNRecord : r,
+                                                        ),
+                                                      )
+                                                    }
+                                                    setEditingPRNField(null)
+                                                    setEditingPRNValue('')
+                                                  }}
+                                                  compact
+                                                />
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handlePRNFieldCancel()}
+                                                  className="text-[10px] text-gray-500 hover:text-gray-700 mt-0.5"
+                                                >
+                                                  Cancel
+                                                </button>
+                                              </div>
+                                            ) : (
+                                              <div className="font-semibold text-gray-900 dark:text-gray-100 leading-tight">
+                                                {prn.hour ? formatTimeDisplay(prn.hour) : readOnly ? '—' : 'Set time'}
+                                              </div>
+                                            )}
+                                          </div>
+                                          <div
+                                            className={`text-[11px] leading-snug break-words border-t border-emerald-800/15 dark:border-emerald-400/20 pt-1 ${
+                                              readOnly || !prnHasTime
+                                                ? ''
+                                                : 'cursor-pointer hover:bg-white/60 dark:hover:bg-black/25 rounded px-0.5'
+                                            } ${!prnHasTime ? 'opacity-60' : ''}`}
+                                            onClick={
+                                              readOnly || !prnHasTime
+                                                ? undefined
+                                                : (e) => {
+                                                    e.stopPropagation()
+                                                    handlePRNFieldEdit(prn.id, 'result', prn.result, 'chart')
+                                                  }
+                                            }
+                                            title={readOnly ? '' : prnResultHelper}
+                                          >
+                                            {!readOnly &&
+                                            prnHasTime &&
+                                            editingPRNField?.recordId === prn.id &&
+                                            editingPRNField?.field === 'result' &&
+                                            editingPRNField.surface === 'chart' ? (
+                                              <div onClick={(e) => e.stopPropagation()} className="w-full">
+                                                <input
+                                                  type="text"
+                                                  value={editingPRNValue}
+                                                  onChange={(e) => setEditingPRNValue(e.target.value)}
+                                                  onBlur={() => handlePRNFieldSave(prn.id, 'result')}
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handlePRNFieldSave(prn.id, 'result')
+                                                    else if (e.key === 'Escape') handlePRNFieldCancel()
+                                                  }}
+                                                  autoFocus
+                                                  placeholder="Result"
+                                                  className="w-full px-1 py-0.5 border border-lasso-teal rounded text-[11px] dark:bg-gray-700 dark:text-white"
+                                                />
+                                              </div>
+                                            ) : prn.result?.trim() ? (
+                                              <span className="text-gray-800 dark:text-gray-100">{prn.result}</span>
+                                            ) : !readOnly && !prnHasTime ? (
+                                              <span className="text-[10px] text-amber-700 dark:text-amber-300">{prnResultHelper}</span>
+                                            ) : !readOnly ? (
+                                              <span className="text-[10px] text-gray-500">Add result</span>
+                                            ) : (
+                                              <span>—</span>
+                                            )}
+                                          </div>
+                                          <div
+                                            className={`text-[11px] leading-tight border-t border-emerald-800/15 dark:border-emerald-400/20 pt-1 ${
+                                              readOnly || !prnHasTime || !prnHasResult
+                                                ? ''
+                                                : 'cursor-pointer hover:bg-white/60 dark:hover:bg-black/25 rounded px-0.5'
+                                            } ${!prnHasTime || !prnHasResult ? 'opacity-60' : ''}`}
+                                            onClick={
+                                              readOnly || !prnHasTime || !prnHasResult
+                                                ? undefined
+                                                : (e) => {
+                                                    e.stopPropagation()
+                                                    if (!prn.initials) {
+                                                      let userInitials: string | null = null
+                                                      const si = userProfile?.staff_initials
+                                                      if (
+                                                        si &&
+                                                        typeof si === 'string' &&
+                                                        !si.startsWith('data:image') &&
+                                                        si.trim().length > 0
+                                                      ) {
+                                                        userInitials = si.trim().toUpperCase()
+                                                      }
+                                                      if (!userInitials && userProfile?.full_name) {
+                                                        const names = userProfile.full_name.trim().split(/\s+/)
+                                                        if (names.length >= 2) {
+                                                          userInitials = (names[0][0] + names[names.length - 1][0]).toUpperCase()
+                                                        } else if (names.length === 1 && names[0].length > 0) {
+                                                          userInitials = names[0][0].toUpperCase()
+                                                        }
+                                                      }
+                                                      const safeInitials = userInitials ? userInitials.slice(0, 10) : null
+                                                      if (safeInitials) {
+                                                        setPrnRecords((prev) =>
+                                                          prev.map((r) =>
+                                                            r.id === prn.id ? { ...r, initials: safeInitials } : r,
+                                                          ),
+                                                        )
+                                                        updatePRNRecord(prn.id, 'initials', safeInitials).then((ok) => {
+                                                          if (!ok) {
+                                                            setPrnRecords((prev) =>
+                                                              prev.map((r) =>
+                                                                r.id === prn.id ? { ...r, initials: prn.initials } : r,
+                                                              ),
+                                                            )
+                                                          }
+                                                        })
+                                                        return
+                                                      }
+                                                    }
+                                                    handlePRNFieldEdit(prn.id, 'initials', prn.initials, 'chart')
+                                                  }
+                                            }
+                                            title={readOnly ? '' : prnInitialsHelper}
+                                          >
+                                            {!readOnly &&
+                                            editingPRNField?.recordId === prn.id &&
+                                            editingPRNField?.field === 'initials' &&
+                                            editingPRNField.surface === 'chart' ? (
+                                              <div onClick={(e) => e.stopPropagation()} className="w-full">
+                                                <input
+                                                  type="text"
+                                                  value={editingPRNValue}
+                                                  onChange={(e) => setEditingPRNValue(e.target.value.toUpperCase())}
+                                                  onBlur={() => handlePRNFieldSave(prn.id, 'initials')}
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handlePRNFieldSave(prn.id, 'initials')
+                                                    else if (e.key === 'Escape') handlePRNFieldCancel()
+                                                  }}
+                                                  autoFocus
+                                                  placeholder="Initials"
+                                                  maxLength={4}
+                                                  className="w-full px-1 py-0.5 border border-lasso-teal rounded text-[11px] dark:bg-gray-700 dark:text-white text-center"
+                                                />
+                                              </div>
+                                            ) : prn.initials ? (
+                                              <InitialsOrSignatureDisplay
+                                                value={prn.initials}
+                                                variant="initials"
+                                                userProfile={userProfile}
+                                              />
+                                            ) : !readOnly && prnHasTime && prnHasResult && (userProfile?.staff_initials || userProfile?.full_name) ? (
+                                              <button
+                                                type="button"
+                                                onClick={async (e) => {
+                                                  e.stopPropagation()
+                                                  let userInitials: string | null = null
+                                                  const si = userProfile?.staff_initials
+                                                  if (
+                                                    si &&
+                                                    typeof si === 'string' &&
+                                                    !si.startsWith('data:image') &&
+                                                    si.trim().length > 0
+                                                  ) {
+                                                    userInitials = si.trim().toUpperCase()
+                                                  }
+                                                  if (!userInitials && userProfile?.full_name) {
+                                                    const names = userProfile.full_name.trim().split(/\s+/)
+                                                    if (names.length >= 2) {
+                                                      userInitials = (names[0][0] + names[names.length - 1][0]).toUpperCase()
+                                                    } else if (names.length === 1 && names[0].length > 0) {
+                                                      userInitials = names[0][0].toUpperCase()
+                                                    }
+                                                  }
+                                                  const safeInitials = userInitials ? userInitials.slice(0, 10) : null
+                                                  if (safeInitials) {
+                                                    setPrnRecords((prev) =>
+                                                      prev.map((r) => (r.id === prn.id ? { ...r, initials: safeInitials } : r)),
+                                                    )
+                                                    const ok = await updatePRNRecord(prn.id, 'initials', safeInitials)
+                                                    if (!ok) {
+                                                      setPrnRecords((prev) =>
+                                                        prev.map((r) => (r.id === prn.id ? { ...r, initials: prn.initials } : r)),
+                                                      )
+                                                    }
+                                                  }
+                                                }}
+                                                className="text-[10px] font-medium text-lasso-teal border border-lasso-teal rounded px-1 py-0.5 hover:bg-lasso-teal/10"
+                                              >
+                                                Initial
+                                              </button>
+                                            ) : !readOnly && prnInitialsHelper ? (
+                                              <span className="text-[10px] text-amber-700 dark:text-amber-300">{prnInitialsHelper}</span>
+                                            ) : (
+                                              <span className="text-gray-400">—</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-400 dark:text-gray-500 select-none">—</span>
+                                      )}
+                                    </td>
+                                  )
+                                })}
+                              </SortableTableRow>
+                              {showPrnDropAfter ? (
+                                <tr aria-hidden className="pointer-events-none">
+                                  <td colSpan={marDropLineColSpan} className="p-0 border-0 leading-none">
+                                    <div className="h-1.5 w-full bg-sky-500 dark:bg-sky-400 z-[25] shadow-sm rounded-sm" />
+                                  </td>
+                                </tr>
+                              ) : null}
+                            </Fragment>,
+                          ]
                         }
-                        medicationGroups[groupKey].meds.push(med)
-                      })
-                      
-                      Object.keys(medicationGroups).forEach(key => {
-                        medicationGroups[key].rowSpan = medicationGroups[key].meds.length
-                      })
-                      
-                      const isFirstInGroup: { [medId: string]: boolean } = {}
-                      Object.values(medicationGroups).forEach(group => {
-                        if (group.meds.length > 0) {
-                          isFirstInGroup[group.meds[0].id] = true
-                        }
-                      })
-                      
-                      return displayMedications.map((med, medIndex) => {
+
+                        return seg.meds.map((med, idxInSeg) => {
                         const medAdmin = administrations[med.id] || {}
                         const parsedMarMonthForRow = parseMARMonthYear(marForm.month_year)
                         const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
                         const groupKey = getMarMedicationGroupKey(med)
-                        const group = medicationGroups[groupKey]
-                        const shouldMerge = group && group.rowSpan > 1
-                        const isFirstRow = isFirstInGroup[med.id] || false
-                        const isFirstTableRow = medIndex === 0
-                        
+                        const group = { meds: seg.meds, rowSpan: seg.meds.length }
+                        const shouldMerge = group.rowSpan > 1
+                        const isFirstRow = idxInSeg === 0
+                        const isFirstTableRow = globalRowIndex === 0
+                        globalRowIndex += 1
+
                         const marDropLineColSpan = 3 + days.length
                         const showDropLineBefore =
-                          marReorderDropIndicator?.mode === 'before' && marReorderDropIndicator.medId === med.id
+                          marReorderDropIndicator?.mode === 'before' &&
+                          marReorderDropIndicator.sortableId === med.id &&
+                          isFirstRow
                         const showDropLineAfter =
-                          marReorderDropIndicator?.mode === 'after' && marReorderDropIndicator.medId === med.id
+                          marReorderDropIndicator?.mode === 'after' &&
+                          marReorderDropIndicator.lastMedRowId === med.id
 
                         return (
                           <Fragment key={med.id}>
@@ -3329,7 +4232,7 @@ export default function ViewMARForm() {
                               </tr>
                             ) : null}
                             <MarMedTableRow 
-                            sortableId={isFirstInGroup[med.id] ? med.id : null}
+                            sortableId={isFirstRow ? med.id : null}
                             sortableDisabled={marRowReorderLocked}
                             className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${
                               draggingGroupMedIdSet.has(med.id) ? 'opacity-0 pointer-events-none' : ''
@@ -3968,12 +4871,16 @@ export default function ViewMARForm() {
                           </Fragment>
                         )
                       })
+                      })
                     })()}
+                    </>
                       </tbody>
                     </SortableContext>
                     <DragOverlay zIndex={2000} dropAnimation={{ duration: 180, easing: 'ease' }}>
                       {marDragPreviewGroupMeds.length > 0 ? (
                         <MarMedicationGroupDragPreview meds={marDragPreviewGroupMeds} />
+                      ) : marDragPreviewPrn ? (
+                        <MarPrnChartRowDragPreview prn={marDragPreviewPrn} />
                       ) : null}
                     </DragOverlay>
                   </DndContext>
@@ -4100,7 +5007,6 @@ export default function ViewMARForm() {
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Time</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Result</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Initials</th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Signature</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -4109,18 +5015,13 @@ export default function ViewMARForm() {
                         const hasTime = !!prn.hour
                         const hasResult = !!prn.result?.trim()
                         const hasInitials = !!prn.initials?.trim()
-                        const hasSignature = !!prn.staff_signature?.trim()
-                        const needsTimeAndResult = !hasTime || !hasResult
-                        const needsInitials = !hasInitials
                         const nextStepText = !hasTime
-                          ? 'Set Time first'
+                          ? 'Set time first'
                           : !hasResult
-                            ? 'Set Result next'
+                            ? 'Set result next'
                             : !hasInitials
-                              ? 'Set Initials next'
-                              : !hasSignature
-                                ? 'Ready to Sign'
-                                : 'Signed'
+                              ? 'Set initials — Progress Note syncs here'
+                              : 'Synced to Progress Notes (sign there if required)'
                         const initialsHelperText = !hasTime
                           ? 'Set Time first'
                           : !hasResult
@@ -4135,35 +5036,23 @@ export default function ViewMARForm() {
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white">
                             {prn.entry_number || '—'}
                           </td>
-                          <td 
-                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
-                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'start_date', prn.start_date || '') : undefined}
-                          >
-                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'start_date' ? (
-                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="date"
-                                  value={editingPRNValue || prn.start_date || ''}
-                                  onChange={(e) => setEditingPRNValue(e.target.value)}
-                                  onBlur={() => handlePRNFieldSave(prn.id, 'start_date')}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handlePRNFieldSave(prn.id, 'start_date')
-                                    else if (e.key === 'Escape') handlePRNFieldCancel()
-                                  }}
-                                  autoFocus
-                                  className="px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
-                                />
-                                <button type="button" onClick={() => handlePRNFieldCancel()} className="text-xs text-gray-500 hover:text-gray-700">✕</button>
-                              </div>
-                            ) : (
-                              prn.start_date ? new Date(prn.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
-                            )}
+                          <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white select-none cursor-default">
+                            {prn.start_date
+                              ? new Date(prn.start_date).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })
+                              : '—'}
                           </td>
                           <td 
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
                             onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'date', prn.date) : undefined}
                           >
-                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'date' ? (
+                            {!readOnly &&
+                            editingPRNField?.recordId === prn.id &&
+                            editingPRNField?.field === 'date' &&
+                            editingPRNField.surface === 'table' ? (
                               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 <input
                                   type="date"
@@ -4189,7 +5078,10 @@ export default function ViewMARForm() {
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
                             onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'medication', prn.medication) : undefined}
                           >
-                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'medication' ? (
+                            {!readOnly &&
+                            editingPRNField?.recordId === prn.id &&
+                            editingPRNField?.field === 'medication' &&
+                            editingPRNField.surface === 'table' ? (
                               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 <select
                                   value={editingPRNValue}
@@ -4233,7 +5125,10 @@ export default function ViewMARForm() {
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
                             onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'dosage', prn.dosage) : undefined}
                           >
-                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'dosage' ? (
+                            {!readOnly &&
+                            editingPRNField?.recordId === prn.id &&
+                            editingPRNField?.field === 'dosage' &&
+                            editingPRNField.surface === 'table' ? (
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
@@ -4261,7 +5156,10 @@ export default function ViewMARForm() {
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
                             onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'reason', prn.reason) : undefined}
                           >
-                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'reason' ? (
+                            {!readOnly &&
+                            editingPRNField?.recordId === prn.id &&
+                            editingPRNField?.field === 'reason' &&
+                            editingPRNField.surface === 'table' ? (
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
@@ -4311,7 +5209,10 @@ export default function ViewMARForm() {
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
                             onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'hour', prn.hour) : undefined}
                           >
-                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'hour' ? (
+                            {!readOnly &&
+                            editingPRNField?.recordId === prn.id &&
+                            editingPRNField?.field === 'hour' &&
+                            editingPRNField.surface === 'table' ? (
                               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 <TimeInput
                                   value={editingPRNValue}
@@ -4346,7 +5247,11 @@ export default function ViewMARForm() {
                             onClick={readOnly || !hasTime ? undefined : () => handlePRNFieldEdit(prn.id, 'result', prn.result)}
                             title={readOnly ? '' : resultHelperText}
                           >
-                            {!readOnly && hasTime && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'result' ? (
+                            {!readOnly &&
+                            hasTime &&
+                            editingPRNField?.recordId === prn.id &&
+                            editingPRNField?.field === 'result' &&
+                            editingPRNField.surface === 'table' ? (
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
@@ -4408,7 +5313,10 @@ export default function ViewMARForm() {
                             }}
                             title={readOnly ? '' : initialsHelperText}
                           >
-                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'initials' ? (
+                            {!readOnly &&
+                            editingPRNField?.recordId === prn.id &&
+                            editingPRNField?.field === 'initials' &&
+                            editingPRNField.surface === 'table' ? (
                               <div className="flex items-center gap-2">
                                 <input
                                   type="text"
@@ -4469,100 +5377,14 @@ export default function ViewMARForm() {
                             ) : (
                               <span className="text-gray-400">—</span>
                             )}
-                          </td>
-                          <td 
-                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
-                              readOnly ? '' : hasInitials ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50'
-                            }`}
-                            onClick={readOnly ? undefined : async (e) => {
-                              if (!hasTime || !hasResult || !hasInitials) return
-                              e.stopPropagation()
-                              if (prn.staff_signature && editingPRNField?.recordId !== prn.id) return
-                              if (!prn.staff_signature && userProfile?.staff_signature) {
-                                const sig = userProfile.staff_signature
-                                const inits = prn.initials?.trim().toUpperCase()
-                                setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: sig } : r))
-                                if (inits) setStaffInitials(prev => ({ ...prev, [inits]: sig }))
-                                const ok = await updatePRNRecord(prn.id, 'staff_signature', sig)
-                                if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: prn.staff_signature } : r))
-                                return
-                              }
-                              if (prn.staff_signature) handlePRNFieldEdit(prn.id, 'staff_signature', prn.staff_signature)
-                            }}
-                            title={readOnly ? '' : (!hasTime || !hasResult || !hasInitials) ? 'Complete Time, Result, and Initials first' : !prn.staff_signature ? 'Click to sign (apply saved signature)' : ''}
-                          >
-                            {!readOnly && editingPRNField?.recordId === prn.id && editingPRNField?.field === 'staff_signature' ? (
-                              <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="text"
-                                  value={editingPRNValue}
-                                  onChange={(e) => setEditingPRNValue(e.target.value)}
-                                  onBlur={() => handlePRNFieldSave(prn.id, 'staff_signature')}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      handlePRNFieldSave(prn.id, 'staff_signature')
-                                    } else if (e.key === 'Escape') {
-                                      handlePRNFieldCancel()
-                                    }
-                                  }}
-                                  autoFocus
-                                  placeholder="e.g., J. Smith, RN"
-                                  className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
-                                />
-                              </div>
-                            ) : (() => {
-                              const isMine = prn.signed_by === userProfile?.id || (prn.signed_by == null && prn.initials?.trim().toUpperCase() === currentUserInitialsForMatch(userProfile))
-                              const effectiveSig = isMine && userProfile?.staff_signature ? userProfile.staff_signature : (prn.staff_signature ?? '')
-                              return effectiveSig ? (
-                              <div className="flex flex-col gap-0.5">
-                                <InitialsOrSignatureDisplay value={effectiveSig} variant="signature" userProfile={userProfile} />
-                                {!readOnly && (
-                                  <button
-                                    type="button"
-                                    onClick={async (ev) => {
-                                      ev.stopPropagation()
-                                      const prevSig = prn.staff_signature
-                                      setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: '', signed_by: null } : r))
-                                      const ok = await updatePRNRecord(prn.id, 'staff_signature', null)
-                                      if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: prevSig, signed_by: prn.signed_by } : r))
-                                    }}
-                                    className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 underline w-fit"
-                                  >
-                                    Clear signature
-                                  </button>
-                                )}
-                              </div>
-                            ) : !readOnly && userProfile?.staff_signature && hasTime && hasResult && hasInitials ? (
-                              <button
-                                type="button"
-                                onClick={async (ev) => {
-                                  ev.stopPropagation()
-                                  const sig = userProfile!.staff_signature
-                                  const inits = prn.initials?.trim().toUpperCase()
-                                  setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: sig, signed_by: userProfile?.id ?? null } : r))
-                                  if (inits) setStaffInitials(prev => ({ ...prev, [inits]: sig }))
-                                  const ok = await updatePRNRecord(prn.id, 'staff_signature', sig)
-                                  if (!ok) setPrnRecords(prev => prev.map(r => r.id === prn.id ? { ...r, staff_signature: prn.staff_signature, signed_by: prn.signed_by } : r))
-                                }}
-                                className="px-2 py-1 text-sm font-medium text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10 dark:hover:bg-lasso-teal/20"
-                              >
-                                Sign
-                              </button>
-                            ) : !readOnly && (!hasTime || !hasResult || !hasInitials) ? (
-                              <button
-                                type="button"
-                                disabled
-                                title="Complete Time, Result, and Initials first"
-                                className="px-2 py-1 text-sm font-medium text-gray-400 border border-gray-300 dark:border-gray-600 rounded cursor-not-allowed"
-                              >
-                                Sign
-                              </button>
-                            ) : (
-                              <span className="text-gray-400">—</span>
-                            )
-                            })()}
                             {!readOnly && (
-                              <div className={`mt-1 text-[11px] ${nextStepText === 'Signed' ? 'text-green-600 dark:text-green-400' : nextStepText === 'Ready to Sign' ? 'text-lasso-teal dark:text-lasso-blue' : 'text-amber-600 dark:text-amber-400'}`}>
+                              <div
+                                className={`mt-1.5 text-[11px] leading-tight ${
+                                  hasTime && hasResult && hasInitials
+                                    ? 'text-green-700 dark:text-green-400'
+                                    : 'text-amber-600 dark:text-amber-400'
+                                }`}
+                              >
                                 {nextStepText}
                               </div>
                             )}
@@ -4703,7 +5525,6 @@ export default function ViewMARForm() {
                         <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Time</th>
                         <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Result</th>
                         <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Initials</th>
-                        <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Signature</th>
                         <th className="border border-gray-400 px-2 py-1.5 text-left font-semibold">Note</th>
                       </tr>
                     </thead>
@@ -4719,18 +5540,7 @@ export default function ViewMARForm() {
                           <td className="border border-gray-400 px-2 py-1.5">{prn.hour ? formatTimeDisplay(prn.hour) : '—'}</td>
                           <td className="border border-gray-400 px-2 py-1.5">{prn.result || '—'}</td>
                           <td className="border border-gray-400 px-2 py-1.5 align-middle">
-                            {prn.initials?.startsWith('data:image') ? (
-                              <img src={prn.initials} alt="Initials" style={{ maxHeight: '1.25em', maxWidth: '3em', display: 'inline-block', verticalAlign: 'middle' }} />
-                            ) : (
-                              prn.initials || '—'
-                            )}
-                          </td>
-                          <td className="border border-gray-400 px-2 py-1.5 align-middle">
-                            {prn.staff_signature?.startsWith('data:image') ? (
-                              <img src={prn.staff_signature} alt="Signature" style={{ maxHeight: '1.75em', maxWidth: '8em', display: 'inline-block', verticalAlign: 'middle' }} />
-                            ) : (
-                              prn.staff_signature || '—'
-                            )}
+                            <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} />
                           </td>
                           <td className="border border-gray-400 px-2 py-1.5">{prn.note || '—'}</td>
                         </tr>
@@ -5119,6 +5929,181 @@ export default function ViewMARForm() {
               dateMax={getMarMonthDateRangeISO(marForm?.month_year || '')?.max}
               prnMedicationList={prnMedicationList}
             />
+          </div>
+        </div>
+      )}
+
+      {/* View/Manage PRN library (mar_prn_medications) */}
+      {showManagePRNListModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
+          <div
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col"
+            role="dialog"
+            aria-labelledby="manage-prn-list-title"
+          >
+            <div className="flex justify-between items-center gap-3 p-6 border-b border-gray-200 dark:border-gray-600 shrink-0">
+              <h2 id="manage-prn-list-title" className="text-xl font-bold text-gray-800 dark:text-white">
+                PRN list (this MAR)
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowManagePRNListModal(false)
+                  setPrnListDeleteTarget(null)
+                  setPrnListEditTarget(null)
+                }}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1 min-h-0">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                These entries are available when adding a PRN record or choosing a medication on an existing PRN row. Use{' '}
+                <strong className="font-medium text-gray-700 dark:text-gray-300">Edit</strong> to change medication, dosage, reason, or start date.
+              </p>
+              {prnMedicationList.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                  No PRN medications in the list yet. Use <strong className="font-medium">Add PRN to List</strong> from the PRN menu to add one.
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-600">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-900/80 text-left">
+                      <tr>
+                        <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-200">Medication</th>
+                        <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-200">Dosage</th>
+                        <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-200">Reason</th>
+                        <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap">Start date</th>
+                        <th className="px-3 py-2 font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap text-right">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                      {prnMedicationList.map((item) => (
+                        <tr key={item.id} className="text-gray-800 dark:text-gray-100">
+                          <td className="px-3 py-2 align-top">{item.medication}</td>
+                          <td className="px-3 py-2 align-top">{item.dosage || '—'}</td>
+                          <td className="px-3 py-2 align-top max-w-[200px] break-words">{item.reason}</td>
+                          <td className="px-3 py-2 align-top whitespace-nowrap">
+                            {item.start_date
+                              ? new Date(item.start_date + 'T12:00:00').toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-2 align-top text-right whitespace-nowrap">
+                            <button
+                              type="button"
+                              className="text-lasso-teal hover:text-lasso-blue dark:text-lasso-teal dark:hover:text-lasso-blue text-xs font-medium mr-3"
+                              onClick={() => setPrnListEditTarget(item)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 text-xs font-medium"
+                              onClick={() => setPrnListDeleteTarget(item)}
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="p-6 border-t border-gray-200 dark:border-gray-600 flex flex-wrap gap-3 justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowManagePRNListModal(false)
+                  setShowAddPRNModal(true)
+                }}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
+              >
+                Add PRN to List
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowManagePRNListModal(false)
+                  setPrnListDeleteTarget(null)
+                  setPrnListEditTarget(null)
+                }}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {prnListEditTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10001] p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Edit PRN list entry</h2>
+              <button
+                type="button"
+                onClick={() => setPrnListEditTarget(null)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <EditPRNMedicationForm
+              item={prnListEditTarget}
+              saving={savingPrnLibraryEdit}
+              onSubmit={async (data) => {
+                await updatePRNMedicationInList(prnListEditTarget.id, {
+                  start_date: data.date,
+                  medication: data.medication,
+                  dosage: data.dosage,
+                  reason: data.reason,
+                })
+              }}
+              onCancel={() => setPrnListEditTarget(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {prnListDeleteTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000] p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">Remove from PRN list?</h3>
+            <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
+              This removes <strong className="text-gray-800 dark:text-gray-200">{prnListDeleteTarget.medication}</strong>
+              {prnListDeleteTarget.dosage ? ` (${prnListDeleteTarget.dosage})` : ''} from the library. Existing PRN records that
+              already used this medication are not deleted.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                disabled={deletingPrnLibraryItem}
+                onClick={() => setPrnListDeleteTarget(null)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingPrnLibraryItem}
+                onClick={() => void deletePRNMedicationFromList(prnListDeleteTarget)}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingPrnLibraryItem ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -6200,6 +7185,113 @@ function EditableHourField({
   )
 }
 
+// Edit PRN library row (mar_prn_medications)
+function EditPRNMedicationForm({
+  item,
+  saving,
+  onSubmit,
+  onCancel,
+}: {
+  item: MARPRNMedication
+  saving: boolean
+  onSubmit: (data: { date: string; medication: string; dosage: string | null; reason: string }) => Promise<void>
+  onCancel: () => void
+}) {
+  const [formData, setFormData] = useState({
+    date: item.start_date?.slice(0, 10) || '',
+    medication: item.medication,
+    dosage: item.dosage || '',
+    reason: item.reason,
+  })
+
+  useEffect(() => {
+    setFormData({
+      date: item.start_date?.slice(0, 10) || '',
+      medication: item.medication,
+      dosage: item.dosage || '',
+      reason: item.reason,
+    })
+  }, [item.id, item.start_date, item.medication, item.dosage, item.reason])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!formData.date || !formData.medication.trim() || !formData.reason.trim()) {
+      alert('Please fill in all required fields')
+      return
+    }
+    await onSubmit({
+      date: formData.date,
+      medication: formData.medication,
+      dosage: formData.dosage.trim() || null,
+      reason: formData.reason,
+    })
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date *</label>
+        <input
+          type="date"
+          value={formData.date}
+          onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+          required
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Medication Name *</label>
+        <input
+          type="text"
+          value={formData.medication}
+          onChange={(e) => setFormData({ ...formData, medication: e.target.value })}
+          required
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dosage</label>
+        <input
+          type="text"
+          value={formData.dosage}
+          onChange={(e) => setFormData({ ...formData, dosage: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason/Indication *</label>
+        <input
+          type="text"
+          value={formData.reason}
+          onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+          required
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+        />
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400">
+        Changing the library does not rewrite text on existing PRN records that already used this entry.
+      </p>
+      <div className="flex justify-end space-x-3 pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={saving}
+          className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {saving ? 'Saving…' : 'Save changes'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
 // Add PRN Medication (Library) Form Component
 function AddPRNMedicationForm({ 
   onSubmit, 
@@ -6345,7 +7437,6 @@ function AddPRNRecordForm({
     dosage: string | null
     reason: string
     result: string | null
-    staffSignature: string | null
     startDate: string | null
   }) => Promise<void>
   onCancel: () => void
@@ -6405,7 +7496,6 @@ function AddPRNRecordForm({
         reason: formData.reason,
         result: null,
         initials: null,
-        staffSignature: null,
         startDate: formData.startDate || null
       })
       setFormData({

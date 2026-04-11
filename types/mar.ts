@@ -1,3 +1,8 @@
+/** One row in the on-screen MAR grid: a medication group (multi-time = one slot) or a PRN record row. */
+export type MarChartRowRef =
+  | { type: 'med'; firstMedId: string }
+  | { type: 'prn'; prnId: string }
+
 export interface MARForm {
   id: string
   patient_id: string
@@ -17,6 +22,8 @@ export interface MARForm {
   facility_name: string | null
   comments: string | null // General comments and notes for the MAR form
   vital_signs_instructions: string | null // Custom instructions for vital signs (e.g., "BP (sprinkle salt on food if BP low <80/60)")
+  /** Interleaved MAR chart: medication groups (first row id) + PRN rows. Null = default order. */
+  mar_chart_row_order?: MarChartRowRef[] | null
   created_at: string
   updated_at: string
 }

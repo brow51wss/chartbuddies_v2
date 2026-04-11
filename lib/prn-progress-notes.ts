@@ -2,9 +2,22 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { formatTimeDisplay } from '../components/TimeInput'
 import type { MARPRNRecord } from '../types/mar'
 
-/** Progress Notes only include PRN rows that have a staff signature (Signed). */
-export function isPrnRecordSignedForProgressNote(record: MARPRNRecord): boolean {
-  return !!(record.staff_signature && String(record.staff_signature).trim())
+function marPrnHasDocumentedHour(record: MARPRNRecord): boolean {
+  const h = record.hour
+  if (h == null) return false
+  return String(h).trim().length > 0
+}
+
+/**
+ * Upsert/delete linked Progress Notes is driven by MAR documentation completeness, not PRN staff_signature.
+ * Signature for the legal record is applied on the Progress Notes entry when required.
+ * Requires time, result, and initials (same sequence as the MAR PRN UI).
+ */
+export function shouldSyncMarPrnRecordToProgressNotes(record: MARPRNRecord): boolean {
+  if (!marPrnHasDocumentedHour(record)) return false
+  if (!(record.result && String(record.result).trim())) return false
+  if (!(record.initials && String(record.initials).trim())) return false
+  return true
 }
 
 /** YYYY-MM-DD for progress_note_entries.note_date */
@@ -27,6 +40,10 @@ export function formatPRNProgressNoteBody(record: MARPRNRecord): string {
     lines.push(`Additional note: ${(record.note || '').trim()}`)
   }
   lines.push(`Result: ${(record.result || '').trim() || '—'}`)
+  const inits = (record.initials || '').trim()
+  if (inits) {
+    lines.push(`MAR initials: ${inits}`)
+  }
   return lines.join('\n')
 }
 
@@ -51,7 +68,7 @@ export async function upsertProgressNoteFromPRNRecord(
 
   if (fetchError) throw new Error(`Progress note lookup failed: ${fetchError.message}`)
 
-  if (!isPrnRecordSignedForProgressNote(record)) {
+  if (!shouldSyncMarPrnRecordToProgressNotes(record)) {
     if (existing?.id) {
       const { error: delError } = await supabase.from('progress_note_entries').delete().eq('id', existing.id)
       if (delError) throw new Error(`Progress note delete failed: ${delError.message}`)
