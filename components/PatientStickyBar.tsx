@@ -37,7 +37,7 @@ export default function PatientStickyBar({
 
   return (
     <>
-      <div className={`no-print sticky top-0 z-40 w-full bg-lasso-navy text-white border-b border-lasso-blue/30 ${className}`.trim()}>
+      <div className={`no-print sticky top-0 z-[99999] w-full bg-lasso-navy text-white border-b border-lasso-blue/30 ${className}`.trim()}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4 text-xs font-semibold flex-wrap">
             <span>

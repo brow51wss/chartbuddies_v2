@@ -102,6 +102,37 @@ export async function upsertProgressNoteFromPRNRecord(
   if (insertError) throw new Error(`Progress note insert failed: ${insertError.message}`)
 }
 
+/**
+ * Removes the Progress Note row linked to this MAR PRN record, if any.
+ * Refuses when the note has a signature (audit / legal integrity).
+ */
+export async function deleteLinkedProgressNoteForMarPrnRecordId(
+  supabase: SupabaseClient,
+  recordId: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const { data: row, error } = await supabase
+    .from('progress_note_entries')
+    .select('id, signature')
+    .eq('source_mar_prn_record_id', recordId)
+    .maybeSingle()
+
+  if (error) return { ok: false, reason: `Progress note lookup failed: ${error.message}` }
+  if (!row) return { ok: true }
+
+  const sig = row.signature != null ? String(row.signature).trim() : ''
+  if (sig.length > 0) {
+    return {
+      ok: false,
+      reason:
+        'This administration is linked to a signed Progress Note. Change or remove the signature in Progress Notes before deleting this MAR row.',
+    }
+  }
+
+  const { error: delError } = await supabase.from('progress_note_entries').delete().eq('id', row.id)
+  if (delError) return { ok: false, reason: `Progress note delete failed: ${delError.message}` }
+  return { ok: true }
+}
+
 export async function upsertProgressNoteFromMarPrnRecordId(
   supabase: SupabaseClient,
   params: {

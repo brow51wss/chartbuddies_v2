@@ -776,6 +776,7 @@ export default function PatientForms() {
                                   value={hour}
                                   onChange={(newTime) => updateHourInGroup(index, hourIndex, newTime)}
                                   compact
+                                  plain
                                 />
                                 {med.hours.length > 1 && !med.isVitals && (
                                   <button

@@ -8,6 +8,13 @@ interface TimeInputProps {
   className?: string
   disabled?: boolean
   compact?: boolean // For smaller inline use
+  /** With `compact`, drop the outer white card (border/shadow/padding) so controls sit on tinted row backgrounds. */
+  plain?: boolean
+  /**
+   * Compact + MAR PRN day cell: hour, minute, and AM/PM use white field boxes; selected period is border + colored
+   * text instead of solid blue/navy fill. The compact row still uses one outer white card (`rounded-md border …`).
+   */
+  whiteAmPmBox?: boolean
 }
 
 // Helper to parse various time formats into { hour12, minute, period }
@@ -140,7 +147,9 @@ export default function TimeInput({
   placeholder = 'Select time',
   className = '',
   disabled = false,
-  compact = false
+  compact = false,
+  plain = false,
+  whiteAmPmBox = false,
 }: TimeInputProps) {
   const parsed = parseTimeValue(value)
   const [hour, setHour] = useState(parsed.hour12.toString())
@@ -232,8 +241,27 @@ export default function TimeInput({
   const unselectedBtn = 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-500'
 
   if (compact) {
+    const wrapClass = plain
+      ? `relative z-auto inline-flex items-center gap-1 shrink-0 ${className}`
+      : `relative z-[999] inline-flex items-center gap-1 shrink-0 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1.5 shadow-lg w-[147px] ${className}`
+    const digitClass = plain
+      ? 'w-9 min-w-[2rem] text-center text-xs border border-gray-500/45 dark:border-gray-500 rounded px-1.5 py-1 bg-white/30 dark:bg-gray-900/35 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal'
+      : whiteAmPmBox
+        ? 'w-9 min-w-[2rem] text-center text-xs border border-gray-300 rounded px-1.5 py-1 bg-white text-gray-900 dark:bg-gray-800 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal'
+        : 'w-9 min-w-[2rem] text-center text-xs border border-gray-300 rounded px-1.5 py-1 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal'
+    const periodIdleClass = plain
+      ? 'bg-white/35 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 border border-gray-500/35 dark:border-gray-600'
+      : whiteAmPmBox
+        ? 'bg-white text-gray-500 border border-gray-300 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600'
+        : 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-400'
+    const periodSelectedAMClass = whiteAmPmBox
+      ? 'bg-white text-lasso-blue border-2 border-lasso-blue font-semibold dark:bg-gray-800 dark:text-lasso-blue'
+      : 'bg-lasso-blue text-white'
+    const periodSelectedPMClass = whiteAmPmBox
+      ? 'bg-white text-lasso-navy border-2 border-lasso-navy font-semibold dark:bg-gray-800 dark:text-lasso-navy'
+      : 'bg-lasso-navy text-white'
     return (
-      <div className={`inline-flex items-center gap-1 shrink-0 ${className}`}>
+      <div className={wrapClass.trim()}>
         <input
           type="text"
           inputMode="numeric"
@@ -245,7 +273,7 @@ export default function TimeInput({
           disabled={disabled}
           placeholder="12"
           maxLength={2}
-          className="w-9 min-w-[2rem] text-center text-xs border border-gray-300 rounded px-1.5 py-1 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal"
+          className={digitClass}
         />
         <span className="text-gray-500 dark:text-gray-400 text-xs">:</span>
         <input
@@ -259,7 +287,7 @@ export default function TimeInput({
           disabled={disabled}
           placeholder="00"
           maxLength={2}
-          className="w-9 min-w-[2rem] text-center text-xs border border-gray-300 rounded px-1.5 py-1 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal"
+          className={digitClass}
         />
         <button
           type="button"
@@ -276,11 +304,17 @@ export default function TimeInput({
           disabled={disabled}
           className={`min-w-[2.25rem] px-2 py-1 text-xs font-medium rounded transition-colors ${
             period === null
-              ? 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-400'
+              ? periodIdleClass
               : period === 'AM'
-                ? 'bg-lasso-blue text-white'
-                : 'bg-lasso-navy text-white'
-          } ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
+                ? periodSelectedAMClass
+                : periodSelectedPMClass
+          } ${
+            disabled
+              ? 'opacity-50 cursor-not-allowed'
+              : whiteAmPmBox
+                ? 'hover:bg-gray-50 dark:hover:bg-gray-700/90'
+                : 'hover:opacity-80'
+          }`}
         >
           {period ?? 'AM/PM'}
         </button>

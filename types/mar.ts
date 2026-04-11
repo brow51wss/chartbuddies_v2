@@ -1,7 +1,7 @@
-/** One row in the on-screen MAR grid: a medication group (multi-time = one slot) or a PRN record row. */
+/** One row in the on-screen MAR grid: a medication group (multi-time = one slot) or one PRN medication group (all administrations share the row). */
 export type MarChartRowRef =
   | { type: 'med'; firstMedId: string }
-  | { type: 'prn'; prnId: string }
+  | { type: 'prn'; prnGroupKey: string }
 
 export interface MARForm {
   id: string

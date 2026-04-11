@@ -10,6 +10,7 @@ import {
   upsertProgressNoteFromPRNRecord,
   upsertProgressNoteFromMarPrnRecordId,
   shouldSyncMarPrnRecordToProgressNotes,
+  deleteLinkedProgressNoteForMarPrnRecordId,
 } from '../../../../lib/prn-progress-notes'
 import type { UserProfile } from '../../../../types/auth'
 
@@ -191,23 +192,49 @@ function getMarMedicationGroupKey(med: MARMedication): string {
     : `${med.medication_name}|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
 }
 
-const MAR_PRN_CHART_SORT_PREFIX = 'mar-prn-chart:'
+/** Legacy: one sortable id per PRN record row (`mar-prn-chart:<uuid>`). */
+const MAR_PRN_CHART_SORT_PREFIX_LEGACY = 'mar-prn-chart:'
+/** Current: one sortable id per PRN medication group (`mar-prn-grp:<encoded group key>`). */
+const MAR_PRN_CHART_SORT_PREFIX_GROUP = 'mar-prn-grp:'
 
-function marPrnChartSortableId(prnId: string) {
-  return `${MAR_PRN_CHART_SORT_PREFIX}${prnId}`
+function getMarPrnRecordGroupKey(p: MARPRNRecord): string {
+  const dosage = (p.dosage ?? '').trim()
+  const reason = (p.reason ?? '').trim()
+  const sd = p.start_date
+    ? (p.start_date.includes('T') ? p.start_date.slice(0, 10) : p.start_date.slice(0, 10))
+    : ''
+  return `${(p.medication || '').trim()}|${dosage}|${reason}|${sd}`
+}
+
+function marPrnChartSortableIdFromGroupKey(groupKey: string) {
+  return `${MAR_PRN_CHART_SORT_PREFIX_GROUP}${encodeURIComponent(groupKey)}`
 }
 
 function isMarPrnChartSortableId(id: string) {
-  return id.startsWith(MAR_PRN_CHART_SORT_PREFIX)
+  return id.startsWith(MAR_PRN_CHART_SORT_PREFIX_LEGACY) || id.startsWith(MAR_PRN_CHART_SORT_PREFIX_GROUP)
 }
 
-function marPrnIdFromChartSortableId(id: string) {
-  return id.slice(MAR_PRN_CHART_SORT_PREFIX.length)
+function marPrnGroupKeyFromChartSortableId(id: string): string | null {
+  if (id.startsWith(MAR_PRN_CHART_SORT_PREFIX_GROUP)) {
+    try {
+      return decodeURIComponent(id.slice(MAR_PRN_CHART_SORT_PREFIX_GROUP.length))
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function marPrnRecordIdFromLegacyChartSortableId(id: string): string | null {
+  if (!id.startsWith(MAR_PRN_CHART_SORT_PREFIX_LEGACY)) return null
+  return id.slice(MAR_PRN_CHART_SORT_PREFIX_LEGACY.length) || null
 }
 
 type MedGroupSeg = { kind: 'med'; firstMedId: string; meds: MARMedication[] }
-type PrnChartSeg = { kind: 'prn'; prn: MARPRNRecord }
+type PrnChartSeg = { kind: 'prn'; groupKey: string; records: MARPRNRecord[]; template: MARPRNRecord }
 type MarChartSegment = MedGroupSeg | PrnChartSeg
+
+type MarChartRowRefLoose = MarChartRowRef | { type: 'prn'; prnId?: string }
 
 function medGroupsInDisplayOrder(displayMeds: MARMedication[]): MedGroupSeg[] {
   const groups: MedGroupSeg[] = []
@@ -225,7 +252,45 @@ function medGroupsInDisplayOrder(displayMeds: MARMedication[]): MedGroupSeg[] {
 }
 
 function segmentSortableId(s: MarChartSegment): string {
-  return s.kind === 'med' ? s.meds[0]!.id : marPrnChartSortableId(s.prn.id)
+  return s.kind === 'med' ? s.meds[0]!.id : marPrnChartSortableIdFromGroupKey(s.groupKey)
+}
+
+function buildMarPrnGroupMap(prns: MARPRNRecord[]): Map<string, MARPRNRecord[]> {
+  const m = new Map<string, MARPRNRecord[]>()
+  for (const p of prns) {
+    const k = getMarPrnRecordGroupKey(p)
+    if (!m.has(k)) m.set(k, [])
+    m.get(k)!.push(p)
+  }
+  Array.from(m.values()).forEach((arr) => {
+    arr.sort((a: MARPRNRecord, b: MARPRNRecord) => (a.entry_number ?? 0) - (b.entry_number ?? 0))
+  })
+  return m
+}
+
+function normalizeMarChartRowOrderRefs(
+  chartOrder: unknown,
+  prns: MARPRNRecord[],
+  medGroups: MedGroupSeg[],
+): MarChartRowRef[] {
+  const prnById = new Map(prns.map((p) => [p.id, p]))
+  const medGroupByFirstId = new Map(medGroups.map((g) => [g.firstMedId, g]))
+  if (!Array.isArray(chartOrder)) return []
+  const out: MarChartRowRef[] = []
+  for (const ref of chartOrder as MarChartRowRefLoose[]) {
+    if (!ref || typeof ref !== 'object') continue
+    if (ref.type === 'med' && 'firstMedId' in ref && ref.firstMedId && medGroupByFirstId.has(ref.firstMedId)) {
+      out.push({ type: 'med', firstMedId: ref.firstMedId })
+    } else if (ref.type === 'prn') {
+      if ('prnGroupKey' in ref && ref.prnGroupKey && typeof ref.prnGroupKey === 'string') {
+        out.push({ type: 'prn', prnGroupKey: ref.prnGroupKey })
+      } else if ('prnId' in ref && ref.prnId && prnById.has(ref.prnId)) {
+        const p = prnById.get(ref.prnId)!
+        out.push({ type: 'prn', prnGroupKey: getMarPrnRecordGroupKey(p) })
+      }
+    }
+  }
+  return out
 }
 
 function buildMarChartSegments(
@@ -236,24 +301,31 @@ function buildMarChartSegments(
 ): MarChartSegment[] {
   const medGroups = medGroupsInDisplayOrder(displayMeds)
   const medGroupByFirstId = new Map(medGroups.map((g) => [g.firstMedId, g]))
-  const prnById = new Map(prns.map((p) => [p.id, p]))
+  const prnGroupMap = buildMarPrnGroupMap(prns)
   const usedMed = new Set<string>()
-  const usedPrn = new Set<string>()
+  const usedPrnGroup = new Set<string>()
   const result: MarChartSegment[] = []
 
-  if (includePrnInChart && chartOrder && Array.isArray(chartOrder) && chartOrder.length > 0) {
-    for (const ref of chartOrder) {
-      if (ref?.type === 'med' && ref.firstMedId && medGroupByFirstId.has(ref.firstMedId)) {
+  const normalizedOrder = normalizeMarChartRowOrderRefs(chartOrder, prns, medGroups)
+
+  if (includePrnInChart && normalizedOrder.length > 0) {
+    for (const ref of normalizedOrder) {
+      if (ref.type === 'med' && ref.firstMedId && medGroupByFirstId.has(ref.firstMedId)) {
         const g = medGroupByFirstId.get(ref.firstMedId)!
         if (!usedMed.has(g.firstMedId)) {
           result.push(g)
           usedMed.add(g.firstMedId)
         }
-      } else if (includePrnInChart && ref?.type === 'prn' && ref.prnId && prnById.has(ref.prnId)) {
-        const p = prnById.get(ref.prnId)!
-        if (!usedPrn.has(p.id)) {
-          result.push({ kind: 'prn', prn: p })
-          usedPrn.add(p.id)
+      } else if (includePrnInChart && ref.type === 'prn' && prnGroupMap.has(ref.prnGroupKey)) {
+        const records = prnGroupMap.get(ref.prnGroupKey)!
+        if (!usedPrnGroup.has(ref.prnGroupKey)) {
+          result.push({
+            kind: 'prn',
+            groupKey: ref.prnGroupKey,
+            records,
+            template: records[0]!,
+          })
+          usedPrnGroup.add(ref.prnGroupKey)
         }
       }
     }
@@ -266,10 +338,10 @@ function buildMarChartSegments(
     }
   }
   if (includePrnInChart) {
-    for (const p of prns) {
-      if (!usedPrn.has(p.id)) {
-        result.push({ kind: 'prn', prn: p })
-        usedPrn.add(p.id)
+    for (const [groupKey, records] of Array.from(prnGroupMap.entries())) {
+      if (!usedPrnGroup.has(groupKey)) {
+        result.push({ kind: 'prn', groupKey, records, template: records[0]! })
+        usedPrnGroup.add(groupKey)
       }
     }
   }
@@ -280,7 +352,7 @@ function segmentsToChartOrder(segments: MarChartSegment[]): MarChartRowRef[] {
   return segments.map((s) =>
     s.kind === 'med'
       ? { type: 'med', firstMedId: s.firstMedId }
-      : { type: 'prn', prnId: s.prn.id },
+      : { type: 'prn', prnGroupKey: s.groupKey },
   )
 }
 
@@ -334,13 +406,18 @@ function MarMedicationGroupDragPreview({ meds }: { meds: MARMedication[] }) {
   )
 }
 
-function MarPrnChartRowDragPreview({ prn }: { prn: MARPRNRecord }) {
+function MarPrnChartRowDragPreview({ template, recordCount }: { template: MARPRNRecord; recordCount: number }) {
   return (
     <div className="bg-white dark:bg-gray-800 border-2 border-emerald-600 rounded-lg shadow-2xl p-3 min-w-[280px] max-w-md cursor-grabbing">
       <div className="font-semibold text-sm text-emerald-900 dark:text-emerald-100">💊 PRN</div>
-      <div className="text-sm text-gray-900 dark:text-white mt-1 font-medium">{prn.medication}</div>
-      {prn.dosage && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{prn.dosage}</div>}
-      {prn.reason && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 line-clamp-2">{prn.reason}</div>}
+      <div className="text-sm text-gray-900 dark:text-white mt-1 font-medium">{template.medication}</div>
+      {template.dosage && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{template.dosage}</div>}
+      {template.reason && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 line-clamp-2">{template.reason}</div>}
+      {recordCount > 1 ? (
+        <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-2 pt-1 border-t border-dashed border-gray-200 dark:border-gray-600">
+          {recordCount} administration{recordCount === 1 ? '' : 's'} — moving as one row
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -567,6 +644,7 @@ export default function ViewMARForm() {
   const [showAddPRNRecordModal, setShowAddPRNRecordModal] = useState(false)
   const [showManagePRNListModal, setShowManagePRNListModal] = useState(false)
   const [prnListDeleteTarget, setPrnListDeleteTarget] = useState<MARPRNMedication | null>(null)
+  const [prnRecordDeleteTarget, setPrnRecordDeleteTarget] = useState<MARPRNRecord | null>(null)
   const [prnListEditTarget, setPrnListEditTarget] = useState<MARPRNMedication | null>(null)
   const [deletingPrnLibraryItem, setDeletingPrnLibraryItem] = useState(false)
   const [savingPrnLibraryEdit, setSavingPrnLibraryEdit] = useState(false)
@@ -982,6 +1060,8 @@ export default function ViewMARForm() {
           setPrnListEditTarget(null)
         } else if (prnListDeleteTarget) {
           setPrnListDeleteTarget(null)
+        } else if (prnRecordDeleteTarget) {
+          setPrnRecordDeleteTarget(null)
         } else if (showManagePRNListModal) {
           setShowManagePRNListModal(false)
         } else if (showPRNNoteModal) {
@@ -1021,6 +1101,7 @@ export default function ViewMARForm() {
     showAddPRNRecordModal,
     showManagePRNListModal,
     prnListDeleteTarget,
+    prnRecordDeleteTarget,
     prnListEditTarget,
     showPRNNoteModal,
     showMedicationParameterModal,
@@ -1349,16 +1430,19 @@ export default function ViewMARForm() {
     }
   }
 
-  const addPRNRecord = async (record: {
-    date: string
-    hour: string | null
-    initials: string | null
-    medication: string
-    dosage: string | null
-    reason: string
-    result: string | null
-    startDate: string | null
-  }) => {
+  const addPRNRecord = async (
+    record: {
+      date: string
+      hour: string | null
+      initials: string | null
+      medication: string
+      dosage: string | null
+      reason: string
+      result: string | null
+      startDate: string | null
+    },
+    options?: { refreshMode?: 'full' | 'prnOnly' },
+  ) => {
     if (!userProfile || !marForm || !marFormId) return
 
     if (!isPrnDateInMarMonth(record.date, marForm.month_year)) {
@@ -1366,6 +1450,8 @@ export default function ViewMARForm() {
       setTimeout(() => setError(''), 5000)
       return
     }
+
+    const refreshMode = options?.refreshMode ?? 'full'
 
     try {
       setSaving(true)
@@ -1408,11 +1494,42 @@ export default function ViewMARForm() {
         }
       }
 
-      await loadMARForm()
-      setMessage('PRN record added successfully!')
-      setTimeout(() => setMessage(''), 3000)
+      if (refreshMode === 'prnOnly' && inserted) {
+        setPrnRecords((prev) => [...prev, inserted as MARPRNRecord])
+      } else {
+        await loadMARForm()
+      }
+      if (refreshMode !== 'prnOnly') {
+        setMessage('PRN record added successfully!')
+        setTimeout(() => setMessage(''), 3000)
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to add PRN record')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deletePRNRecordById = async (record: MARPRNRecord) => {
+    if (!marFormId) return
+    try {
+      setSaving(true)
+      const pn = await deleteLinkedProgressNoteForMarPrnRecordId(supabase, record.id)
+      if (!pn.ok) {
+        setError(pn.reason)
+        setTimeout(() => setError(''), 8000)
+        return
+      }
+      const { error } = await supabase.from('mar_prn_records').delete().eq('id', record.id)
+      if (error) throw error
+      setPrnRecordDeleteTarget(null)
+      setPrnRecords((prev) => prev.filter((r) => r.id !== record.id))
+      await loadMARForm()
+      setMessage('PRN record deleted.')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete PRN record')
       setTimeout(() => setError(''), 5000)
     } finally {
       setSaving(false)
@@ -1772,6 +1889,37 @@ export default function ViewMARForm() {
     if (d < range.min) return range.min
     if (d > range.max) return range.max
     return d
+  }
+
+  const isValidCalendarDayInMarMonth = (dayNum: number): boolean => {
+    const parsed = parseMARMonthYear(marForm?.month_year || '')
+    if (!parsed) return false
+    const last = new Date(parsed.y, parsed.m, 0).getDate()
+    return dayNum >= 1 && dayNum <= last
+  }
+
+  const isoDateForMarDayNumber = (dayNum: number): string | null => {
+    const parsed = parseMARMonthYear(marForm?.month_year || '')
+    if (!parsed || !isValidCalendarDayInMarMonth(dayNum)) return null
+    return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`
+  }
+
+  const addPrnAdministrationInChartDayCell = (template: MARPRNRecord, dayNum: number) => {
+    const d = isoDateForMarDayNumber(dayNum)
+    if (!d) return
+    void addPRNRecord(
+      {
+        date: d,
+        hour: null,
+        initials: null,
+        medication: template.medication,
+        dosage: template.dosage,
+        reason: template.reason,
+        result: null,
+        startDate: template.start_date,
+      },
+      { refreshMode: 'prnOnly' },
+    )
   }
 
   /** Day number for "today" only when the viewed MAR is the current month; otherwise null. */
@@ -2506,11 +2654,21 @@ export default function ViewMARForm() {
     const gk = getMarMedicationGroupKey(m)
     return medications.filter((x) => getMarMedicationGroupKey(x) === gk)
   }, [activeMarDragId, medications])
-  const marDragPreviewPrn = useMemo(() => {
+  const marDragPreviewPrnSeg = useMemo((): PrnChartSeg | null => {
     if (!activeMarDragId || !isMarPrnChartSortableId(activeMarDragId)) return null
-    const pid = marPrnIdFromChartSortableId(activeMarDragId)
-    return prnRecords.find((p) => p.id === pid) ?? null
-  }, [activeMarDragId, prnRecords])
+    const gk = marPrnGroupKeyFromChartSortableId(activeMarDragId)
+    if (gk) {
+      const hit = marChartSegmentsForTable.find((s): s is PrnChartSeg => s.kind === 'prn' && s.groupKey === gk)
+      return hit ?? null
+    }
+    const legacyId = marPrnRecordIdFromLegacyChartSortableId(activeMarDragId)
+    if (!legacyId) return null
+    const p = prnRecords.find((x) => x.id === legacyId)
+    if (!p) return null
+    const gk2 = getMarPrnRecordGroupKey(p)
+    const hit = marChartSegmentsForTable.find((s): s is PrnChartSeg => s.kind === 'prn' && s.groupKey === gk2)
+    return hit ?? { kind: 'prn', groupKey: gk2, records: [p], template: p }
+  }, [activeMarDragId, marChartSegmentsForTable, prnRecords])
   const draggingGroupMedIdSet = useMemo(
     () => new Set(marDragPreviewGroupMeds.map((x) => x.id)),
     [marDragPreviewGroupMeds]
@@ -2519,7 +2677,7 @@ export default function ViewMARForm() {
   /** Full-width line showing where the dragged parent group will land (no row transforms — avoids splitting rowSpan stacks). */
   const [marReorderDropIndicator, setMarReorderDropIndicator] = useState<
     | { mode: 'before'; sortableId: string }
-    | { mode: 'after'; lastMedRowId?: string; prnId?: string }
+    | { mode: 'after'; lastMedRowId?: string; prnGroupKey?: string }
     | null
   >(null)
 
@@ -2584,7 +2742,7 @@ export default function ViewMARForm() {
           lastMedRowId: targetSeg.meds[targetSeg.meds.length - 1]!.id,
         })
       } else {
-        setMarReorderDropIndicator({ mode: 'after', prnId: targetSeg.prn.id })
+        setMarReorderDropIndicator({ mode: 'after', prnGroupKey: targetSeg.groupKey })
       }
     },
     [displayMedications, marRowReorderLocked, marTableShowFullChart, marChartSegmentsForTable]
@@ -2694,10 +2852,8 @@ export default function ViewMARForm() {
 
     const newOrderJson = segmentsToChartOrder(segs)
     const newMedsFlat = flattenMedsFromChartSegments(segs)
-    const newPrnOrder = segs.filter((s): s is PrnChartSeg => s.kind === 'prn').map((s) => s.prn)
 
     setMedications(newMedsFlat)
-    setPrnRecords(newPrnOrder)
     setMarForm((prev) => (prev ? { ...prev, mar_chart_row_order: newOrderJson } : null))
 
     try {
@@ -3651,7 +3807,7 @@ export default function ViewMARForm() {
               {/* Medication Administration Table - sticky header OUTSIDE overflow so it sticks to viewport; body has overflow-x for horizontal scroll */}
               <div className="relative overflow-visible">
                 {/* Sticky header: no overflow on sticky div so it sticks to viewport; inner div handles horizontal scroll sync */}
-                <div className="sticky top-[35px] z-30 bg-white dark:bg-gray-800 overflow-visible" style={{ marginBottom: -1 }}>
+                <div className="sticky top-[35px] z-[99999] bg-white dark:bg-gray-800 overflow-visible" style={{ marginBottom: -1 }}>
                   <div ref={marHeaderScrollRef} className="overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <table className="min-w-full border border-gray-300 dark:border-gray-600 border-b-0" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
                     <colgroup>
@@ -3662,13 +3818,13 @@ export default function ViewMARForm() {
                     </colgroup>
                     <thead>
                       <tr className="bg-gray-100 dark:bg-gray-700">
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-0 z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-0 z-[99999] bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}>
                           Medication
                         </th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop, maxWidth: MAR_COL.startStop, left: MAR_COL.med }}>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky z-[99998] bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop, maxWidth: MAR_COL.startStop, left: MAR_COL.med }}>
                           Start/Stop Date
                         </th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky z-20 bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth, left: MAR_COL.med + MAR_COL.startStop }}>
+                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky z-[99997] bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth, left: MAR_COL.med + MAR_COL.startStop }}>
                           Hour
                         </th>
                         {days.map(day => (
@@ -3737,58 +3893,57 @@ export default function ViewMARForm() {
                       let globalRowIndex = 0
                       return marChartSegmentsForTable.flatMap((seg, segIndex) => {
                         if (seg.kind === 'prn') {
-                          const prn = seg.prn
+                          const template = seg.template
+                          const getPrnAdminDayInMonth = (prnDate: string | null | undefined): number | null => {
+                            const parsedMarForPrnRow = parseMARMonthYear(marForm?.month_year || '')
+                            if (!parsedMarForPrnRow || !prnDate) return null
+                            const iso = (prnDate.includes('T') ? prnDate.slice(0, 10) : prnDate).slice(0, 10)
+                            if (iso.length < 10) return null
+                            const [yStr, mStr, dStr] = iso.split('-')
+                            const y = parseInt(yStr, 10)
+                            const mNum = parseInt(mStr, 10)
+                            const dNum = parseInt(dStr, 10)
+                            if (
+                              y === parsedMarForPrnRow.y &&
+                              mNum === parsedMarForPrnRow.m &&
+                              dNum >= 1 &&
+                              dNum <= 31
+                            ) {
+                              return dNum
+                            }
+                            return null
+                          }
+                          const adminDaysInMonth = Array.from(
+                            new Set(
+                              seg.records
+                                .map((r) => getPrnAdminDayInMonth(r.date))
+                                .filter((d): d is number => d != null),
+                            ),
+                          ).sort((a, b) => a - b)
                           const prnChartStickyMed =
                             'sticky left-0 z-10 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]'
                           const prnChartStickyStart =
                             'sticky z-10 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]'
                           const prnChartBg =
                             'bg-[#d8f0e0] dark:bg-[#14532d]/35 hover:brightness-[0.97] dark:hover:brightness-110'
-                          const startLabel = prn.start_date
+                          const startLabel = template.start_date
                             ? new Date(
-                                prn.start_date.includes('T') ? prn.start_date : `${prn.start_date}T12:00:00`,
+                                template.start_date.includes('T')
+                                  ? template.start_date
+                                  : `${template.start_date}T12:00:00`,
                               ).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                             : '—'
-                          const parsedMarForPrnRow = parseMARMonthYear(marForm?.month_year || '')
-                          let prnAdminDayInMonth: number | null = null
-                          if (parsedMarForPrnRow && prn.date) {
-                            const iso = (prn.date.includes('T') ? prn.date.slice(0, 10) : prn.date).slice(0, 10)
-                            if (iso.length >= 10) {
-                              const [yStr, mStr, dStr] = iso.split('-')
-                              const y = parseInt(yStr, 10)
-                              const mNum = parseInt(mStr, 10)
-                              const dNum = parseInt(dStr, 10)
-                              if (
-                                y === parsedMarForPrnRow.y &&
-                                mNum === parsedMarForPrnRow.m &&
-                                dNum >= 1 &&
-                                dNum <= 31
-                              ) {
-                                prnAdminDayInMonth = dNum
-                              }
-                            }
-                          }
-                          const prnHasTime = !!prn.hour
-                          const prnHasResult = !!prn.result?.trim()
-                          const prnHasInitials = !!prn.initials?.trim()
-                          const prnResultHelper = !prnHasTime ? 'Set time first' : ''
-                          const prnInitialsHelper = !prnHasTime
-                            ? 'Set time first'
-                            : !prnHasResult
-                              ? 'Set result next'
-                              : prnHasInitials
-                                ? ''
-                                : 'Set initials'
                           const marDropLineColSpan = 3 + days.length
-                          const prnSortableId = marPrnChartSortableId(prn.id)
+                          const prnSortableId = marPrnChartSortableIdFromGroupKey(seg.groupKey)
                           const showPrnDropBefore =
                             marReorderDropIndicator?.mode === 'before' &&
                             marReorderDropIndicator.sortableId === prnSortableId
                           const showPrnDropAfter =
-                            marReorderDropIndicator?.mode === 'after' && marReorderDropIndicator.prnId === prn.id
+                            marReorderDropIndicator?.mode === 'after' &&
+                            marReorderDropIndicator.prnGroupKey === seg.groupKey
                           globalRowIndex += 1
                           return [
-                            <Fragment key={`mar-prn-chart-wrap-${prn.id}`}>
+                            <Fragment key={`mar-prn-chart-wrap-${seg.groupKey}`}>
                               {showPrnDropBefore ? (
                                 <tr aria-hidden className="pointer-events-none">
                                   <td colSpan={marDropLineColSpan} className="p-0 border-0 leading-none">
@@ -3807,15 +3962,15 @@ export default function ViewMARForm() {
                                 >
                                   <div className="flex gap-2">
                                     <div className="flex flex-col items-start gap-1 shrink-0">
-                                      <DragHandleButton medId={prn.id} readOnly={readOnly} reorderLocked={marRowReorderLocked} />
+                                      <DragHandleButton medId={template.id} readOnly={readOnly} reorderLocked={marRowReorderLocked} />
                                     </div>
-                                    <div className="flex flex-col gap-0.5 min-w-0 flex-1 pl-1" aria-label={`PRN chart row: ${prn.medication}`}>
+                                    <div className="flex flex-col gap-0.5 min-w-0 flex-1 pl-1" aria-label={`PRN chart row: ${template.medication}`}>
                                       <div className="font-medium text-sm text-emerald-900 dark:text-emerald-100">💊 PRN</div>
                                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
-                                        {prn.medication || '—'}
+                                        {template.medication || '—'}
                                       </div>
                                       <div className="text-xs text-gray-700 dark:text-gray-300">
-                                        {prn.dosage?.trim() ? prn.dosage : '—'}
+                                        {template.dosage?.trim() ? template.dosage : '—'}
                                       </div>
                                       <div
                                         className={`text-xs text-gray-600 dark:text-gray-400 break-words ${!readOnly ? 'cursor-pointer hover:underline' : ''}`}
@@ -3823,13 +3978,13 @@ export default function ViewMARForm() {
                                           !readOnly
                                             ? (e) => {
                                                 e.stopPropagation()
-                                                handlePRNFieldEdit(prn.id, 'reason', prn.reason, 'chart')
+                                                handlePRNFieldEdit(template.id, 'reason', template.reason, 'chart')
                                               }
                                             : undefined
                                         }
                                       >
                                         {!readOnly &&
-                                        editingPRNField?.recordId === prn.id &&
+                                        editingPRNField?.recordId === template.id &&
                                         editingPRNField?.field === 'reason' &&
                                         editingPRNField.surface === 'chart' ? (
                                           <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
@@ -3840,9 +3995,9 @@ export default function ViewMARForm() {
                                               type="text"
                                               value={editingPRNValue}
                                               onChange={(e) => setEditingPRNValue(e.target.value)}
-                                              onBlur={() => handlePRNFieldSave(prn.id, 'reason')}
+                                              onBlur={() => handlePRNFieldSave(template.id, 'reason')}
                                               onKeyDown={(e) => {
-                                                if (e.key === 'Enter') handlePRNFieldSave(prn.id, 'reason')
+                                                if (e.key === 'Enter') handlePRNFieldSave(template.id, 'reason')
                                                 else if (e.key === 'Escape') handlePRNFieldCancel()
                                               }}
                                               autoFocus
@@ -3855,16 +4010,16 @@ export default function ViewMARForm() {
                                             <div className="font-medium text-gray-500 dark:text-gray-400 text-[10px] uppercase tracking-wide mb-0.5">
                                               Reason
                                             </div>
-                                            <span>{prn.reason || '—'}</span>
+                                            <span>{template.reason || '—'}</span>
                                           </>
                                         )}
                                       </div>
                                       {!(
-                                        editingPRNField?.recordId === prn.id &&
+                                        editingPRNField?.recordId === template.id &&
                                         editingPRNField?.field === 'reason' &&
                                         editingPRNField.surface === 'chart'
                                       ) &&
-                                      (!readOnly || prn.note?.trim()) ? (
+                                      (!readOnly || template.note?.trim()) ? (
                                         <div className="mt-1 pt-1 border-t border-emerald-800/20 dark:border-emerald-400/25">
                                           <div className="flex items-start justify-between gap-1">
                                             <span className="font-medium text-gray-500 dark:text-gray-400 text-[10px] uppercase tracking-wide">
@@ -3875,19 +4030,19 @@ export default function ViewMARForm() {
                                                 type="button"
                                                 onClick={(e) => {
                                                   e.stopPropagation()
-                                                  setEditingPRNNote({ recordId: prn.id, note: prn.note })
+                                                  setEditingPRNNote({ recordId: template.id, note: template.note })
                                                   setShowPRNNoteModal(true)
                                                 }}
                                                 className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue shrink-0"
-                                                title={prn.note ? 'Edit note' : 'Add note'}
+                                                title={template.note ? 'Edit note' : 'Add note'}
                                               >
-                                                {prn.note ? '📝' : '+'} note
+                                                {template.note ? '📝' : '+'} note
                                               </button>
                                             ) : null}
                                           </div>
-                                          {prn.note?.trim() ? (
+                                          {template.note?.trim() ? (
                                             <div className="text-[11px] text-gray-600 dark:text-gray-400 italic mt-0.5 break-words">
-                                              {prn.note}
+                                              {template.note}
                                             </div>
                                           ) : !readOnly ? (
                                             <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
@@ -3896,10 +4051,15 @@ export default function ViewMARForm() {
                                           ) : null}
                                         </div>
                                       ) : null}
-                                      {prn.date && marForm?.month_year && !isPrnDateInMarMonth(prn.date, marForm.month_year) ? (
+                                      {seg.records.some(
+                                        (r) =>
+                                          r.date &&
+                                          marForm?.month_year &&
+                                          !isPrnDateInMarMonth(r.date, marForm.month_year),
+                                      ) ? (
                                         <div className="text-[10px] text-amber-800 dark:text-amber-200 mt-1 leading-snug">
-                                          Admin date is outside this MAR month — adjust in the PRN table below so this row lines up with a
-                                          day column.
+                                          Some administrations have a date outside this MAR month — adjust in the PRN table below so they
+                                          line up with a day column.
                                         </div>
                                       ) : null}
                                     </div>
@@ -3925,41 +4085,88 @@ export default function ViewMARForm() {
                                     left: MAR_COL.med + MAR_COL.startStop,
                                   }}
                                 >
-                                  {prnAdminDayInMonth != null ? (
+                                  {adminDaysInMonth.length === 1 ? (
                                     <button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation()
-                                        scrollMarTableToDayColumn(prnAdminDayInMonth)
+                                        scrollMarTableToDayColumn(adminDaysInMonth[0]!)
                                       }}
                                       className="w-full text-gray-500 dark:text-gray-400 leading-tight block px-0.5 py-0.5 rounded-md hover:bg-white/70 dark:hover:bg-black/20 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors cursor-pointer text-center"
-                                      title={`Scroll chart so day ${prnAdminDayInMonth} sits after the Hour column (same as Missed documentation)`}
-                                      aria-label={`Scroll to day ${prnAdminDayInMonth} column`}
+                                      title={`Scroll chart so day ${adminDaysInMonth[0]} sits after the Hour column (same as Missed documentation)`}
+                                      aria-label={`Scroll to day ${adminDaysInMonth[0]} column`}
                                     >
-                                      <span className="font-medium text-emerald-900/80 dark:text-emerald-100/90">Day {prnAdminDayInMonth}</span>
+                                      <span className="font-medium text-emerald-900/80 dark:text-emerald-100/90">
+                                        Day {adminDaysInMonth[0]}
+                                      </span>
                                       <span className="block text-[10px] mt-0.5 font-normal text-gray-500 dark:text-gray-400">column →</span>
                                     </button>
+                                  ) : adminDaysInMonth.length > 1 ? (
+                                    <div className="w-full leading-tight px-0.5 py-0.5 text-center">
+                                      <div className="font-medium text-emerald-900/80 dark:text-emerald-100/90 text-xs mb-1">
+                                        Days
+                                      </div>
+                                      <div className="flex flex-wrap items-baseline justify-center gap-x-0 gap-y-0.5 text-[10px] font-normal text-gray-500 dark:text-gray-400">
+                                        {adminDaysInMonth.map((d, i) => (
+                                          <Fragment key={d}>
+                                            {i > 0 ? <span aria-hidden className="mx-0.5 select-none">,</span> : null}
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                scrollMarTableToDayColumn(d)
+                                              }}
+                                              className="rounded px-1 py-0.5 text-emerald-900/90 dark:text-emerald-100/90 hover:bg-white/70 dark:hover:bg-black/20 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors cursor-pointer underline-offset-2 hover:underline"
+                                              title={`Scroll chart so day ${d} sits after the Hour column`}
+                                              aria-label={`Scroll to day ${d} column`}
+                                            >
+                                              {d}
+                                            </button>
+                                          </Fragment>
+                                        ))}
+                                      </div>
+                                    </div>
                                   ) : (
                                     <span
                                       className="text-gray-500 dark:text-gray-400 select-none leading-tight block px-0.5"
-                                      title="Time of administration is entered in the day column that matches Date administered"
+                                      title="Time, result, and initials are entered in each day column"
                                     >
                                       —
                                     </span>
                                   )}
                                 </td>
                                 {days.map((day) => {
-                                  const isPrnAdminDay = prnAdminDayInMonth === day
                                   const dayCellHighlight =
                                     day === todayDayInViewedMar ? 'bg-amber-50/90 dark:bg-amber-900/25' : ''
+                                  const recsForDay = seg.records
+                                    .filter((r) => getPrnAdminDayInMonth(r.date) === day)
+                                    .sort((a, b) => {
+                                      const enA = a.entry_number ?? 0
+                                      const enB = b.entry_number ?? 0
+                                      if (enA !== enB) return enA - enB
+                                      return (a.created_at || '').localeCompare(b.created_at || '')
+                                    })
+                                  const canUseDayCell = isValidCalendarDayInMarMonth(day)
                                   return (
                                     <td
-                                      key={`prn-chart-${prn.id}-d${day}`}
+                                      key={`prn-chart-${seg.groupKey}-d${day}`}
                                       style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day }}
-                                      className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs align-top bg-[#eef8f1] dark:bg-[#14532d]/20 ${dayCellHighlight}`}
+                                      className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs align-top bg-[#eef8f1] dark:bg-[#14532d]/20 ${dayCellHighlight} ${!canUseDayCell ? 'opacity-40' : ''}`}
                                     >
-                                      {isPrnAdminDay ? (
-                                        <div className="flex flex-col gap-1 items-stretch text-center min-w-0">
+                                      {canUseDayCell ? (
+                                        <div className="flex flex-col gap-1.5 items-stretch text-center min-w-0">
+                                          {recsForDay.map((prn) => {
+                                            const prnHasTime = !!prn.hour
+                                            const prnHasResult = !!prn.result?.trim()
+                                            const prnHasInitials = !!prn.initials?.trim()
+                                            const prnInitialsHelper =
+                                              prnHasTime && prnHasResult && !prnHasInitials ? 'Set initials' : ''
+                                            const showPrnResultInitialsRows = readOnly || prnHasTime
+                                            return (
+                                              <div
+                                                key={prn.id}
+                                                className="flex flex-col gap-1 items-stretch rounded border border-emerald-800/20 dark:border-emerald-400/25 px-0.5 py-1 bg-white/40 dark:bg-black/15"
+                                              >
                                           <div
                                             className={
                                               readOnly ? '' : 'cursor-pointer rounded px-0.5 py-0.5 hover:bg-white/60 dark:hover:bg-black/25'
@@ -3978,7 +4185,10 @@ export default function ViewMARForm() {
                                             editingPRNField?.recordId === prn.id &&
                                             editingPRNField?.field === 'hour' &&
                                             editingPRNField.surface === 'chart' ? (
-                                              <div onClick={(e) => e.stopPropagation()} className="w-full">
+                                              <div
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="relative z-[999] w-full max-w-[13rem] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 shadow-lg ring-1 ring-black/5 dark:ring-white/10 flex flex-col gap-1.5"
+                                              >
                                                 <TimeInput
                                                   value={editingPRNValue}
                                                   onChange={async (newTime) => {
@@ -3996,11 +4206,12 @@ export default function ViewMARForm() {
                                                     setEditingPRNValue('')
                                                   }}
                                                   compact
+                                                  whiteAmPmBox
                                                 />
                                                 <button
                                                   type="button"
                                                   onClick={() => handlePRNFieldCancel()}
-                                                  className="text-[10px] text-gray-500 hover:text-gray-700 mt-0.5"
+                                                  className="text-[10px] text-gray-500 hover:text-gray-700 self-start"
                                                 >
                                                   Cancel
                                                 </button>
@@ -4011,12 +4222,14 @@ export default function ViewMARForm() {
                                               </div>
                                             )}
                                           </div>
+                                          {showPrnResultInitialsRows ? (
+                                          <>
                                           <div
                                             className={`text-[11px] leading-snug break-words border-t border-emerald-800/15 dark:border-emerald-400/20 pt-1 ${
                                               readOnly || !prnHasTime
                                                 ? ''
                                                 : 'cursor-pointer hover:bg-white/60 dark:hover:bg-black/25 rounded px-0.5'
-                                            } ${!prnHasTime ? 'opacity-60' : ''}`}
+                                            }`}
                                             onClick={
                                               readOnly || !prnHasTime
                                                 ? undefined
@@ -4025,7 +4238,7 @@ export default function ViewMARForm() {
                                                     handlePRNFieldEdit(prn.id, 'result', prn.result, 'chart')
                                                   }
                                             }
-                                            title={readOnly ? '' : prnResultHelper}
+                                            title={readOnly ? '' : 'Result'}
                                           >
                                             {!readOnly &&
                                             prnHasTime &&
@@ -4049,10 +4262,17 @@ export default function ViewMARForm() {
                                               </div>
                                             ) : prn.result?.trim() ? (
                                               <span className="text-gray-800 dark:text-gray-100">{prn.result}</span>
-                                            ) : !readOnly && !prnHasTime ? (
-                                              <span className="text-[10px] text-amber-700 dark:text-amber-300">{prnResultHelper}</span>
-                                            ) : !readOnly ? (
-                                              <span className="text-[10px] text-gray-500">Add result</span>
+                                            ) : !readOnly && prnHasTime ? (
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  handlePRNFieldEdit(prn.id, 'result', prn.result, 'chart')
+                                                }}
+                                                className="text-[10px] font-medium text-lasso-teal border border-lasso-teal rounded px-1 py-0.5 hover:bg-lasso-teal/10"
+                                              >
+                                                Add result
+                                              </button>
                                             ) : (
                                               <span>—</span>
                                             )}
@@ -4183,6 +4403,36 @@ export default function ViewMARForm() {
                                               <span className="text-gray-400">—</span>
                                             )}
                                           </div>
+                                          </>
+                                          ) : null}
+                                          {!readOnly && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setPrnRecordDeleteTarget(prn)
+                                              }}
+                                              className="text-[10px] font-medium text-red-700 dark:text-red-400 border border-red-300/70 dark:border-red-800/80 rounded px-1 py-0.5 mt-0.5 hover:bg-red-50/90 dark:hover:bg-red-950/40"
+                                            >
+                                              Delete
+                                            </button>
+                                          )}
+                                              </div>
+                                            )
+                                          })}
+                                          {!readOnly ? (
+                                            <button
+                                              type="button"
+                                              disabled={saving}
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                addPrnAdministrationInChartDayCell(template, day)
+                                              }}
+                                              className="text-[10px] font-medium text-emerald-800 dark:text-emerald-200 border border-emerald-700/40 dark:border-emerald-500/50 rounded px-1 py-0.5 hover:bg-white/70 dark:hover:bg-black/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                              + Add
+                                            </button>
+                                          ) : null}
                                         </div>
                                       ) : (
                                         <span className="text-gray-400 dark:text-gray-500 select-none">—</span>
@@ -4879,8 +5129,11 @@ export default function ViewMARForm() {
                     <DragOverlay zIndex={2000} dropAnimation={{ duration: 180, easing: 'ease' }}>
                       {marDragPreviewGroupMeds.length > 0 ? (
                         <MarMedicationGroupDragPreview meds={marDragPreviewGroupMeds} />
-                      ) : marDragPreviewPrn ? (
-                        <MarPrnChartRowDragPreview prn={marDragPreviewPrn} />
+                      ) : marDragPreviewPrnSeg ? (
+                        <MarPrnChartRowDragPreview
+                          template={marDragPreviewPrnSeg.template}
+                          recordCount={marDragPreviewPrnSeg.records.length}
+                        />
                       ) : null}
                     </DragOverlay>
                   </DndContext>
@@ -5007,6 +5260,11 @@ export default function ViewMARForm() {
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Time</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Result</th>
                         <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300">Initials</th>
+                        {!readOnly && (
+                          <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 w-24">
+                            Actions
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -5227,6 +5485,7 @@ export default function ViewMARForm() {
                                     setEditingPRNValue('')
                                   }}
                                   compact
+                                  plain
                                 />
                                 <button
                                   type="button"
@@ -5389,6 +5648,20 @@ export default function ViewMARForm() {
                               </div>
                             )}
                           </td>
+                          {!readOnly && (
+                            <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 align-top">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setPrnRecordDeleteTarget(prn)
+                                }}
+                                className="text-xs px-2 py-1 rounded border border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          )}
                         </tr>
                         )
                       })}
@@ -6102,6 +6375,46 @@ export default function ViewMARForm() {
                 className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
               >
                 {deletingPrnLibraryItem ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {prnRecordDeleteTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000] p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">Delete PRN record?</h3>
+            <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
+              This permanently removes this administration row for{' '}
+              <strong className="text-gray-800 dark:text-gray-200">
+                {prnRecordDeleteTarget.medication || 'this medication'}
+              </strong>
+              {prnRecordDeleteTarget.dosage ? ` (${prnRecordDeleteTarget.dosage})` : ''} on{' '}
+              {new Date(prnRecordDeleteTarget.date).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })}
+              . If a Progress Note was created from this row and is not signed, that note will be removed too. Delete is
+              blocked when the linked note has been signed.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => setPrnRecordDeleteTarget(null)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void deletePRNRecordById(prnRecordDeleteTarget)}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+              >
+                {saving ? 'Deleting…' : 'Delete'}
               </button>
             </div>
           </div>
@@ -7180,6 +7493,7 @@ function EditableHourField({
         value={medication.hour || ''}
         onChange={handleChange}
         compact
+        plain
       />
     </div>
   )
@@ -7427,7 +7741,7 @@ function AddPRNRecordForm({
   defaultDate,
   dateMin,
   dateMax,
-  prnMedicationList
+  prnMedicationList,
 }: { 
   onSubmit: (data: {
     date: string
@@ -7474,6 +7788,10 @@ function AddPRNRecordForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.date || !formData.medication || !formData.reason) {
+      alert('Please select a PRN from the list')
+      return
+    }
+    if (!formData.prnMedicationId) {
       alert('Please select a PRN from the list')
       return
     }
