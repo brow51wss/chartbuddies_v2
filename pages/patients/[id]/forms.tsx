@@ -12,6 +12,39 @@ import { ensureProgressNoteSummaryForMonth } from '../../../lib/progress-notes'
 import type { Patient } from '../../../types/auth'
 import type { MARForm, MARMedication } from '../../../types/mar'
 
+/** YYYY-MM for calendar month comparison (matches list/sort logic). */
+function marFormCalendarKey(monthYear: string, ref: Date): string {
+  const raw = String(monthYear || '').trim().replace(/\//g, '-')
+  const parts = raw.split('-').map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n))
+  let y = parts[0],
+    m = parts[1]
+  if (parts.length >= 2 && m > 12) [y, m] = [m, y]
+  if (y && m) return `${y}-${String(m).padStart(2, '0')}`
+  const months: Record<string, number> = {
+    january: 1,
+    february: 2,
+    march: 3,
+    april: 4,
+    may: 5,
+    june: 6,
+    july: 7,
+    august: 8,
+    september: 9,
+    october: 10,
+    november: 11,
+    december: 12,
+  }
+  const lower = raw.toLowerCase()
+  for (const [name, num] of Object.entries(months)) {
+    if (lower.includes(name)) {
+      const match = raw.match(/\b(19|20)\d{2}\b/)
+      const year = match ? parseInt(match[0], 10) : ref.getFullYear()
+      return `${year}-${String(num).padStart(2, '0')}`
+    }
+  }
+  return ''
+}
+
 export default function PatientForms() {
   const router = useRouter()
   const { id } = router.query
@@ -117,6 +150,12 @@ export default function PatientForms() {
       setLoading(false)
     }
   }
+
+  const listNow = new Date()
+  const listCurrentKey = `${listNow.getFullYear()}-${String(listNow.getMonth() + 1).padStart(2, '0')}`
+  const currentMonthHeading = listNow.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const currentMarForms = marForms.filter((f) => marFormCalendarKey(f.month_year, listNow) === listCurrentKey)
+  const pastMarForms = marForms.filter((f) => marFormCalendarKey(f.month_year, listNow) !== listCurrentKey)
 
   const loadMedicationsForDuplicate = async (formId: string) => {
     try {
@@ -374,6 +413,76 @@ export default function PatientForms() {
     }
   }
 
+  const renderMarFormRow = (form: MARForm) => {
+    const formKey = marFormCalendarKey(form.month_year, listNow)
+    const isCurrentMonthYear = !!formKey && formKey === listCurrentKey
+    return (
+      <div
+        key={form.id}
+        className="flex justify-between items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+      >
+        <div>
+          <p className="font-medium text-gray-800 dark:text-white">{form.month_year}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Status: {form.status} • Created: {new Date(form.created_at).toLocaleDateString()}
+          </p>
+        </div>
+        <div className="flex gap-2 items-center">
+          <Link
+            href={`/patients/${id}/mar/${form.id}`}
+            className="px-4 py-2 bg-lasso-teal text-white rounded-lg text-sm font-medium hover:bg-lasso-blue"
+          >
+            {form.status === 'draft' ? 'Continue Editing' : 'View'}
+          </Link>
+          {!isReadOnly && (
+            <button
+              onClick={async () => {
+                if (isCurrentMonthYear) return
+                await loadMedicationsForDuplicate(form.id)
+                setSourceFormId(form.id)
+                setShowDuplicateModal(true)
+              }}
+              disabled={!!isCurrentMonthYear}
+              title={
+                isCurrentMonthYear
+                  ? 'Duplicate is not allowed for the current month; a MAR for this month already exists.'
+                  : 'Duplicate this MAR'
+              }
+              className="inline-flex items-center justify-center p-2 text-lasso-teal hover:text-lasso-blue dark:text-lasso-teal dark:hover:text-lasso-blue transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent"
+              aria-label="Duplicate MAR"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+              </svg>
+            </button>
+          )}
+          {!isReadOnly && (
+            <button
+              onClick={() => setDeleteConfirmForm({ id: form.id, month_year: form.month_year })}
+              className="inline-flex items-center justify-center p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+              title="Delete MAR"
+              aria-label="Delete MAR"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -415,118 +524,56 @@ export default function PatientForms() {
           )}
 
           <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Available MAR Forms
-            </h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <span aria-hidden="true">💊</span>
+                  <span>Available MAR Forms</span>
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  Create and manage MAR forms for this patient
+                </p>
+              </div>
+              {!isReadOnly && (
+                <Link
+                  href={`/patients/${id}/mar`}
+                  className="shrink-0 px-4 py-2 bg-lasso-navy text-white rounded-lg hover:bg-lasso-teal text-sm font-medium text-center"
+                >
+                  + New MAR Form
+                </Link>
+              )}
+            </div>
 
-            {/* MAR Forms Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Create and manage MAR forms for this patient
-                  </p>
-                  {!isReadOnly && (
-                    <Link
-                      href={`/patients/${id}/mar`}
-                      className="px-4 py-2 bg-lasso-navy text-white rounded-lg hover:bg-lasso-teal text-sm font-medium"
-                    >
-                      + New MAR Form
-                    </Link>
-                  )}
+            {marForms.length === 0 ? (
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="p-6">
+                  <p className="text-gray-500 dark:text-gray-400 text-sm italic">No MAR forms created yet</p>
                 </div>
-
-                {marForms.length === 0 ? (
-                  <p className="text-gray-500 dark:text-gray-400 text-sm italic">
-                    No MAR forms created yet
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {marForms.map((form) => {
-                      const now = new Date()
-                      const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-                      const formKey = (() => {
-                        const raw = String(form.month_year || '').trim().replace(/\//g, '-')
-                        const parts = raw.split('-').map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n))
-                        let y = parts[0], m = parts[1]
-                        if (parts.length >= 2 && m > 12) [y, m] = [m, y]
-                        if (y && m) return `${y}-${String(m).padStart(2, '0')}`
-                        const months: Record<string, number> = { january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12 }
-                        const lower = raw.toLowerCase()
-                        for (const [name, num] of Object.entries(months)) {
-                          if (lower.includes(name)) {
-                            const match = raw.match(/\b(19|20)\d{2}\b/)
-                            const year = match ? parseInt(match[0], 10) : now.getFullYear()
-                            return `${year}-${String(num).padStart(2, '0')}`
-                          }
-                        }
-                        return ''
-                      })()
-                      const isCurrentMonthYear = formKey && formKey === currentKey
-                      return (
-                      <div
-                        key={form.id}
-                        className="flex justify-between items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-                      >
-                        <div>
-                          <p className="font-medium text-gray-800 dark:text-white">
-                            MAR - {form.month_year}
-                          </p>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Status: {form.status} • Created: {new Date(form.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div className="flex gap-2 items-center">
-                          <Link
-                            href={`/patients/${id}/mar/${form.id}`}
-                            className="px-4 py-2 bg-lasso-teal text-white rounded-lg text-sm font-medium hover:bg-lasso-blue"
-                          >
-                            {form.status === 'draft' ? 'Continue Editing' : 'View'}
-                          </Link>
-                          {!isReadOnly && (
-                            <button
-                              onClick={async () => {
-                                if (isCurrentMonthYear) return
-                                await loadMedicationsForDuplicate(form.id)
-                                setSourceFormId(form.id)
-                                setShowDuplicateModal(true)
-                              }}
-                              disabled={!!isCurrentMonthYear}
-                              title={isCurrentMonthYear ? 'Duplicate is not allowed for the current month; a MAR for this month already exists.' : 'Duplicate this MAR'}
-                              className="inline-flex items-center justify-center p-2 text-lasso-teal hover:text-lasso-blue dark:text-lasso-teal dark:hover:text-lasso-blue transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent"
-                              aria-label="Duplicate MAR"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                              </svg>
-                            </button>
-                          )}
-                          {!isReadOnly && (
-                            <button
-                              onClick={() => setDeleteConfirmForm({ id: form.id, month_year: form.month_year })}
-                              className="inline-flex items-center justify-center p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
-                              title="Delete MAR"
-                              aria-label="Delete MAR"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )})}
+              </div>
+            ) : (
+              <>
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
+                  <div className="p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                      Current month ({currentMonthHeading})
+                    </h3>
+                    {currentMarForms.length === 0 ? (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 italic">No MAR for this month yet.</p>
+                    ) : (
+                      <div className="space-y-2">{currentMarForms.map(renderMarFormRow)}</div>
+                    )}
+                  </div>
+                </div>
+                {pastMarForms.length > 0 && (
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div className="p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Past months</h3>
+                      <div className="space-y-2">{pastMarForms.map(renderMarFormRow)}</div>
+                    </div>
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* Placeholder for future forms */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-6">
-              <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-                Additional form types will be available here (custom forms, vital signs, etc.)
-              </p>
-            </div>
+              </>
+            )}
           </div>
         </main>
       </div>
@@ -539,7 +586,7 @@ export default function PatientForms() {
               Delete MAR Form
             </h2>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Are you sure you want to delete <strong>MAR - {deleteConfirmForm.month_year}</strong>? This will permanently remove the form and all its medications, administrations, and notes. This cannot be undone.
+              Are you sure you want to delete <strong>{deleteConfirmForm.month_year}</strong>? This will permanently remove the form and all its medications, administrations, and notes. This cannot be undone.
             </p>
             <div className="flex gap-3 justify-end">
               <button

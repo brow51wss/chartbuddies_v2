@@ -3036,8 +3036,9 @@ export default function ViewMARForm() {
               ← Back to MAR Forms
             </button>
             <div className="flex justify-between items-center">
-              <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
-                Medication Administration Record (MAR)
+              <h1 className="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                <span aria-hidden="true">💊</span>
+                <span>Medication Administration Record (MAR)</span>
               </h1>
               <div className="flex space-x-3">
                 <button

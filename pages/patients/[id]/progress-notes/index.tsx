@@ -125,8 +125,9 @@ export default function ProgressNotesIndex() {
           </p>
 
           <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Available Progress Notes
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <span aria-hidden="true">📝</span>
+              <span>Available Progress Notes</span>
             </h2>
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="divide-y divide-gray-200 dark:divide-gray-700">

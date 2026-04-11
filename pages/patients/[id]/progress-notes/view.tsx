@@ -906,7 +906,10 @@ export default function ProgressNotesPage() {
             ← Back to Progress Notes
           </Link>
           <div className="mb-2">
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white">Progress Notes</h1>
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <span aria-hidden="true">📝</span>
+              <span>Progress Notes</span>
+            </h1>
             {monthFromQuery && (
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Showing: {monthFromQuery}</p>
             )}

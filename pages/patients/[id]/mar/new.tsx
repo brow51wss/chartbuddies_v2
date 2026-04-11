@@ -332,8 +332,9 @@ export default function NewMARForm() {
             >
               ← Back to MAR Forms
             </button>
-            <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
-              New Medication Administration Record (MAR)
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+              <span aria-hidden="true">💊</span>
+              <span>New Medication Administration Record (MAR)</span>
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-2">
               Patient: {patient.patient_name} • Record #: {patient.record_number}
