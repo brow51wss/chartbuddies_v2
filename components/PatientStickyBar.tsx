@@ -86,7 +86,7 @@ export default function PatientStickyBar({
       </div>
 
       {showAllergiesModal && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-xl rounded-xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-700 dark:bg-gray-800">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Patient Allergies</h3>
