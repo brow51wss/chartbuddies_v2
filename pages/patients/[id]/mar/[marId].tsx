@@ -3907,20 +3907,22 @@ export default function ViewMARForm() {
                   {showMissedDocAlerts && (
                     <ul
                       id="mar-missed-doc-panel"
-                      className="border-t border-red-200 dark:border-red-900/60 max-h-52 overflow-y-auto divide-y divide-red-200/90 dark:divide-red-900/50"
+                      aria-label="Missed documentation entries"
+                      className="border-t border-red-200 dark:border-red-900/60 max-h-64 overflow-y-auto p-3 m-0 list-none grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3"
                     >
                       {missedMarDocumentation.map((item) => (
-                        <li key={`${item.medId}-${item.day}`}>
+                        <li key={`${item.medId}-${item.day}`} className="min-w-0">
                           <button
                             type="button"
                             onClick={() => jumpToMissedMarCell(item.medId, item.day)}
-                            className="w-full text-left px-4 py-2.5 text-sm text-red-950 dark:text-red-50 hover:bg-red-100 dark:hover:bg-red-950/55 transition-colors"
+                            className="w-full h-full min-h-[4.25rem] text-left rounded-lg border border-red-200/90 dark:border-red-800/55 bg-white/90 dark:bg-red-950/45 px-3 py-2.5 shadow-sm hover:border-red-300 dark:hover:border-red-700 hover:bg-red-100/80 dark:hover:bg-red-950/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/80 dark:focus-visible:ring-red-500/60 transition-colors"
                           >
-                            <span className="font-medium">Day {item.day}</span>
-                            <span className="text-red-800/95 dark:text-red-200/90"> · {item.dateLabel}</span>
-                            <span className="block text-xs text-red-900/90 dark:text-red-200/75 mt-0.5">
+                            <div className="text-sm font-semibold text-red-950 dark:text-red-50 leading-snug">
+                              {item.dateLabel}
+                            </div>
+                            <div className="text-xs text-red-900/90 dark:text-red-200/80 mt-1.5 leading-snug">
                               {item.rowLabel}
-                            </span>
+                            </div>
                           </button>
                         </li>
                       ))}
@@ -4895,26 +4897,26 @@ export default function ViewMARForm() {
                                 !!parsedMarMonthForRow &&
                                 isMarRowActiveOnDayColumn(med, day, parsedMarMonthForRow.y, parsedMarMonthForRow.m)
 
+                              const missedDocThisCell =
+                                missedDocKeySet.has(`${med.id}|${day}`) && !isDiscontinued
+                              const cellBgClass = isDiscontinued
+                                ? 'bg-red-50 dark:bg-red-900/20'
+                                : missedDocThisCell
+                                  ? 'bg-red-100/90 dark:bg-red-950/35'
+                                  : day === todayDayInViewedMar
+                                    ? 'bg-amber-50 dark:bg-amber-900/20'
+                                    : !isMedActive
+                                      ? 'bg-gray-100 dark:bg-gray-800'
+                                      : ''
+
                               return (
                                 <td
                                   key={day}
                                   data-mar-cell={`${med.id}|${day}`}
                                   style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day }}
-                                  className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs relative ${
-                                    isDiscontinued ? 'bg-red-50 dark:bg-red-900/20' : ''
-                                  } ${
+                                  className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs relative ${cellBgClass} ${
                                     isEditing && isMedActive && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
-                                  } ${
-                                    day === todayDayInViewedMar
-                                      ? 'bg-amber-50 dark:bg-amber-900/20'
-                                      : !isMedActive
-                                        ? 'bg-gray-100 dark:bg-gray-800'
-                                        : ''
-                                  } ${isDiscontinued ? 'cursor-not-allowed' : ''} ${
-                                    missedDocKeySet.has(`${med.id}|${day}`)
-                                      ? 'ring-2 ring-red-500/90 dark:ring-red-500/80 ring-inset'
-                                      : ''
-                                  }`}
+                                  } ${isDiscontinued ? 'cursor-not-allowed' : ''}`}
                                   onDoubleClick={isEditing && isMedActive && !isVitalsEntry && !isDiscontinued ? () => {
                                     if (isGiven) {
                                       updateAdministration(med.id, day, 'Not Given', initials)
@@ -5272,33 +5274,12 @@ export default function ViewMARForm() {
           <div className="max-w-7xl mx-auto">
           {/* Patient Information Section - Box 2 */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-            {/* Diet (edit via patient profile modal) */}
-            <div className="mb-6">
-              <div className="space-y-3 p-4 rounded-lg bg-lasso-teal/5 dark:bg-lasso-teal/10">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
+              {/* Legend — left column on large screens */}
+              <div className="text-xs text-gray-700 dark:text-gray-300 p-4 rounded-lg bg-lasso-teal/5 dark:bg-lasso-teal/10 min-h-0">
                 <div>
-                  <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">
-                    DIET (Special Instructions, e.g. Texture, Bite Size, Position, etc.):
-                  </label>
-                  {readOnly ? (
-                    <div className="w-full text-left text-sm text-gray-800 dark:text-white p-2 rounded border border-transparent min-h-[60px]">
-                      {marForm.diet || 'N/A'}
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => void openMarEditPatientModal()}
-                      className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors min-h-[60px]"
-                    >
-                      {marForm.diet || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
-                    </button>
-                  )}
+                  <strong className="font-bold uppercase">Legend:</strong>
                 </div>
-              </div>
-            </div>
-
-            {/* Legend */}
-            <div className="text-xs text-gray-700 dark:text-gray-300 p-4 rounded-lg bg-lasso-teal/5 dark:bg-lasso-teal/10">
-                <div><strong className="font-bold uppercase">Legend:</strong></div>
                 <div className="mt-1 space-y-0.5">
                   {(() => {
                     const hasUserInitials = !!(userProfile?.staff_initials || userProfile?.staff_initials_text)
@@ -5348,8 +5329,33 @@ export default function ViewMARForm() {
                       </>
                     )
                   })()}
-                    </div>
+                </div>
               </div>
+
+              {/* Diet — right column on large screens (edit via patient profile modal) */}
+              <div className="min-h-0">
+                <div className="space-y-3 p-4 rounded-lg bg-lasso-teal/5 dark:bg-lasso-teal/10 h-full">
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-gray-700 dark:text-gray-300 mb-1">
+                      DIET (Special Instructions, e.g. Texture, Bite Size, Position, etc.):
+                    </label>
+                    {readOnly ? (
+                      <div className="w-full text-left text-sm text-gray-800 dark:text-white p-2 rounded border border-transparent min-h-[60px]">
+                        {marForm.diet || 'N/A'}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void openMarEditPatientModal()}
+                        className="w-full text-left text-sm text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 transition-colors min-h-[60px]"
+                      >
+                        {marForm.diet || 'N/A'} <span className="text-lasso-blue dark:text-lasso-blue text-xs">(edit)</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* PRN Records Section - same max-width as Patient info above */}
