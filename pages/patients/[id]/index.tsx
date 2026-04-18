@@ -312,7 +312,7 @@ export default function PatientHub() {
               const cardClasses = `group relative block bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border transition-all duration-300 ${
                 isAvailable
                   ? 'cursor-pointer hover:shadow-xl hover:scale-[1.02] border-gray-200 dark:border-gray-700 hover:border-lasso-blue dark:hover:border-lasso-blue'
-                  : 'cursor-not-allowed opacity-75 border-gray-200 dark:border-gray-700'
+                  : 'cursor-not-allowed opacity-25 border-gray-200 dark:border-gray-700'
               }`
               const content = (
                 <>
@@ -324,11 +324,7 @@ export default function PatientHub() {
                   <div className="p-6">
                     <div className="flex items-start justify-between mb-4">
                       <div
-                        className={`text-4xl ${
-                          module.status === 'coming_soon'
-                            ? 'grayscale opacity-70'
-                            : ''
-                        }`}
+                        className={`text-4xl ${module.status === 'coming_soon' ? 'grayscale' : ''}`}
                         aria-hidden="true"
                       >
                         {module.icon}
