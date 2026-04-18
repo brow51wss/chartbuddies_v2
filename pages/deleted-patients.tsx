@@ -142,6 +142,13 @@ export default function DeletedPatientsPage() {
             </div>
           )}
 
+          <Link
+            href="/dashboard"
+            className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue mb-2 inline-flex items-center gap-2 text-sm font-medium transition-colors"
+          >
+            <span>←</span>
+            <span>Back to Patients</span>
+          </Link>
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
               Deleted patients
@@ -157,15 +164,9 @@ export default function DeletedPatientsPage() {
               <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
                 No deleted patients
               </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
+              <p className="text-gray-600 dark:text-gray-400">
                 Deleted patients will appear here. You can restore them at any time.
               </p>
-              <Link
-                href="/dashboard"
-                className="inline-block px-6 py-3 bg-lasso-teal text-white rounded-lg hover:bg-lasso-blue font-medium"
-              >
-                Back to Patients
-              </Link>
             </div>
           ) : (
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">

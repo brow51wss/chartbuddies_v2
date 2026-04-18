@@ -847,12 +847,12 @@ export default function Dashboard() {
                             <h3 className="text-base font-semibold text-gray-900 dark:text-white">
                               {patient.patient_name}
                             </h3>
-                            <dl className="mt-3 flex-1 space-y-2 text-sm">
+                            <dl className="mt-3 flex-1 space-y-5 text-sm">
                               <div>
                                 <dt className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                                   Date of birth
                                 </dt>
-                                <dd className="mt-0.5 text-gray-800 dark:text-gray-200">
+                                <dd className="mt-1 text-gray-800 dark:text-gray-200">
                                   {formatCalendarDate(patient.date_of_birth)}
                                 </dd>
                               </div>
@@ -860,7 +860,7 @@ export default function Dashboard() {
                                 <dt className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                                   Date added
                                 </dt>
-                                <dd className="mt-0.5 text-gray-800 dark:text-gray-200">
+                                <dd className="mt-1 text-gray-800 dark:text-gray-200">
                                   {formatCalendarDate(patient.created_at)}
                                 </dd>
                               </div>
@@ -868,7 +868,7 @@ export default function Dashboard() {
                                 <dt className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                                   Diagnosis
                                 </dt>
-                                <dd className="mt-0.5 text-gray-800 dark:text-gray-200">
+                                <dd className="mt-1 text-gray-800 dark:text-gray-200">
                                   {patient.diagnosis || (
                                     <span className="text-gray-400 dark:text-gray-500 italic">N/A</span>
                                   )}
