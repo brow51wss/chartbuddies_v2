@@ -15,6 +15,9 @@ import { formatCalendarDate } from '../lib/calendarDate'
 
 type SortColumn = 'date_of_birth' | 'created_at' | 'first_name' | 'last_name' | null
 type SortDirection = 'asc' | 'desc'
+type PatientsViewMode = 'list' | 'cards'
+
+const PATIENTS_VIEW_STORAGE_KEY = 'lasso-dashboard-patients-view'
 
 // Helper to parse first/last name from full name
 const parsePatientName = (fullName: string) => {
@@ -38,6 +41,11 @@ export default function Dashboard() {
   const [message, setMessage] = useState('')
   const [sortColumn, setSortColumn] = useState<SortColumn>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [patientsView, setPatientsView] = useState<PatientsViewMode>(() => {
+    if (typeof window === 'undefined') return 'list'
+    const stored = window.localStorage.getItem(PATIENTS_VIEW_STORAGE_KEY)
+    return stored === 'cards' ? 'cards' : 'list'
+  })
   const [showNameSortMenu, setShowNameSortMenu] = useState(false)
   const [editingPatientId, setEditingPatientId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EditPatientFormState | null>(null)
@@ -66,6 +74,11 @@ export default function Dashboard() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showNameSortMenu])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(PATIENTS_VIEW_STORAGE_KEY, patientsView)
+  }, [patientsView])
 
   // Sort patients based on current sort settings
   const sortedPatients = [...patients].sort((a, b) => {
@@ -487,6 +500,41 @@ export default function Dashboard() {
     }
   }
 
+  const renderPatientActions = (patient: Patient) => (
+    <div className="flex flex-wrap items-center gap-3">
+      <Link
+        href={`/patients/${patient.id}`}
+        className="inline-flex items-center gap-1 text-sm font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue dark:hover:text-lasso-blue/80 transition-colors"
+      >
+        <span>Open</span>
+      </Link>
+      {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && !isReadOnly && (
+        <button
+          type="button"
+          onClick={() => openEditPatientModal(patient)}
+          className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-lasso-blue dark:text-gray-300 dark:hover:text-lasso-blue transition-colors"
+          title="Edit patient details"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        </button>
+      )}
+      {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && !isReadOnly && (
+        <button
+          type="button"
+          onClick={() => handleDeletePatient(patient.id, patient.patient_name)}
+          className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+          title="Delete patient"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      )}
+    </div>
+  )
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -524,7 +572,7 @@ export default function Dashboard() {
 
           {/* Patient list (default dashboard view) */}
           <div>
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+            <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                   Patients
@@ -533,14 +581,69 @@ export default function Dashboard() {
                   Select a patient to view their records and modules
                 </p>
               </div>
-              {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && !isReadOnly && (
-                <Link
-                  href="/deleted-patients"
-                  className="text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-lasso-teal dark:hover:text-lasso-teal"
-                >
-                  View deleted patients
-                </Link>
-              )}
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                {patients.length > 0 && (
+                  <div
+                    className="inline-flex rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50/80 dark:bg-gray-900/40 p-0.5 shadow-sm"
+                    role="group"
+                    aria-label="Patients display format"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setPatientsView('list')}
+                      className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-md p-2 transition-colors ${
+                        patientsView === 'list'
+                          ? 'bg-white text-lasso-navy shadow-sm dark:bg-gray-800 dark:text-white'
+                          : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                      }`}
+                      aria-pressed={patientsView === 'list'}
+                      aria-label="List view"
+                      title="List view"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 6h13M8 12h13M8 18h13"
+                        />
+                        <circle cx="5" cy="6" r="1.25" fill="currentColor" stroke="none" />
+                        <circle cx="5" cy="12" r="1.25" fill="currentColor" stroke="none" />
+                        <circle cx="5" cy="18" r="1.25" fill="currentColor" stroke="none" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPatientsView('cards')}
+                      className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-md p-2 transition-colors ${
+                        patientsView === 'cards'
+                          ? 'bg-white text-lasso-navy shadow-sm dark:bg-gray-800 dark:text-white'
+                          : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                      }`}
+                      aria-pressed={patientsView === 'cards'}
+                      aria-label="Card view"
+                      title="Card view"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+                {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && !isReadOnly && (
+                  <Link
+                    href="/deleted-patients"
+                    className="text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-lasso-teal dark:hover:text-lasso-teal"
+                  >
+                    View deleted patients
+                  </Link>
+                )}
+              </div>
             </div>
 
             {patients.length === 0 ? (
@@ -562,6 +665,50 @@ export default function Dashboard() {
               ) : (
                 <div className="max-w-7xl mx-auto">
                   <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
+                    {patientsView === 'cards' && (
+                      <div className="flex flex-wrap items-center gap-2 justify-between border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 px-4 py-3 sm:px-6">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                            Sort
+                          </span>
+                          {(
+                            [
+                              ['first_name', 'First name'],
+                              ['last_name', 'Last name'],
+                              ['date_of_birth', 'Date of birth'],
+                              ['created_at', 'Date added'],
+                            ] as const
+                          ).map(([col, label]) => (
+                            <button
+                              key={col}
+                              type="button"
+                              onClick={() => handleSort(col)}
+                              className={`inline-flex items-center rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                                sortColumn === col
+                                  ? 'border-lasso-teal bg-lasso-teal text-white dark:border-lasso-teal dark:bg-lasso-teal [&_svg]:text-white'
+                                  : 'border-gray-200 bg-white text-gray-700 hover:border-lasso-blue/40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-lasso-teal/40'
+                              }`}
+                            >
+                              {label}
+                              <SortIcon column={col} />
+                            </button>
+                          ))}
+                        </div>
+                        {sortColumn && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSortColumn(null)
+                              setSortDirection('asc')
+                            }}
+                            className="text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                          >
+                            Clear sort
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {patientsView === 'list' ? (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                         <colgroup>
@@ -682,42 +829,60 @@ export default function Dashboard() {
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="flex items-center gap-3">
-                                  <Link
-                                    href={`/patients/${patient.id}`}
-                                    className="inline-flex items-center gap-1 text-sm font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue dark:hover:text-lasso-blue/80 transition-colors"
-                                  >
-                                    <span>Open</span>
-                                  </Link>
-                                  {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && !isReadOnly && (
-                                    <button
-                                      onClick={() => openEditPatientModal(patient)}
-                                      className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-lasso-blue dark:text-gray-300 dark:hover:text-lasso-blue transition-colors"
-                                      title="Edit patient details"
-                                    >
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                      </svg>
-                                    </button>
-                                  )}
-                                  {(userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && !isReadOnly && (
-                                    <button
-                                      onClick={() => handleDeletePatient(patient.id, patient.patient_name)}
-                                      className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-                                      title="Delete patient"
-                                    >
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                      </svg>
-                                    </button>
-                                  )}
-                                </div>
+                                {renderPatientActions(patient)}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
+                    ) : (
+                    <div className="p-4 sm:p-6">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {sortedPatients.map((patient) => (
+                          <div
+                            key={patient.id}
+                            className="flex flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800/90"
+                          >
+                            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                              {patient.patient_name}
+                            </h3>
+                            <dl className="mt-3 flex-1 space-y-2 text-sm">
+                              <div>
+                                <dt className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                  Date of birth
+                                </dt>
+                                <dd className="mt-0.5 text-gray-800 dark:text-gray-200">
+                                  {formatCalendarDate(patient.date_of_birth)}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                  Date added
+                                </dt>
+                                <dd className="mt-0.5 text-gray-800 dark:text-gray-200">
+                                  {formatCalendarDate(patient.created_at)}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                  Diagnosis
+                                </dt>
+                                <dd className="mt-0.5 text-gray-800 dark:text-gray-200">
+                                  {patient.diagnosis || (
+                                    <span className="text-gray-400 dark:text-gray-500 italic">N/A</span>
+                                  )}
+                                </dd>
+                              </div>
+                            </dl>
+                            <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-700">
+                              {renderPatientActions(patient)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    )}
                   </div>
                 </div>
               )}

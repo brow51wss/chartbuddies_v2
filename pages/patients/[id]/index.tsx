@@ -238,38 +238,69 @@ export default function PatientHub() {
               </svg>
             </button>
             {showActivityStatus && (
-              <div id="activity-status-panel" className="overflow-x-auto border-t border-gray-200 dark:border-gray-700">
-                <table className="min-w-full">
-                  <thead className="bg-gray-50 dark:bg-gray-900/40">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">Module</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">Last activity</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activityRows.map((row) => {
-                      const actionAvailable = row.moduleId === 'mar' || row.moduleId === 'progress'
-                      return (
-                        <tr key={row.moduleId} className="border-t border-gray-200 dark:border-gray-700">
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{row.moduleName}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{row.statusLabel}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{row.lastActivityLabel}</td>
-                          <td className="px-4 py-3 text-sm">
-                            {actionAvailable && row.href ? (
-                              <Link href={row.href} className="font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue">
-                                Open
-                              </Link>
-                            ) : (
-                              <span className="text-gray-400 dark:text-gray-500">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+              <div
+                id="activity-status-panel"
+                className="border-t border-gray-200 dark:border-gray-700 px-4 py-6 sm:px-6"
+              >
+                {activityRows.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 py-1">
+                    No recent MAR or Progress Notes activity to show yet.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto pb-1">
+                    <ul className="relative z-[1] m-0 flex min-w-min list-none flex-row items-start gap-0 px-1 py-2">
+                      {activityRows.map((row, index) => {
+                        const actionAvailable = row.moduleId === 'mar' || row.moduleId === 'progress'
+                        const isFirst = index === 0
+                        const isLast = index === activityRows.length - 1
+                        return (
+                          <li
+                            key={row.moduleId}
+                            className="flex w-[min(280px,calc(100vw-3rem))] shrink-0 flex-col items-center px-3 sm:w-72 sm:px-4"
+                          >
+                            {/* Bleed past horizontal padding so line segments meet between columns */}
+                            <div className="mb-3 flex w-[calc(100%+1.5rem)] max-w-none items-center -mx-3 sm:w-[calc(100%+2rem)] sm:-mx-4">
+                              <div
+                                className={`h-0.5 min-h-[2px] flex-1 rounded-full ${isFirst ? 'bg-transparent' : 'bg-gray-300 dark:bg-gray-600'}`}
+                                aria-hidden
+                              />
+                              <div
+                                className="mx-1 h-4 w-4 shrink-0 rounded-full border-4 border-white bg-lasso-teal shadow-md ring-1 ring-gray-200 dark:border-gray-800 dark:ring-gray-600"
+                                aria-hidden
+                              />
+                              <div
+                                className={`h-0.5 min-h-[2px] flex-1 rounded-full ${isLast ? 'bg-transparent' : 'bg-gray-300 dark:bg-gray-600'}`}
+                                aria-hidden
+                              />
+                            </div>
+                            <div className="w-full rounded-lg border border-gray-200 bg-gray-50/90 p-4 text-center shadow-sm dark:border-gray-600 dark:bg-gray-900/50">
+                              <h3 className="text-sm font-semibold leading-snug text-gray-900 dark:text-white">
+                                {row.moduleName}
+                              </h3>
+                              <p className="mt-2 text-xs leading-snug text-gray-600 dark:text-gray-400">{row.statusLabel}</p>
+                              <p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500">
+                                Last activity
+                              </p>
+                              <p className="mt-0.5 text-xs font-medium text-gray-800 dark:text-gray-200">{row.lastActivityLabel}</p>
+                              <div className="mt-4">
+                                {actionAvailable && row.href ? (
+                                  <Link
+                                    href={row.href}
+                                    className="text-sm font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue"
+                                  >
+                                    Open
+                                  </Link>
+                                ) : (
+                                  <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                                )}
+                              </div>
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </div>
