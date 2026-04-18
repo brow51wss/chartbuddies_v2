@@ -90,7 +90,7 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
   })
 
   return (
-    <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-[10000001]">
+    <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-app-header">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -122,7 +122,7 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
                   </svg>
                 </button>
                 {modulesOpen && (
-                  <div className="absolute top-full left-0 mt-1 py-1 w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-[10000000]">
+                  <div className="absolute top-full left-0 mt-1 py-1 w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-app-header-dropdown">
                     <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-500 dark:text-gray-400 truncate">
                       {patientName ? `Patient: ${patientName}` : 'Jump to module'}
                     </div>
@@ -169,7 +169,7 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
                 </svg>
               </button>
               {userMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 py-1 w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-[10000000]">
+                <div className="absolute right-0 top-full mt-1 py-1 w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-app-header-dropdown">
                   {!isReadOnly && userProfile?.role === 'superadmin' && (
                     <Link
                       href="/invites"
@@ -241,7 +241,7 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
 
       {/* Exit Read-Only Modal */}
       {showExitReadOnlyModal && (
-        <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="exit-readonly-title">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="exit-readonly-title">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
             <h2 id="exit-readonly-title" className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Exit Read-Only View</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">

@@ -3688,7 +3688,7 @@ export default function ViewMARForm() {
                         <div
                           id="mar-prn-actions-menu"
                           role="menu"
-                          className="absolute right-0 mt-1 z-[10000000] min-w-[16rem] rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg py-1"
+                          className="absolute right-0 mt-1 z-app-header-dropdown min-w-[16rem] rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg py-1"
                         >
                           <button
                             type="button"
@@ -6005,7 +6005,7 @@ export default function ViewMARForm() {
       {/* Add Medication/Vitals Modal */}
       {showAddMedModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999]"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
@@ -6105,7 +6105,7 @@ export default function ViewMARForm() {
       {/* Edit Patient Info Modal — same sections as admissions; patients row is source of truth, then MAR forms sync */}
       {showEditPatientInfoModal && marForm && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999] p-4"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="mar-edit-patient-title"
@@ -6221,7 +6221,7 @@ export default function ViewMARForm() {
       {/* Vital Signs Modal */}
       {showVitalSignsModal && marForm && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999]"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
@@ -6273,7 +6273,7 @@ export default function ViewMARForm() {
       {/* Add PRN Medication (Library) Modal */}
       {showAddPRNModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999]"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -6306,7 +6306,7 @@ export default function ViewMARForm() {
       {/* Add PRN Record Modal */}
       {showAddPRNRecordModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999]"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -6340,7 +6340,7 @@ export default function ViewMARForm() {
 
       {/* View/Manage PRN library (mar_prn_medications) */}
       {showManagePRNListModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999] p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal p-4">
           <div
             className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col"
             role="dialog"
@@ -6452,7 +6452,7 @@ export default function ViewMARForm() {
       )}
 
       {prnListEditTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999] p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 dark:text-white">Edit PRN list entry</h2>
@@ -6483,7 +6483,7 @@ export default function ViewMARForm() {
       )}
 
       {prnListDeleteTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999] p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full">
             <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">Remove from PRN list?</h3>
             <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
@@ -6514,7 +6514,7 @@ export default function ViewMARForm() {
       )}
 
       {prnRecordDeleteTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999] p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full">
             <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">Delete PRN record?</h3>
             <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
@@ -6556,7 +6556,7 @@ export default function ViewMARForm() {
       {/* PRN Note Modal */}
       {showPRNNoteModal && editingPRNNote && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999]"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -6619,7 +6619,7 @@ export default function ViewMARForm() {
       {/* Medication Parameter Modal */}
       {showMedicationParameterModal && editingMedicationParameter && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999]"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -6678,7 +6678,7 @@ export default function ViewMARForm() {
       {/* Medication Notes Modal */}
       {showMedicationNotesModal && editingMedicationNotes && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999]"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -6738,7 +6738,7 @@ export default function ViewMARForm() {
       {/* Administration Note Modal (for R - Refused and H - Held) */}
       {showAdministrationNoteModal && editingAdministrationNote && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999]"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -6797,7 +6797,7 @@ export default function ViewMARForm() {
       {/* Custom Legend Modal */}
       {showCustomLegendModal && editingCustomLegend && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999]"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -6904,7 +6904,7 @@ export default function ViewMARForm() {
       {/* Delete Entry Confirmation Modal */}
       {showDeleteConfirmModal && deletingEntry && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999]"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
@@ -6960,7 +6960,7 @@ export default function ViewMARForm() {
       {/* Leave Confirmation Modal */}
       {showLeaveConfirmModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999999]"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
         >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">

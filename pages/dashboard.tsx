@@ -739,7 +739,7 @@ export default function Dashboard() {
                               )}
                               {/* Dropdown Menu */}
                               {showNameSortMenu && (
-                                <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-[10000000] min-w-[160px]">
+                                <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-app-header-dropdown min-w-[160px]">
                                   <div className="py-1">
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleSort('first_name'); }}
@@ -889,7 +889,7 @@ export default function Dashboard() {
             </div>
 
             {editingPatientId && editForm && (
-              <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="edit-patient-title">
+              <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="edit-patient-title">
                 <div className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
                   <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-4">
                     <h3 id="edit-patient-title" className="text-lg font-semibold text-gray-900 dark:text-white shrink-0">

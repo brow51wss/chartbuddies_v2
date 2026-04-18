@@ -24,6 +24,8 @@ type BinderActivityRow = {
   statusLabel: string
   lastActivityLabel: string
   href?: string
+  /** UTC ms — timeline reads left-to-right: most recent → oldest */
+  lastActivitySortMs: number
 }
 
 const MODULES: EHRModule[] = [
@@ -81,7 +83,13 @@ const MODULES: EHRModule[] = [
 
 export default function PatientHub() {
   const router = useRouter()
-  const { id: patientId } = router.query
+  const rawPatientId = router.query.id
+  const patientId =
+    typeof rawPatientId === 'string'
+      ? rawPatientId
+      : Array.isArray(rawPatientId)
+        ? rawPatientId[0]
+        : undefined
   const [patient, setPatient] = useState<Patient | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -95,21 +103,48 @@ export default function PatientHub() {
     return date.toLocaleString()
   }
 
+  const activityTimestampMs = (value?: string | null) => {
+    if (value == null || value === '') return 0
+    const t = new Date(value).getTime()
+    return Number.isNaN(t) ? 0 : t
+  }
+
   useEffect(() => {
-    if (!patientId || typeof patientId !== 'string') return
+    if (!router.isReady) return
+
+    if (!patientId) {
+      setLoading(false)
+      setError('Patient not found')
+      setPatient(null)
+      setActivityRows([])
+      return
+    }
+
+    const loadPatientId = patientId
+    let cancelled = false
+
     const load = async () => {
+      setLoading(true)
+      setError('')
+      setActivityRows([])
+
       const profile = await getCurrentUserProfile()
+      if (cancelled) return
       if (!profile) {
         router.push('/auth/login')
         return
       }
+
       const { data, error: fetchError } = await supabase
         .from('patients')
         .select('*')
-        .eq('id', patientId)
+        .eq('id', loadPatientId)
         .single()
+      if (cancelled) return
       if (fetchError || !data) {
         setError('Patient not found')
+        setPatient(null)
+        setActivityRows([])
         setLoading(false)
         return
       }
@@ -119,16 +154,18 @@ export default function PatientHub() {
         supabase
           .from('mar_forms')
           .select('id, status, month_year, updated_at, created_at')
-          .eq('patient_id', patientId)
+          .eq('patient_id', loadPatientId)
           .order('updated_at', { ascending: false })
           .limit(1),
         supabase
           .from('progress_note_entries')
           .select('id, updated_at, note_date')
-          .eq('patient_id', patientId)
+          .eq('patient_id', loadPatientId)
           .order('updated_at', { ascending: false })
           .limit(1),
       ])
+
+      if (cancelled) return
 
       const latestMar = marRes.data?.[0]
       const latestProgressEntry = progressRes.data?.[0]
@@ -137,31 +174,41 @@ export default function PatientHub() {
 
       const marModule = MODULES.find((module) => module.id === 'mar')
       if (latestMar && marModule) {
+        const marRaw = latestMar.updated_at || latestMar.created_at
         rows.push({
           moduleId: marModule.id,
           moduleName: marModule.name,
           statusLabel: `${String(latestMar.status || 'active').replace('_', ' ')} (${latestMar.month_year || 'unknown month'})`,
-          lastActivityLabel: formatDateTimeLabel(latestMar.updated_at || latestMar.created_at),
-          href: marModule.href ? `/patients/${patientId}/${marModule.href}` : undefined,
+          lastActivityLabel: formatDateTimeLabel(marRaw),
+          href: marModule.href ? `/patients/${loadPatientId}/${marModule.href}` : undefined,
+          lastActivitySortMs: activityTimestampMs(marRaw),
         })
       }
 
       const progressModule = MODULES.find((module) => module.id === 'progress')
       if (latestProgressEntry && progressModule) {
+        const progressRaw =
+          latestProgressEntry.updated_at || latestProgressEntry.note_date || null
         rows.push({
           moduleId: progressModule.id,
           moduleName: progressModule.name,
           statusLabel: 'Has entries',
-          lastActivityLabel: formatDateTimeLabel(latestProgressEntry.updated_at || latestProgressEntry.note_date || null),
-          href: progressModule.href ? `/patients/${patientId}/${progressModule.href}` : undefined,
+          lastActivityLabel: formatDateTimeLabel(progressRaw),
+          href: progressModule.href ? `/patients/${loadPatientId}/${progressModule.href}` : undefined,
+          lastActivitySortMs: activityTimestampMs(progressRaw),
         })
       }
 
+      rows.sort((a, b) => b.lastActivitySortMs - a.lastActivitySortMs)
       setActivityRows(rows)
       setLoading(false)
     }
+
     load()
-  }, [patientId, router])
+    return () => {
+      cancelled = true
+    }
+  }, [patientId, router.isReady, router])
 
   if (loading) {
     return (
@@ -195,10 +242,7 @@ export default function PatientHub() {
         <title>{patient.patient_name} - Lasso</title>
       </Head>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <AppHeader
-          patientId={typeof patientId === 'string' ? patientId : Array.isArray(patientId) ? patientId[0] : undefined}
-          patientName={patient.patient_name}
-        />
+        <AppHeader patientId={patient.id} patientName={patient.patient_name} />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Link
@@ -308,7 +352,7 @@ export default function PatientHub() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
             {MODULES.map((module) => {
               const isAvailable = module.status === 'available' && module.href
-              const href = module.href ? `/patients/${patientId}/${module.href}` : '#'
+              const href = module.href ? `/patients/${patient.id}/${module.href}` : '#'
               const cardClasses = `group relative block bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border transition-all duration-300 ${
                 isAvailable
                   ? 'cursor-pointer hover:shadow-xl hover:scale-[1.02] border-gray-200 dark:border-gray-700 hover:border-lasso-blue dark:hover:border-lasso-blue'

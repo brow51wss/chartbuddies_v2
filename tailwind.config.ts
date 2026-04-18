@@ -8,6 +8,13 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // AppHeader is z-app-header so MAR sticky chrome stays beneath it.
+      // All full-screen dialogs / scrims must use z-modal (above the header).
+      zIndex: {
+        'app-header': '10000001',
+        'app-header-dropdown': '10000002',
+        modal: '10100000',
+      },
       colors: {
         'lasso-navy': '#142F61',
         'lasso-teal': '#00799E',
