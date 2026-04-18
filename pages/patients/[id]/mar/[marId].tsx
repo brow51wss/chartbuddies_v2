@@ -713,6 +713,7 @@ export default function ViewMARForm() {
   const [showAddMedModal, setShowAddMedModal] = useState(false)
   const [showAddPRNModal, setShowAddPRNModal] = useState(false)
   const [showAddPRNRecordModal, setShowAddPRNRecordModal] = useState(false)
+  const showPrnRecordsSection = false // temporary: hide PRN Records section on MAR
   const [showManagePRNListModal, setShowManagePRNListModal] = useState(false)
   const [prnListDeleteTarget, setPrnListDeleteTarget] = useState<MARPRNMedication | null>(null)
   const [prnRecordDeleteTarget, setPrnRecordDeleteTarget] = useState<MARPRNRecord | null>(null)
@@ -5359,7 +5360,7 @@ export default function ViewMARForm() {
           </div>
 
           {/* PRN Records Section - same max-width as Patient info above */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mt-8">
+          <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mt-8 ${showPrnRecordsSection ? '' : 'hidden'}`}>
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
                   PRN Records
@@ -5914,7 +5915,7 @@ export default function ViewMARForm() {
               {printPages.map(({ chunk, dayRange, startIndex }, idx) =>
                 printTablePage(chunk, dayRange, `mar-page-${idx}-${dayRange}`, idx === printPages.length - 1 && prnRecords.length === 0, startIndex)
               )}
-              {prnRecords.length > 0 && (
+              {showPrnRecordsSection && prnRecords.length > 0 && (
                 <div style={{ pageBreakBefore: 'always' }} className="mt-6">
                   {printHeader}
                   <h2 className="text-xs font-bold text-gray-900 mb-2 mt-2">PRN Records</h2>
