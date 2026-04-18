@@ -230,6 +230,54 @@ These are from recent local/dev observations and prior troubleshooting. Treat as
 
 ---
 
+## 6a) Lasso product & release checklist (intake 2026-04-18)
+
+Sourced from partner notes / screenshots. Track here alongside §5 unless an item is duplicated—then keep one canonical row and cross-link.
+
+### Critical bugs — fix first
+
+- [ ] **Validation bypass:** Forms must **hard-stop** submit when required fields are incomplete (e.g. phone number missing a digit); no silent acceptance.
+- [ ] **Pop-up layering (MAR):** Modals/dropdowns must always render **above** sticky bars and chart chrome (z-index / stacking contexts).
+- [ ] **Progress Notes date bug:** Notes saving or displaying the **wrong calendar day** (e.g. 4/13 → 4/12); audit default date handling and timezone.
+
+### Pre-release cleanup (before going public)
+
+- [ ] **Remove temporary “original PRN records” table** used only for migration checking.
+- [ ] **Remove PRN from routine-meds dropdown** (cleanup missed earlier).
+- [ ] **Relabel ambiguous fields:** Vitals **Notes** → **Parameter** or **Vital Name**; **Edit Patient Details** → **Patient Details**; confirm **Substitute** vs **Secondary** caregiver wording everywhere.
+
+### New features to build
+
+- [ ] **PRN → Progress Notes:** Auto-log / sync when a PRN entry is completed (initials path). **Note:** Signed PRN → `progress_note_entries` work is tracked in §5 #6; this item covers any **remaining** gaps vs “initials = log” expectation.
+- [ ] **MAR duplication (exact-value copy):** Copy a finalized MAR into the next month with all values preserved.
+- [ ] **MAR search:** Find medications in long MAR lists without scrolling.
+- [ ] **UX design pass:** Engage UX for layout and labeling polish.
+
+### Compliance & distribution
+
+- [ ] **HIPAA review** if Lasso moves to **mobile / App Store** distribution (beyond browser).
+
+### Fides follow-ups
+
+- [ ] **Re-test on a laptop (not a phone)** — app not mobile-optimized yet; capture the exact inputs that failed and the failure mode.
+- [ ] **Add her medication entries** to patient records and continue end-to-end testing.
+
+### Open questions (captured answers — reopen if product changes)
+
+1. **Downloadable app vs browser link?** — *Current:* browser-based web app; a wrapped mobile build is possible but triggers HIPAA review (see **Compliance** above).
+2. **Will the MAR be very long for some patients?** — *Yes* — drives **MAR search**.
+3. **Open a new April MAR without duplicating March — retype everything?** — *For now, yes* until **MAR duplication** ships and forms are finalized/approved.
+
+### Confirmed design decisions (reference — no task unless regressed)
+
+- Lasso remains a **browser-based web app** (Gmail / QuickBooks Online–style positioning).
+- **No** automatic alphabetize on MAR; users reorder via drag handle; default order chronological by start date/hour.
+- **No** visible late-entry timestamps on MAR (inspection-friendly posture).
+- **Read-only inspection mode** is in place and requires a **password** to exit.
+- **Monthly progress notes:** weight change vs previous month’s weight (green = gain, negative = loss).
+
+---
+
 ## 7) Triage Checklist (Per Live Issue)
 
 For each live incident, capture:
@@ -303,5 +351,5 @@ Only after all P0/P1 live issues are closed:
 ## 12) Session Notes
 
 - Billing/e-commerce work is intentionally paused until live stability is restored.
-- Live homepage incidents: **§3** tracker + **§4** line-by-line actions. Product work: **§5** (ordered 1–8 + extended backlog). Dev observations: **§6**.
+- Live homepage incidents: **§3** tracker + **§4** line-by-line actions. Product work: **§5** (ordered 1–8 + extended backlog). Dev observations: **§6**. Partner checklist: **§6a** (2026-04-18).
 
