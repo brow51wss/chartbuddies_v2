@@ -586,6 +586,14 @@ export default function ViewMARForm() {
   /** On-screen MAR grid only; print always uses full `medications`. Multi-select: routine / vitals / PRN chart rows. */
   const [marTableCategoryVisible, setMarTableCategoryVisible] =
     useState<Record<MarTableCategory, boolean>>(MAR_TABLE_DEFAULT_VISIBILITY)
+  const [marMedSearchQuery, setMarMedSearchQuery] = useState('')
+  const [marMedSearchFocused, setMarMedSearchFocused] = useState(false)
+  const medSearchTrim = marMedSearchQuery.trim()
+  const medSearchLower = medSearchTrim.toLowerCase()
+  const hasActiveMedSearch = medSearchLower.length > 0
+  const vitalsSnapshotBeforeMarSearchRef = useRef<boolean | null>(null)
+  const marMedSearchWasActiveRef = useRef(false)
+
   const marTableShowFullChart =
     marTableCategoryVisible.routine_meds &&
     marTableCategoryVisible.vitals &&
@@ -597,11 +605,28 @@ export default function ViewMARForm() {
       return marTableCategoryVisible.routine_meds
     })
   }, [medications, marTableCategoryVisible])
+
+  /** Routine meds only (vitals excluded); narrowed by medication name search when active. */
+  const displayMedicationsForMarChart = useMemo(() => {
+    if (!hasActiveMedSearch) return displayMedications
+    const matching = new Set<string>()
+    for (const m of displayMedications) {
+      if (isMarVitalsMedicationRow(m)) continue
+      if ((m.medication_name || '').toLowerCase().includes(medSearchLower)) {
+        matching.add(getMarMedicationGroupKey(m))
+      }
+    }
+    return displayMedications.filter((m) => {
+      if (isMarVitalsMedicationRow(m)) return false
+      return matching.has(getMarMedicationGroupKey(m))
+    })
+  }, [displayMedications, hasActiveMedSearch, medSearchLower])
+
   /** First `<tr>` id per medication group — only these register as sortable (extended backlog #14). */
   const marSortableFirstRowIds = useMemo(() => {
     const ids: string[] = []
     let prevKey: string | null = null
-    for (const m of displayMedications) {
+    for (const m of displayMedicationsForMarChart) {
       const gk = getMarMedicationGroupKey(m)
       if (gk !== prevKey) {
         ids.push(m.id)
@@ -609,21 +634,66 @@ export default function ViewMARForm() {
       }
     }
     return ids
-  }, [displayMedications])
+  }, [displayMedicationsForMarChart])
   const [administrations, setAdministrations] = useState<{ [medId: string]: { [day: number]: MARAdministration } }>({})
   const [prnRecords, setPrnRecords] = useState<MARPRNRecord[]>([])
+  const prnRecordsForMarChart = useMemo(() => {
+    if (!hasActiveMedSearch) return prnRecords
+    return prnRecords.filter((p) => (p.medication || '').toLowerCase().includes(medSearchLower))
+  }, [prnRecords, hasActiveMedSearch, medSearchLower])
+
+  const marMedSearchSuggestions = useMemo(() => {
+    if (!medSearchLower) return [] as string[]
+    const out = new Set<string>()
+    for (const m of medications) {
+      if (isMarVitalsMedicationRow(m)) continue
+      const n = (m.medication_name || '').trim()
+      if (n && n.toLowerCase().includes(medSearchLower)) out.add(n)
+    }
+    for (const p of prnRecords) {
+      const n = (p.medication || '').trim()
+      if (n && n.toLowerCase().includes(medSearchLower)) out.add(n)
+    }
+    return Array.from(out)
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+      .slice(0, 20)
+  }, [medications, prnRecords, medSearchLower])
+
   /** Medication groups + optional PRN chart rows in on-screen order (All view = interleaved with saved `mar_chart_row_order`). */
   const marChartSegmentsForTable = useMemo((): MarChartSegment[] => {
     if (!marTableCategoryVisible.prn) {
-      return medGroupsInDisplayOrder(displayMedications)
+      return medGroupsInDisplayOrder(displayMedicationsForMarChart)
     }
     return buildMarChartSegments(
-      displayMedications,
-      prnRecords,
+      displayMedicationsForMarChart,
+      prnRecordsForMarChart,
       marForm?.mar_chart_row_order,
       true,
     )
-  }, [marTableCategoryVisible.prn, displayMedications, prnRecords, marForm?.mar_chart_row_order])
+  }, [marTableCategoryVisible.prn, displayMedicationsForMarChart, prnRecordsForMarChart, marForm?.mar_chart_row_order])
+
+  useEffect(() => {
+    const active = hasActiveMedSearch
+    const was = marMedSearchWasActiveRef.current
+    marMedSearchWasActiveRef.current = active
+    if (active && !was) {
+      setMarTableCategoryVisible((prev) => {
+        if (vitalsSnapshotBeforeMarSearchRef.current === null) {
+          vitalsSnapshotBeforeMarSearchRef.current = prev.vitals
+        }
+        if (!prev.vitals) return prev
+        return { ...prev, vitals: false }
+      })
+    } else if (!active && was) {
+      const restore = vitalsSnapshotBeforeMarSearchRef.current
+      vitalsSnapshotBeforeMarSearchRef.current = null
+      if (restore === null) return
+      setMarTableCategoryVisible((prev) => {
+        if (prev.vitals === restore) return prev
+        return { ...prev, vitals: restore }
+      })
+    }
+  }, [hasActiveMedSearch])
   const marUnifiedSortableIds = useMemo(
     () => marChartSegmentsForTable.map(segmentSortableId),
     [marChartSegmentsForTable],
@@ -670,7 +740,7 @@ export default function ViewMARForm() {
   }, [])
   const { isReadOnly } = useReadOnly()
   const readOnly = isReadOnly
-  const marRowReorderLocked = readOnly || !marTableShowFullChart
+  const marRowReorderLocked = readOnly || !marTableShowFullChart || hasActiveMedSearch
   // Always allow editing of day cells (unless read-only view)
   const [isEditingBase] = useState(true)
   const isEditing = isEditingBase && !readOnly
@@ -3695,7 +3765,7 @@ export default function ViewMARForm() {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">From your profile (assigned facility)</p>
                   </div>
                 </div>
-                <div className="mt-4 flex justify-between items-center">
+                <div className="mt-4 flex flex-col gap-3">
                   <div
                     className="flex flex-wrap items-center gap-2"
                     role="group"
@@ -3722,10 +3792,17 @@ export default function ViewMARForm() {
                     ] as const
                   ).map(({ id, label }) => {
                     const on = marTableCategoryVisible[id]
+                    const vitalsBlocked = id === 'vitals' && hasActiveMedSearch
                     return (
                       <button
                         key={id}
                         type="button"
+                        disabled={vitalsBlocked}
+                        title={
+                          vitalsBlocked
+                            ? 'Clear medication search to turn Vitals back on (vitals are not part of medication search).'
+                            : undefined
+                        }
                         onClick={() =>
                           setMarTableCategoryVisible((prev) => ({
                             ...prev,
@@ -3733,16 +3810,61 @@ export default function ViewMARForm() {
                           }))
                         }
                         className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                          on
-                            ? 'bg-lasso-teal text-white border-lasso-teal shadow-sm'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
+                          vitalsBlocked
+                            ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-500 border-gray-200 dark:border-gray-600'
+                            : on
+                              ? 'bg-lasso-teal text-white border-lasso-teal shadow-sm'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
                         }`}
                         aria-pressed={on}
+                        aria-disabled={vitalsBlocked}
                       >
                         {label}
                       </button>
                     )
-                  })}
+                  }                  )}
+                  </div>
+                  <div className="relative w-full max-w-md">
+                    <label htmlFor="mar-med-search" className="sr-only">
+                      Search medications on chart (routine and PRN rows)
+                    </label>
+                    <input
+                      id="mar-med-search"
+                      type="search"
+                      autoComplete="off"
+                      placeholder="Search medication (routine + PRN)…"
+                      value={marMedSearchQuery}
+                      onChange={(e) => setMarMedSearchQuery(e.target.value)}
+                      onFocus={() => setMarMedSearchFocused(true)}
+                      onBlur={() => {
+                        window.setTimeout(() => setMarMedSearchFocused(false), 180)
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                    />
+                    {marMedSearchFocused && marMedSearchSuggestions.length > 0 ? (
+                      <ul
+                        className="absolute left-0 right-0 top-full mt-1 max-h-52 overflow-y-auto rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg z-[120]"
+                        role="listbox"
+                        aria-label="Medication name suggestions"
+                      >
+                        {marMedSearchSuggestions.map((name) => (
+                          <li key={name} role="presentation">
+                            <button
+                              type="button"
+                              role="option"
+                              className="w-full text-left px-3 py-2 text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700"
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                setMarMedSearchQuery(name)
+                                setMarMedSearchFocused(false)
+                              }}
+                            >
+                              {name}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
                   {/* Hidden for now - will be re-enabled when PRN records are integrated into MAR chart
                   <button
@@ -3889,7 +4011,9 @@ export default function ViewMARForm() {
                             ? 'Select at least one category under Show (Routine meds, Vitals, or PRN).'
                             : medications.length === 0 && prnRecords.length === 0
                               ? 'No medications recorded. Click "+ Medication" to add one.'
-                              : 'Nothing matches the current Show filters. Turn on more categories or add medications / PRN records.'}
+                              : hasActiveMedSearch
+                                ? 'No routine or PRN rows match this medication search. Clear the search or try different text.'
+                                : 'Nothing matches the current Show filters. Turn on more categories or add medications / PRN records.'}
                         </td>
                       </tr>
                     ) : (() => {

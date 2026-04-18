@@ -251,7 +251,7 @@ Sourced from partner notes / screenshots. Track here alongside §5 unless an ite
 
 - [ ] **PRN → Progress Notes:** Auto-log / sync when a PRN entry is completed (initials path). **Note:** Signed PRN → `progress_note_entries` work is tracked in §5 #6; this item covers any **remaining** gaps vs “initials = log” expectation.
 - [ ] **MAR duplication (exact-value copy):** Copy a finalized MAR into the next month with all values preserved.
-- [ ] **MAR search:** Find medications in long MAR lists without scrolling.
+- [x] **MAR search:** Find medications in long MAR lists without scrolling. **Shipped** on MAR detail (`pages/patients/[id]/mar/[marId].tsx`): medication search (routine + PRN chart rows), autocomplete suggestions from existing names, **Show** chips still apply; Vitals auto-off while search active (see product notes in session).
 - [ ] **UX design pass:** Engage UX for layout and labeling polish.
 
 ### Compliance & distribution
