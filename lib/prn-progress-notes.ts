@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { formatTimeDisplay } from '../components/TimeInput'
 import type { MARPRNRecord } from '../types/mar'
+import { localTodayYMD, ymdFromDateInput } from './calendarDate'
 
 function marPrnHasDocumentedHour(record: MARPRNRecord): boolean {
   const h = record.hour
@@ -22,9 +23,9 @@ export function shouldSyncMarPrnRecordToProgressNotes(record: MARPRNRecord): boo
 
 /** YYYY-MM-DD for progress_note_entries.note_date */
 export function prnRecordNoteDate(record: MARPRNRecord): string {
-  const raw = (record.date || '').trim()
-  if (raw.length >= 10) return raw.slice(0, 10)
-  return new Date().toISOString().slice(0, 10)
+  const raw = ymdFromDateInput(record.date)
+  if (raw.length >= 10) return raw
+  return localTodayYMD()
 }
 
 export function formatPRNProgressNoteBody(record: MARPRNRecord): string {

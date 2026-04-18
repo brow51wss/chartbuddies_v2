@@ -7,10 +7,7 @@ import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
 import { PatientProfileFormFields, type PatientProfileFormValues } from '../components/PatientProfileFormFields'
 import { missingFieldsForPatientProfileWizardStep1 } from '../lib/patientProfileWizardValidation'
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
-}
+import { localTodayYMD } from '../lib/calendarDate'
 
 export default function Admissions() {
   const router = useRouter()
@@ -59,7 +56,7 @@ export default function Admissions() {
     if (!userProfile) return
     setFormData((prev) => {
       if (prev.dateOfAdmission) return prev
-      return { ...prev, dateOfAdmission: todayISO() }
+      return { ...prev, dateOfAdmission: localTodayYMD() }
     })
   }, [userProfile])
 
@@ -145,7 +142,7 @@ export default function Admissions() {
     lastName: '',
     dateOfBirth: '',
     sex: '',
-    dateOfAdmission: todayISO(),
+    dateOfAdmission: localTodayYMD(),
     streetAddress: '',
     city: '',
     state: '',

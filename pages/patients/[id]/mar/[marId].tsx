@@ -12,6 +12,7 @@ import {
   shouldSyncMarPrnRecordToProgressNotes,
   deleteLinkedProgressNoteForMarPrnRecordId,
 } from '../../../../lib/prn-progress-notes'
+import { formatCalendarDate, localTodayYMD, ymdFromDateInput } from '../../../../lib/calendarDate'
 import type { UserProfile } from '../../../../types/auth'
 
 const SIGNATURE_FONTS_LINK_ID = 'mar-signature-fonts-link'
@@ -1444,8 +1445,10 @@ export default function ViewMARForm() {
     options?: { refreshMode?: 'full' | 'prnOnly' },
   ) => {
     if (!userProfile || !marForm || !marFormId) return
+    const normalizedDate = ymdFromDateInput(record.date)
+    const normalizedStartDate = ymdFromDateInput(record.startDate)
 
-    if (!isPrnDateInMarMonth(record.date, marForm.month_year)) {
+    if (!isPrnDateInMarMonth(normalizedDate, marForm.month_year)) {
       setError('PRN date must fall within this MAR month.')
       setTimeout(() => setError(''), 5000)
       return
@@ -1461,8 +1464,8 @@ export default function ViewMARForm() {
         .from('mar_prn_records')
         .insert({
           mar_form_id: marFormId,
-          start_date: record.startDate,
-          date: record.date,
+          start_date: normalizedStartDate || null,
+          date: normalizedDate,
           hour: record.hour,
           initials: record.initials,
           medication: record.medication,
@@ -1876,7 +1879,7 @@ export default function ViewMARForm() {
     if (!dateStr || !monthYear?.trim()) return false
     const range = getMarMonthDateRangeISO(monthYear)
     if (!range) return false
-    const d = dateStr.includes('T') ? dateStr.slice(0, 10) : dateStr.slice(0, 10)
+    const d = ymdFromDateInput(dateStr)
     if (d.length < 10) return false
     return d >= range.min && d <= range.max
   }
@@ -1885,7 +1888,7 @@ export default function ViewMARForm() {
     if (!monthYear?.trim()) return dateStr
     const range = getMarMonthDateRangeISO(monthYear)
     if (!range) return dateStr
-    const d = dateStr.slice(0, 10)
+    const d = ymdFromDateInput(dateStr)
     if (d < range.min) return range.min
     if (d > range.max) return range.max
     return d
@@ -3358,13 +3361,13 @@ export default function ViewMARForm() {
             <td rowSpan={rowSpan} className="border border-gray-400 px-0.5 py-1.5 text-left align-top">
               <div className="font-semibold">Start</div>
               <div>
-                {new Date(med.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {formatCalendarDate(med.start_date, 'en-US', { month: 'short', day: 'numeric' })}
               </div>
               {med.stop_date && (
                 <div className="mt-1.5">
                   <div className="font-semibold">Stop</div>
                   <div>
-                    {new Date(med.stop_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {formatCalendarDate(med.stop_date, 'en-US', { month: 'short', day: 'numeric' })}
                   </div>
                 </div>
               )}
@@ -3547,7 +3550,7 @@ export default function ViewMARForm() {
           allergies={marForm?.allergies}
           recordNumber={marForm?.record_number}
           onEditPatient={readOnly ? undefined : () => void openMarEditPatientModal()}
-          editPatientLabel="Edit patient details"
+          editPatientLabel="Patient Details"
         />
 
         {/* Main Content - 95vw with min 1000px so the white MAR card uses almost the full screen */}
@@ -3927,11 +3930,11 @@ export default function ViewMARForm() {
                           const prnChartBg =
                             'bg-[#d8f0e0] dark:bg-[#14532d]/35 hover:brightness-[0.97] dark:hover:brightness-110'
                           const startLabel = template.start_date
-                            ? new Date(
-                                template.start_date.includes('T')
-                                  ? template.start_date
-                                  : `${template.start_date}T12:00:00`,
-                              ).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            ? formatCalendarDate(template.start_date, 'en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })
                             : '—'
                           const marDropLineColSpan = 3 + days.length
                           const prnSortableId = marPrnChartSortableIdFromGroupKey(seg.groupKey)
@@ -4701,9 +4704,9 @@ export default function ViewMARForm() {
                                 } border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]`}
                                 style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop, maxWidth: MAR_COL.startStop }}
                               >
-                              <div>Start: {new Date(med.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                              <div>Start: {formatCalendarDate(med.start_date, 'en-US', { month: 'short', day: 'numeric' })}</div>
                               {med.stop_date && (
-                                <div>Stop: {new Date(med.stop_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                                <div>Stop: {formatCalendarDate(med.stop_date, 'en-US', { month: 'short', day: 'numeric' })}</div>
                               )}
                             </td>
                             )}
@@ -4897,7 +4900,6 @@ export default function ViewMARForm() {
                                                 )}
                                                 <option value="DC">DC (Discontinued)</option>
                                                 <option value="NG">NG (Not Given)</option>
-                                                <option value="PRN">PRN (As Needed)</option>
                                                 <option value="H">H (Held)</option>
                                                 <option value="R">R (Refused)</option>
                                                 {customLegends.map(legend => (
@@ -5296,7 +5298,7 @@ export default function ViewMARForm() {
                           </td>
                           <td className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white select-none cursor-default">
                             {prn.start_date
-                              ? new Date(prn.start_date).toLocaleDateString('en-US', {
+                              ? formatCalendarDate(prn.start_date, 'en-US', {
                                   month: 'short',
                                   day: 'numeric',
                                   year: 'numeric',
@@ -5329,7 +5331,7 @@ export default function ViewMARForm() {
                                 <button type="button" onClick={() => handlePRNFieldCancel()} className="text-xs text-gray-500 hover:text-gray-700">✕</button>
                               </div>
                             ) : (
-                              new Date(prn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                              formatCalendarDate(prn.date, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                             )}
                           </td>
                           <td 
@@ -5805,8 +5807,8 @@ export default function ViewMARForm() {
                       {prnRecords.map((prn) => (
                         <tr key={prn.id}>
                           <td className="border border-gray-400 px-2 py-1.5">{prn.entry_number ?? '—'}</td>
-                          <td className="border border-gray-400 px-2 py-1.5">{prn.start_date ? new Date(prn.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
-                          <td className="border border-gray-400 px-2 py-1.5">{prn.date ? new Date(prn.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.start_date ? formatCalendarDate(prn.start_date, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
+                          <td className="border border-gray-400 px-2 py-1.5">{prn.date ? formatCalendarDate(prn.date, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
                           <td className="border border-gray-400 px-2 py-1.5">{prn.medication || '—'}</td>
                           <td className="border border-gray-400 px-2 py-1.5">{prn.dosage || '—'}</td>
                           <td className="border border-gray-400 px-2 py-1.5">{prn.reason || '—'}</td>
@@ -5946,7 +5948,7 @@ export default function ViewMARForm() {
                 setInsertPosition(null)
                 setEditingEntry(null)
               }}
-              defaultStartDate={new Date().toISOString().split('T')[0]}
+              defaultStartDate={localTodayYMD()}
               defaultHour=""
               defaultInitials={(() => {
                 // Generate initials from full_name if staff_initials not set
@@ -6115,7 +6117,7 @@ export default function ViewMARForm() {
                 }
               }}
               onCancel={() => setShowVitalSignsModal(false)}
-              defaultStartDate={new Date().toISOString().split('T')[0]}
+              defaultStartDate={localTodayYMD()}
               defaultHour=""
               defaultInitials={(() => {
                 // Generate initials from full_name if staff_initials not set
@@ -6165,7 +6167,7 @@ export default function ViewMARForm() {
                 }
               }}
               onCancel={() => setShowAddPRNModal(false)}
-              defaultDate={new Date().toISOString().split('T')[0]}
+              defaultDate={localTodayYMD()}
             />
           </div>
         </div>
@@ -6197,7 +6199,7 @@ export default function ViewMARForm() {
                 }
               }}
               onCancel={() => setShowAddPRNRecordModal(false)}
-              defaultDate={clampDateToMarMonth(new Date().toISOString().split('T')[0], marForm?.month_year)}
+              defaultDate={clampDateToMarMonth(localTodayYMD(), marForm?.month_year)}
               dateMin={getMarMonthDateRangeISO(marForm?.month_year || '')?.min}
               dateMax={getMarMonthDateRangeISO(marForm?.month_year || '')?.max}
               prnMedicationList={prnMedicationList}
@@ -6262,7 +6264,7 @@ export default function ViewMARForm() {
                           <td className="px-3 py-2 align-top max-w-[200px] break-words">{item.reason}</td>
                           <td className="px-3 py-2 align-top whitespace-nowrap">
                             {item.start_date
-                              ? new Date(item.start_date + 'T12:00:00').toLocaleDateString('en-US', {
+                              ? formatCalendarDate(item.start_date, 'en-US', {
                                   month: 'short',
                                   day: 'numeric',
                                   year: 'numeric',
@@ -6391,7 +6393,7 @@ export default function ViewMARForm() {
                 {prnRecordDeleteTarget.medication || 'this medication'}
               </strong>
               {prnRecordDeleteTarget.dosage ? ` (${prnRecordDeleteTarget.dosage})` : ''} on{' '}
-              {new Date(prnRecordDeleteTarget.date).toLocaleDateString('en-US', {
+              {formatCalendarDate(prnRecordDeleteTarget.date, 'en-US', {
                 month: 'short',
                 day: 'numeric',
                 year: 'numeric',
@@ -7639,7 +7641,7 @@ function AddPRNMedicationForm({
     setIsSubmitting(true)
     try {
       await onSubmit({
-        date: formData.date,
+        date: ymdFromDateInput(formData.date),
         medication: formData.medication,
         dosage: formData.dosage.trim() || null,
         reason: formData.reason
@@ -7781,7 +7783,7 @@ function AddPRNRecordForm({
       medication: selected.medication,
       dosage: selected.dosage || '',
       reason: selected.reason,
-      startDate: selected.start_date,
+      startDate: ymdFromDateInput(selected.start_date),
     }))
   }
 
@@ -7807,14 +7809,14 @@ function AddPRNRecordForm({
     setIsSubmitting(true)
     try {
       await onSubmit({
-        date: formData.date,
+        date: ymdFromDateInput(formData.date),
         hour: null,
         medication: formData.medication,
         dosage: formData.dosage.trim() || null,
         reason: formData.reason,
         result: null,
         initials: null,
-        startDate: formData.startDate || null
+        startDate: ymdFromDateInput(formData.startDate) || null
       })
       setFormData({
         date: defaultDate,

@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
 import { useReadOnly } from '../contexts/ReadOnlyContext'
 import type { UserProfile } from '../types/auth'
+import { formatCalendarDate } from '../lib/calendarDate'
 
 interface DeletedPatient {
   id: string
@@ -199,7 +200,7 @@ export default function DeletedPatientsPage() {
                           {patient.patient_name}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                          {new Date(patient.date_of_birth).toLocaleDateString()}
+                          {formatCalendarDate(patient.date_of_birth)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                           {new Date(patient.created_at).toLocaleDateString()}

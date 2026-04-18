@@ -10,6 +10,7 @@ import {
   type PatientProfileFormValues,
 } from '../../../../components/PatientProfileFormFields'
 import { supabase } from '../../../../lib/supabase'
+import { formatCalendarDate, localTodayYMD } from '../../../../lib/calendarDate'
 import { getCurrentUserProfile } from '../../../../lib/auth'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import { parsePatientNameParts, computeAgeFromISODate } from '../../../../lib/patientName'
@@ -276,10 +277,7 @@ export default function ProgressNotesPage() {
   const [message, setMessage] = useState('')
 
   // New entry being added (unsaved row)
-  const [newDate, setNewDate] = useState<string>(() => {
-    const d = new Date()
-    return d.toISOString().slice(0, 10)
-  })
+  const [newDate, setNewDate] = useState<string>(() => localTodayYMD())
   const [newNotes, setNewNotes] = useState('')
   // User must explicitly sign to confirm the note (saved signature is applied on "Sign")
   const [newNoteSigned, setNewNoteSigned] = useState(false)
@@ -638,7 +636,7 @@ export default function ProgressNotesPage() {
       (() => {
         const q = typeof router.query.month === 'string' ? router.query.month.trim() : null
         const key = parseMonthQuery(q)
-        return key ? `${key}-01` : new Date().toISOString().slice(0, 10)
+        return key ? `${key}-01` : localTodayYMD()
       })()
     )
     setNewNoteSigned(false)
@@ -895,7 +893,7 @@ export default function ProgressNotesPage() {
           sex={patient?.sex}
           recordNumber={patient?.record_number}
           onEditPatient={readOnly ? undefined : () => void openEditPatientModal()}
-          editPatientLabel="Edit patient details"
+          editPatientLabel="Patient Details"
         />
 
         <main className="no-print max-w-5xl mx-auto px-4 py-6">
@@ -1123,7 +1121,7 @@ export default function ProgressNotesPage() {
                   {mainEntries.map((entry) => (
                     <tr key={entry.id} className="border-t border-gray-200 dark:border-gray-600">
                       <td className="px-4 py-2 align-top text-sm text-gray-900 dark:text-white whitespace-nowrap">
-                        {new Date(entry.note_date).toLocaleDateString('en-US')}
+                        {formatCalendarDate(entry.note_date, 'en-US')}
                       </td>
                       <td className="px-4 py-2 align-top text-sm text-gray-900 dark:text-white whitespace-nowrap">
                         {physicianDisplayText(entry.physician_name)}
@@ -1774,7 +1772,7 @@ export default function ProgressNotesPage() {
               ) : (
                 allMainEntries.map((entry) => (
                   <tr key={entry.id}>
-                    <td className="border border-gray-400 px-3 py-2 whitespace-nowrap">{new Date(entry.note_date).toLocaleDateString('en-US')}</td>
+                    <td className="border border-gray-400 px-3 py-2 whitespace-nowrap">{formatCalendarDate(entry.note_date, 'en-US')}</td>
                     <td className="border border-gray-400 px-3 py-2 whitespace-nowrap align-top">{physicianDisplayText(entry.physician_name)}</td>
                     <td className="border border-gray-400 px-3 py-2 whitespace-pre-wrap align-top">{page1EntryNotesDisplay(entry)}</td>
                     <td className="border border-gray-400 px-3 py-2 align-top">

@@ -8,6 +8,7 @@ import { getCurrentUserProfile } from '../../../../lib/auth'
 import { ensureProgressNoteSummaryForMonth } from '../../../../lib/progress-notes'
 import type { Patient } from '../../../../types/auth'
 import type { MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns } from '../../../../types/mar'
+import { formatCalendarDate } from '../../../../lib/calendarDate'
 
 export default function NewMARForm() {
   const router = useRouter()
@@ -388,7 +389,7 @@ export default function NewMARForm() {
                   </label>
                   <input
                     type="text"
-                    value={new Date(patient.date_of_birth).toLocaleDateString()}
+                    value={formatCalendarDate(patient.date_of_birth)}
                     disabled
                     className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 dark:bg-gray-700 dark:text-white cursor-not-allowed"
                   />

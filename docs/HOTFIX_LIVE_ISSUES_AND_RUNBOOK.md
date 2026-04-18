@@ -118,7 +118,7 @@ Follow these in order. Do not start the next item until the current item is conf
 
 1. **[DONE]** Restore patient data editing (names/spelling) from dashboard; sync to MAR where applicable.
 2. **[DONE]** Show patient identity prominently on MAR (sticky bar; also **Progress Notes**).
-3. **[PENDING / MONITORING]** Medication date saves one day early — watch for repro.
+3. **[DONE]** Medication / MAR calendar dates and “today” defaults: fixed client-side **UTC-midnight** parsing of `YYYY-MM-DD` and **UTC `toISOString()` “today”** (`lib/calendarDate`, MAR grid active-day logic, PRN add paths, DOB display/age). Re-open only if a new repro appears on live after deploy.
 4. **[PENDING]** Multiple administration times per day for a single **vital** row.
 5. **[DONE]** PRN library + PRN records selection workflow (not free-typing every row).
 6. **[DONE]** PRN activity feeds **Progress Notes** (signed PRNs only): linked `progress_note_entries` row, sync on save/update; migrations **064**/**065** for column + backfill; PRN **date** constrained to MAR month.
@@ -133,7 +133,7 @@ Additional items from team notes. **Not** sequenced with §5 items 1–8 above; 
 
 1. **DONE** — Standardize **Progress Notes** labels: tab buttons **Notes & Addendum** / **Monthly Summary** (no “Page 1/2”); Monthly Summary screen/print title **MONTHLY SUMMARY**. Shared **PatientStickyBar**: **Name**, **DOB**, **Sex** labels (same accent as Record No.).
 2. **DONE** — Physician/APRN or Clinic: **+ Add** / **Add New** pattern; column + print use `physician_name` per note; **Existing notes** section has its own header row (Date / Physician/APRN or Clinic / Notes / Signature); TBD shows blank; debounced patient sync uses empty string (NOT NULL). PRN → Progress Notes: new sync omits **Initials** / **Documentation** lines (signature column is enough); UI strips legacy tail for `source_mar_prn_record_id` rows.
-3. Re-test MAR date-edit bug + cache hypothesis; second tester.
+3. **DONE** — MAR / calendar **date display and grid logic** aligned with §5 #3 fix (`parseLocalDateFromYMD` / `localTodayYMD` / `formatCalendarDate`). Optional: second tester in US timezones post-deploy.
 4. Multi-time vitals (same theme as task 4 above).
 5. **DONE** — **Linear** PRN UX (MAR PRN Records table): columns ordered **Entry # → Date → Medication → Dosage → Reason/Indication → Time → Result → Initials → Signature** (on-screen + print; print keeps **Note** last). **Rule 1:** if **Time** is not set, **Result** is disabled with same UX as **Initials** / **Signature** prerequisites (`Set Time first`, non-clickable, muted). Further linear nudges (modal order, extra copy) remain optional.
 6. **DONE** — **Prescription/start date** on PRN definitions shipped: `mar_prn_medications.start_date` (rename from `date_added`) and PRN record `start_date` support via migration **066**; MAR PRN flows read/write this field.
@@ -238,13 +238,14 @@ Sourced from partner notes / screenshots. Track here alongside §5 unless an ite
 
 - [ ] **Validation bypass:** Forms must **hard-stop** submit when required fields are incomplete (e.g. phone number missing a digit); no silent acceptance.
 - [ ] **Pop-up layering (MAR):** Modals/dropdowns must always render **above** sticky bars and chart chrome (z-index / stacking contexts).
-- [ ] **Progress Notes date bug:** Notes saving or displaying the **wrong calendar day** (e.g. 4/13 → 4/12); audit default date handling and timezone.
+- [x] **Progress Notes date bug:** Notes saving or displaying the **wrong calendar day** (e.g. 4/13 → 4/12); audit default date handling and timezone. **Addressed in code** with same `lib/calendarDate` approach as MAR (local `YYYY-MM-DD` parsing + local “today” for defaults); reopen if live repro after deploy.
 
 ### Pre-release cleanup (before going public)
 
 - [ ] **Remove temporary “original PRN records” table** used only for migration checking.
-- [ ] **Remove PRN from routine-meds dropdown** (cleanup missed earlier).
-- [ ] **Relabel ambiguous fields:** Vitals **Notes** → **Parameter** or **Vital Name**; **Edit Patient Details** → **Patient Details**; confirm **Substitute** vs **Secondary** caregiver wording everywhere.
+- [x] **Remove PRN from routine-meds dropdown** (cleanup missed earlier).
+- [x] **Edit Patient Details** → **Patient Details** (sticky bar link; `PatientStickyBar` default + MAR + Progress Notes).
+- [ ] **Relabel ambiguous fields — remaining:** Vitals **Notes** → **Parameter** or **Vital Name**; confirm **Substitute** vs **Secondary** caregiver wording everywhere.
 
 ### New features to build
 

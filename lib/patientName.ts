@@ -1,3 +1,5 @@
+import { parseLocalDateFromYMD } from './calendarDate'
+
 /** Split stored `patient_name` into parts for forms. */
 export function parsePatientNameParts(fullName: string) {
   const parts = fullName.trim().split(/\s+/).filter(Boolean)
@@ -13,8 +15,8 @@ export function parsePatientNameParts(fullName: string) {
 
 export function computeAgeFromISODate(dobIso: string): string {
   if (!dobIso) return ''
-  const birthDate = new Date(dobIso)
-  if (Number.isNaN(birthDate.getTime())) return ''
+  const birthDate = parseLocalDateFromYMD(dobIso)
+  if (!birthDate) return ''
   const today = new Date()
   let calculatedAge = today.getFullYear() - birthDate.getFullYear()
   const monthDiff = today.getMonth() - birthDate.getMonth()

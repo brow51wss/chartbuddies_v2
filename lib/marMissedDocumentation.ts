@@ -1,4 +1,5 @@
 import type { MARMedication, MARAdministration } from '../types/mar'
+import { parseLocalDateFromYMD } from './calendarDate'
 
 /**
  * True when this MAR row’s start/stop range includes the calendar day for the given MAR month column.
@@ -11,8 +12,9 @@ export function isMarRowActiveOnDayColumn(
   formMonth1Based: number
 ): boolean {
   const formMonthIndex = formMonth1Based - 1
-  const medStartDate = new Date(med.start_date)
-  const medStopDate = med.stop_date ? new Date(med.stop_date) : null
+  const medStartDate = parseLocalDateFromYMD(med.start_date)
+  const medStopDate = med.stop_date ? parseLocalDateFromYMD(med.stop_date) : null
+  if (!medStartDate) return false
   const startDayOfMonth = medStartDate.getDate()
   const isStartInFormMonth =
     medStartDate.getMonth() === formMonthIndex && medStartDate.getFullYear() === formYear

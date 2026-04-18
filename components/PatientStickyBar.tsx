@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { formatCalendarDate } from '../lib/calendarDate'
 
 interface PatientStickyBarProps {
   patientName?: string | null
@@ -24,9 +25,9 @@ export default function PatientStickyBar({
   allergies,
   className = '',
   onEditPatient,
-  editPatientLabel = 'Edit patient',
+  editPatientLabel = 'Patient Details',
 }: PatientStickyBarProps) {
-  const formattedDob = dateOfBirth ? new Date(dateOfBirth).toLocaleDateString() : '—'
+  const formattedDob = dateOfBirth ? formatCalendarDate(dateOfBirth) : '—'
   const [showAllergiesModal, setShowAllergiesModal] = useState(false)
   const normalizedAllergies = (allergies ?? '').trim() || 'None'
   const ALLERGY_PREVIEW_LIMIT = 38

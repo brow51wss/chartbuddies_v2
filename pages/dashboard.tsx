@@ -11,6 +11,7 @@ import type { UserProfile, Patient } from '../types/auth'
 import { parsePatientNameParts, computeAgeFromISODate } from '../lib/patientName'
 import { PatientProfileFormFields, type PatientProfileFormValues } from '../components/PatientProfileFormFields'
 import { missingFieldsForPatientProfileWizardStep1 } from '../lib/patientProfileWizardValidation'
+import { formatCalendarDate } from '../lib/calendarDate'
 
 type SortColumn = 'date_of_birth' | 'created_at' | 'first_name' | 'last_name' | null
 type SortDirection = 'asc' | 'desc'
@@ -665,7 +666,7 @@ export default function Dashboard() {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap sticky left-[192px] z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
                                 <div className="text-sm text-gray-600 dark:text-gray-400">
-                                  {new Date(patient.date_of_birth).toLocaleDateString()}
+                                  {formatCalendarDate(patient.date_of_birth)}
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
