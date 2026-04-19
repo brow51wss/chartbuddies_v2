@@ -55,6 +55,8 @@ export interface Patient {
   home_phone?: string | null
   email?: string | null
   admission_date?: string | null
+  /** Optional portrait (JPEG/PNG data URL or public URL) after migration 069. */
+  patient_photo?: string | null
   created_by: string
   created_at: string
   updated_at: string

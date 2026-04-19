@@ -6,6 +6,7 @@ import AppHeader from '../components/AppHeader'
 import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
 import { PatientProfileFormFields, type PatientProfileFormValues } from '../components/PatientProfileFormFields'
+import { PatientPhotoCaptureField } from '../components/PatientPhotoCaptureField'
 import { missingFieldsForPatientProfileWizardStep1 } from '../lib/patientProfileWizardValidation'
 import { localTodayYMD } from '../lib/calendarDate'
 
@@ -39,6 +40,7 @@ export default function Admissions() {
   const submitUnlockAtRef = useRef(0)
   const submitInFlightRef = useRef(false)
   const [duplicateWarning, setDuplicateWarning] = useState('')
+  const [admissionPatientPhoto, setAdmissionPatientPhoto] = useState<string | null>(null)
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -301,6 +303,9 @@ export default function Admissions() {
         email: formData.email?.trim() || null,
         admission_date: formData.dateOfAdmission || null,
       }
+      if (admissionPatientPhoto) {
+        row.patient_photo = admissionPatientPhoto
+      }
 
       const { data, error: insertError } = await supabase.from('patients').insert([row]).select()
 
@@ -327,6 +332,7 @@ export default function Admissions() {
 
       setSubmitMessage('Admission record saved successfully!')
       setFormData(emptyForm())
+      setAdmissionPatientPhoto(null)
       setAge('')
       setStep(1)
       setDuplicateWarning('')
@@ -423,15 +429,27 @@ export default function Admissions() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-10">
-                <PatientProfileFormFields
-                  values={formData as PatientProfileFormValues}
-                  onChange={handleInputChange}
-                  ageDisplay={age}
-                  mode={{ type: 'wizard', step }}
-                  disabled={isSubmitting}
-                  facilityDisplayName={resolvedFacilityName}
-                  showCompletionChecks
-                />
+                <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-10">
+                  <aside className="mx-auto shrink-0 lg:mx-0 lg:pt-1">
+                    <PatientPhotoCaptureField
+                      patientId={null}
+                      value={admissionPatientPhoto}
+                      onChange={setAdmissionPatientPhoto}
+                      disabled={isSubmitting}
+                    />
+                  </aside>
+                  <div className="min-w-0 flex-1">
+                    <PatientProfileFormFields
+                      values={formData as PatientProfileFormValues}
+                      onChange={handleInputChange}
+                      ageDisplay={age}
+                      mode={{ type: 'wizard', step }}
+                      disabled={isSubmitting}
+                      facilityDisplayName={resolvedFacilityName}
+                      showCompletionChecks
+                    />
+                  </div>
+                </div>
 
                 <div className="flex flex-wrap justify-end gap-4 pt-2">
                   {step === 2 && (
@@ -453,6 +471,7 @@ export default function Admissions() {
                     className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                     onClick={() => {
                       setFormData(emptyForm())
+                      setAdmissionPatientPhoto(null)
                       setAge('')
                       setStep(1)
                       submitUnlockAtRef.current = 0

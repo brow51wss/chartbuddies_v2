@@ -139,6 +139,7 @@ import {
   PatientProfileFormFields,
   type PatientProfileFormValues,
 } from '../../../../components/PatientProfileFormFields'
+import { PatientPhotoCaptureField } from '../../../../components/PatientPhotoCaptureField'
 import { parsePatientNameParts, computeAgeFromISODate } from '../../../../lib/patientName'
 import { missingFieldsForPatientProfileWizardStep1 } from '../../../../lib/patientProfileWizardValidation'
 import {
@@ -729,6 +730,7 @@ export default function ViewMARForm() {
   const [editPatientModalError, setEditPatientModalError] = useState('')
   const [editPatientStep, setEditPatientStep] = useState<1 | 2>(1)
   const [editPatientTouchedFields, setEditPatientTouchedFields] = useState<Partial<Record<keyof PatientProfileFormValues, boolean>>>({})
+  const [editPatientPhoto, setEditPatientPhoto] = useState<string | null>(null)
   const [showVitalSignsModal, setShowVitalSignsModal] = useState(false)
   const [editingCell, setEditingCell] = useState<{ medId: string; day: number } | null>(null)
   const [editingCellValue, setEditingCellValue] = useState<string>('') // Store the value being edited
@@ -808,6 +810,7 @@ export default function ViewMARForm() {
     setEditPatientLoading(false)
     setEditPatientStep(1)
     setEditPatientTouchedFields({})
+    setEditPatientPhoto(null)
   }, [])
 
   const closeMarEditPatientInfoModal = useCallback(() => {
@@ -859,6 +862,7 @@ export default function ViewMARForm() {
         physicianName: patient.physician_name || '',
         physicianPhone: patient.physician_phone || '',
       })
+      setEditPatientPhoto(patient.patient_photo ?? null)
       setEditPatientAge(computeAgeFromISODate(patient.date_of_birth?.slice(0, 10) || ''))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load patient'
@@ -942,6 +946,7 @@ export default function ViewMARForm() {
         home_phone: form.homePhone.trim() || null,
         email: form.email.trim() || null,
         admission_date: form.dateOfAdmission || null,
+        patient_photo: editPatientPhoto,
       }
 
       const { data: updatedPatient, error: patientError } = await supabase
@@ -6155,17 +6160,34 @@ export default function ViewMARForm() {
               {editPatientLoading ? (
                 <p className="text-sm text-gray-600 dark:text-gray-400">Loading patient…</p>
               ) : editPatientFormDraft ? (
-                <PatientProfileFormFields
-                  values={editPatientFormDraft}
-                  onChange={handleMarEditPatientInputChange}
-                  ageDisplay={editPatientAge}
-                  mode={{ type: 'wizard', step: editPatientStep }}
-                  disabled={editPatientSaving}
-                  recordNumber={marForm.record_number || ''}
-                  facilityDisplayName={facilityNameFromProfile}
-                  showCompletionChecks
-                  editedFields={editPatientTouchedFields}
-                />
+                <>
+                  <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+                    {marForm?.patient_id && (
+                      <aside className="mx-auto shrink-0 lg:mx-0 lg:pt-1">
+                        <PatientPhotoCaptureField
+                          patientId={marForm.patient_id}
+                          value={editPatientPhoto}
+                          onChange={setEditPatientPhoto}
+                          disabled={editPatientSaving}
+                          readOnly={readOnly}
+                        />
+                      </aside>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <PatientProfileFormFields
+                        values={editPatientFormDraft}
+                        onChange={handleMarEditPatientInputChange}
+                        ageDisplay={editPatientAge}
+                        mode={{ type: 'wizard', step: editPatientStep }}
+                        disabled={editPatientSaving}
+                        recordNumber={marForm.record_number || ''}
+                        facilityDisplayName={facilityNameFromProfile}
+                        showCompletionChecks
+                        editedFields={editPatientTouchedFields}
+                      />
+                    </div>
+                  </div>
+                </>
               ) : !editPatientModalError ? (
                 <p className="text-sm text-gray-600 dark:text-gray-400">Could not load patient record.</p>
               ) : null}

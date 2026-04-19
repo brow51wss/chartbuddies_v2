@@ -9,6 +9,7 @@ import {
   PatientProfileFormFields,
   type PatientProfileFormValues,
 } from '../../../../components/PatientProfileFormFields'
+import { PatientPhotoCaptureField } from '../../../../components/PatientPhotoCaptureField'
 import { supabase } from '../../../../lib/supabase'
 import { formatCalendarDate, localTodayYMD } from '../../../../lib/calendarDate'
 import { getCurrentUserProfile } from '../../../../lib/auth'
@@ -269,6 +270,7 @@ export default function ProgressNotesPage() {
   const [editPatientModalError, setEditPatientModalError] = useState('')
   const [editPatientStep, setEditPatientStep] = useState<1 | 2>(1)
   const [editPatientTouchedFields, setEditPatientTouchedFields] = useState<Partial<Record<keyof PatientProfileFormValues, boolean>>>({})
+  const [editPatientPhoto, setEditPatientPhoto] = useState<string | null>(null)
   const [selectedPhysician, setSelectedPhysician] = useState<string>('')
   const [customPhysician, setCustomPhysician] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -454,6 +456,7 @@ export default function ProgressNotesPage() {
     setEditPatientLoading(false)
     setEditPatientStep(1)
     setEditPatientTouchedFields({})
+    setEditPatientPhoto(null)
   }
 
   const closeEditPatientInfoModal = () => {
@@ -499,6 +502,7 @@ export default function ProgressNotesPage() {
         physicianName: loadedPatient.physician_name || '',
         physicianPhone: loadedPatient.physician_phone || '',
       })
+      setEditPatientPhoto(loadedPatient.patient_photo ?? null)
       setEditPatientAge(computeAgeFromISODate(loadedPatient.date_of_birth?.slice(0, 10) || ''))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load patient'
@@ -574,6 +578,7 @@ export default function ProgressNotesPage() {
         home_phone: form.homePhone.trim() || null,
         email: form.email.trim() || null,
         admission_date: form.dateOfAdmission || null,
+        patient_photo: editPatientPhoto,
         updated_at: new Date().toISOString(),
       }
 
@@ -1549,16 +1554,33 @@ export default function ProgressNotesPage() {
                 {editPatientLoading ? (
                   <p className="text-sm text-gray-600 dark:text-gray-300">Loading patient details...</p>
                 ) : editPatientFormDraft ? (
-                  <PatientProfileFormFields
-                    values={editPatientFormDraft}
-                    ageDisplay={editPatientAge}
-                    facilityDisplayName={facilityName}
-                    onChange={handleEditPatientInputChange}
-                    mode={{ type: 'wizard', step: editPatientStep }}
-                    showCompletionChecks
-                    editedFields={editPatientTouchedFields}
-                    disabled={editPatientSaving}
-                  />
+                  <>
+                    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+                      {patientId && typeof patientId === 'string' && (
+                        <aside className="mx-auto shrink-0 lg:mx-0 lg:pt-1">
+                          <PatientPhotoCaptureField
+                            patientId={patientId}
+                            value={editPatientPhoto}
+                            onChange={setEditPatientPhoto}
+                            disabled={editPatientSaving}
+                            readOnly={readOnly}
+                          />
+                        </aside>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <PatientProfileFormFields
+                          values={editPatientFormDraft}
+                          ageDisplay={editPatientAge}
+                          facilityDisplayName={facilityName}
+                          onChange={handleEditPatientInputChange}
+                          mode={{ type: 'wizard', step: editPatientStep }}
+                          showCompletionChecks
+                          editedFields={editPatientTouchedFields}
+                          disabled={editPatientSaving}
+                        />
+                      </div>
+                    </div>
+                  </>
                 ) : (
                   <p className="text-sm text-gray-600 dark:text-gray-300">
                     Patient details could not be loaded.

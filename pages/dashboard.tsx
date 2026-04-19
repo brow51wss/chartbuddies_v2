@@ -10,6 +10,7 @@ import { useReadOnly } from '../contexts/ReadOnlyContext'
 import type { UserProfile, Patient } from '../types/auth'
 import { parsePatientNameParts, computeAgeFromISODate } from '../lib/patientName'
 import { PatientProfileFormFields, type PatientProfileFormValues } from '../components/PatientProfileFormFields'
+import { PatientPhotoCaptureField } from '../components/PatientPhotoCaptureField'
 import { missingFieldsForPatientProfileWizardStep1 } from '../lib/patientProfileWizardValidation'
 import { formatCalendarDate } from '../lib/calendarDate'
 
@@ -49,6 +50,7 @@ export default function Dashboard() {
   const [showNameSortMenu, setShowNameSortMenu] = useState(false)
   const [editingPatientId, setEditingPatientId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EditPatientFormState | null>(null)
+  const [editPatientPhoto, setEditPatientPhoto] = useState<string | null>(null)
   const [editError, setEditError] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   const [editPatientAge, setEditPatientAge] = useState('')
@@ -365,6 +367,7 @@ export default function Dashboard() {
       physicianName: patient.physician_name || '',
       physicianPhone: patient.physician_phone || '',
     })
+    setEditPatientPhoto(patient.patient_photo ?? null)
     setEditPatientAge(computeAgeFromISODate(patient.date_of_birth?.slice(0, 10) || ''))
     setEditPatientStep(1)
     setEditTouchedFields({})
@@ -374,6 +377,7 @@ export default function Dashboard() {
     if (savingEdit) return
     setEditingPatientId(null)
     setEditForm(null)
+    setEditPatientPhoto(null)
     setEditError('')
     setEditPatientAge('')
     setEditPatientStep(1)
@@ -455,6 +459,7 @@ export default function Dashboard() {
         home_phone: editForm.homePhone.trim() || null,
         email: editForm.email.trim() || null,
         admission_date: editForm.dateOfAdmission || null,
+        patient_photo: editPatientPhoto,
       }
 
       const { data, error: updateError } = await supabase
@@ -935,17 +940,32 @@ export default function Dashboard() {
                       </div>
                     )}
 
-                    <PatientProfileFormFields
-                      values={editForm as PatientProfileFormValues}
-                      onChange={handleEditPatientInputChange}
-                      ageDisplay={editPatientAge}
-                      mode={{ type: 'wizard', step: editPatientStep }}
-                      disabled={savingEdit}
-                      recordNumber={patients.find((p) => p.id === editingPatientId)?.record_number || ''}
-                      facilityDisplayName={userFacilityName || null}
-                      showCompletionChecks
-                      editedFields={editTouchedFields}
-                    />
+                    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+                      {editForm && editingPatientId && (
+                        <aside className="mx-auto shrink-0 lg:mx-0 lg:pt-1">
+                          <PatientPhotoCaptureField
+                            patientId={editingPatientId}
+                            value={editPatientPhoto}
+                            onChange={setEditPatientPhoto}
+                            disabled={savingEdit}
+                            readOnly={isReadOnly}
+                          />
+                        </aside>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <PatientProfileFormFields
+                          values={editForm as PatientProfileFormValues}
+                          onChange={handleEditPatientInputChange}
+                          ageDisplay={editPatientAge}
+                          mode={{ type: 'wizard', step: editPatientStep }}
+                          disabled={savingEdit}
+                          recordNumber={patients.find((p) => p.id === editingPatientId)?.record_number || ''}
+                          facilityDisplayName={userFacilityName || null}
+                          showCompletionChecks
+                          editedFields={editTouchedFields}
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-end gap-2">

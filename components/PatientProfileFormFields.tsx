@@ -179,12 +179,12 @@ export function PatientProfileFormFields({
               </div>
 
               <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                  <div className="md:col-span-4">
+                <div className="grid grid-cols-1 gap-x-0 gap-y-4 md:grid-cols-[175px_minmax(10px,max-content)_150px_175px] md:items-start md:gap-x-[10px] md:gap-y-0">
+                  <div className="min-w-0 w-full md:w-[175px] md:max-w-[175px]">
                     <label htmlFor="pp-dateOfBirth" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Date of Birth (DOB)<span className="text-red-500 ml-0.5">*</span>
                     </label>
-                    <div className="relative">
+                    <div className="relative min-w-0 w-full overflow-x-clip">
                       <input
                         type="date"
                         id="pp-dateOfBirth"
@@ -192,12 +192,12 @@ export function PatientProfileFormFields({
                         value={v.dateOfBirth}
                         onChange={onChange}
                         required={mode.type === 'full'}
-                        className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''}`}
+                        className={`${patientProfileInputClass} min-w-0 w-full pr-8`}
                       />
                       <FieldCompleteCheck show={shouldShowCheck('dateOfBirth')} />
                     </div>
                   </div>
-                  <div className="md:col-span-2">
+                  <div className="min-w-0 w-full">
                     <label htmlFor="pp-age" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Age
                     </label>
@@ -206,11 +206,12 @@ export function PatientProfileFormFields({
                       name="age"
                       value={ageDisplay}
                       readOnly
-                      className={`${patientProfileInputClass} bg-gray-50 dark:bg-gray-600 cursor-not-allowed opacity-90`}
-                      placeholder="Auto-calculated"
+                      title="Auto-calculated from date of birth"
+                      className={`${patientProfileInputClass} block w-full min-w-[3.5ch] max-w-[3.75rem] bg-gray-50 text-center dark:bg-gray-600 cursor-not-allowed opacity-90`}
+                      placeholder="—"
                     />
                   </div>
-                  <div className="md:col-span-3">
+                  <div className="min-w-0 w-full md:w-[150px] md:max-w-[150px]">
                     <label htmlFor="pp-sex" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Sex<span className="text-red-500 ml-0.5">*</span>
                     </label>
@@ -221,7 +222,7 @@ export function PatientProfileFormFields({
                         value={v.sex}
                         onChange={onChange}
                         required={mode.type === 'full'}
-                        className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''}`}
+                        className={`${patientProfileInputClass} min-w-0 w-full ${showCompletionChecks ? 'pr-10' : ''}`}
                       >
                         <option value="">Legal Sex</option>
                         <option value="Male">Male</option>
@@ -231,11 +232,11 @@ export function PatientProfileFormFields({
                       <FieldCompleteCheck show={shouldShowCheck('sex')} rightClassName="right-8" />
                     </div>
                   </div>
-                  <div className="md:col-span-3">
+                  <div className="min-w-0 w-full md:w-[175px] md:max-w-[175px]">
                     <label htmlFor="pp-dateOfAdmission" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Date of Admission<span className="text-red-500 ml-0.5">*</span>
                     </label>
-                    <div className="relative">
+                    <div className="relative min-w-0 w-full overflow-x-clip">
                       <input
                         type="date"
                         id="pp-dateOfAdmission"
@@ -243,7 +244,7 @@ export function PatientProfileFormFields({
                         value={v.dateOfAdmission}
                         onChange={onChange}
                         required={mode.type === 'full'}
-                        className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''}`}
+                        className={`${patientProfileInputClass} min-w-0 w-full pr-8`}
                       />
                       <FieldCompleteCheck show={shouldShowCheck('dateOfAdmission')} />
                     </div>
