@@ -229,19 +229,29 @@ export default function PatientPhotoCapturePage() {
         <Head>
           <title>Confirm photo - Lasso</title>
         </Head>
-        <div className="min-h-screen flex flex-col items-center p-4 pb-8 bg-gray-900 text-white">
-          <h1 className="text-lg font-semibold mt-4 mb-1 text-center">Preview</h1>
-          {patientName && <p className="text-sm text-gray-400 mb-4 text-center">{patientName}</p>}
-          {previewDataUrl && (
-            <img src={previewDataUrl} alt="Captured preview" className="max-w-full max-h-[60vh] rounded-xl border border-gray-600 shadow-lg" />
+        <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-gray-900 px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-white">
+          <div className="shrink-0 space-y-0.5 text-center">
+            <h1 className="text-base font-semibold leading-tight">Preview</h1>
+            {patientName && <p className="truncate text-xs text-gray-400">{patientName}</p>}
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center py-1">
+            {previewDataUrl && (
+              <img
+                src={previewDataUrl}
+                alt="Captured preview"
+                className="max-h-full w-full max-w-md object-contain rounded-xl border border-gray-600 shadow-lg"
+              />
+            )}
+          </div>
+          {submitError && (
+            <p className="shrink-0 px-1 py-1 text-center text-xs text-red-300">{submitError}</p>
           )}
-          {submitError && <p className="mt-3 text-sm text-red-300 text-center">{submitError}</p>}
-          <div className="mt-6 flex flex-wrap gap-3 justify-center">
+          <div className="flex shrink-0 flex-wrap justify-center gap-2 pt-1">
             <button
               type="button"
               onClick={handleRetake}
               disabled={status === 'submitting'}
-              className="px-5 py-2.5 rounded-lg border border-gray-500 text-gray-200 hover:bg-gray-800 disabled:opacity-50"
+              className="rounded-lg border border-gray-500 px-4 py-2 text-sm text-gray-200 hover:bg-gray-800 disabled:opacity-50"
             >
               Retake
             </button>
@@ -249,7 +259,7 @@ export default function PatientPhotoCapturePage() {
               type="button"
               onClick={handleConfirm}
               disabled={status === 'submitting'}
-              className="px-5 py-2.5 rounded-lg bg-teal-600 text-white font-medium hover:bg-teal-500 disabled:opacity-50"
+              className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:opacity-50"
             >
               {status === 'submitting' ? 'Saving…' : 'Confirm'}
             </button>
@@ -264,35 +274,37 @@ export default function PatientPhotoCapturePage() {
       <Head>
         <title>Take patient photo - Lasso</title>
       </Head>
-      <div className="min-h-screen flex flex-col bg-gray-900 text-white p-4">
-        <h1 className="text-lg font-semibold text-center mt-2">Patient photo</h1>
-        {patientName && <p className="text-sm text-gray-400 text-center mt-1">{patientName}</p>}
-        <p className="text-xs text-gray-500 text-center mt-2 max-w-md mx-auto">
-          Align the patient within the frame. Corners mark the crop area.
-        </p>
+      <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-gray-900 px-3 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] text-white">
+        <div className="shrink-0 space-y-0.5 text-center">
+          <h1 className="text-base font-semibold leading-tight">Patient photo</h1>
+          {patientName && <p className="truncate px-1 text-xs text-gray-400">{patientName}</p>}
+          <p className="mx-auto max-w-md px-1 text-[10px] leading-snug text-gray-500">
+            Align within the frame. Teal corners show the crop area.
+          </p>
+        </div>
 
         {cameraError && (
-          <p className="mt-4 text-sm text-red-300 text-center max-w-md mx-auto">{cameraError}</p>
+          <p className="mt-1 shrink-0 px-1 text-center text-xs text-red-300">{cameraError}</p>
         )}
 
-        <div className="flex-1 flex items-center justify-center py-4">
-          <div className="relative w-full max-w-md aspect-[3/4] bg-black rounded-2xl overflow-hidden shadow-xl">
+        <div className="flex min-h-0 flex-1 items-center justify-center px-1 py-1">
+          <div className="relative mx-auto aspect-[3/4] h-full max-h-full w-auto max-w-full min-h-0 rounded-2xl bg-black shadow-xl ring-1 ring-white/10 sm:max-w-md">
             <video ref={videoRef} playsInline muted autoPlay className="absolute inset-0 h-full w-full object-cover" />
             {/* Corner guides */}
-            <div className="pointer-events-none absolute inset-5">
-              <div className="absolute left-0 top-0 h-14 w-14 rounded-tl-2xl border-l-4 border-t-4 border-teal-300 opacity-95 shadow-sm" />
-              <div className="absolute right-0 top-0 h-14 w-14 rounded-tr-2xl border-r-4 border-t-4 border-teal-300 opacity-95 shadow-sm" />
-              <div className="absolute bottom-0 left-0 h-14 w-14 rounded-bl-2xl border-b-4 border-l-4 border-teal-300 opacity-95 shadow-sm" />
-              <div className="absolute bottom-0 right-0 h-14 w-14 rounded-br-2xl border-b-4 border-r-4 border-teal-300 opacity-95 shadow-sm" />
+            <div className="pointer-events-none absolute inset-3 sm:inset-5">
+              <div className="absolute left-0 top-0 h-10 w-10 rounded-tl-2xl border-l-[3px] border-t-[3px] border-teal-300 opacity-95 sm:h-14 sm:w-14 sm:border-l-4 sm:border-t-4" />
+              <div className="absolute right-0 top-0 h-10 w-10 rounded-tr-2xl border-r-[3px] border-t-[3px] border-teal-300 opacity-95 sm:h-14 sm:w-14 sm:border-r-4 sm:border-t-4" />
+              <div className="absolute bottom-0 left-0 h-10 w-10 rounded-bl-2xl border-b-[3px] border-l-[3px] border-teal-300 opacity-95 sm:h-14 sm:w-14 sm:border-b-4 sm:border-l-4" />
+              <div className="absolute bottom-0 right-0 h-10 w-10 rounded-br-2xl border-b-[3px] border-r-[3px] border-teal-300 opacity-95 sm:h-14 sm:w-14 sm:border-b-4 sm:border-r-4" />
             </div>
           </div>
         </div>
 
-        <div className="pb-safe flex justify-center">
+        <div className="flex shrink-0 justify-center pt-1">
           <button
             type="button"
             onClick={handleCapture}
-            className="px-8 py-3 rounded-xl bg-teal-600 text-white font-semibold text-lg hover:bg-teal-500 shadow-lg"
+            className="rounded-xl bg-teal-600 px-6 py-2.5 text-base font-semibold text-white shadow-lg hover:bg-teal-500"
           >
             Take photo
           </button>
