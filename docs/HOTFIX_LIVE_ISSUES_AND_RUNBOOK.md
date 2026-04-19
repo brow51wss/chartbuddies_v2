@@ -119,7 +119,7 @@ Follow these in order. Do not start the next item until the current item is conf
 1. **[DONE]** Restore patient data editing (names/spelling) from dashboard; sync to MAR where applicable.
 2. **[DONE]** Show patient identity prominently on MAR (sticky bar; also **Progress Notes**).
 3. **[DONE]** Medication / MAR calendar dates and “today” defaults: fixed client-side **UTC-midnight** parsing of `YYYY-MM-DD` and **UTC `toISOString()` “today”** (`lib/calendarDate`, MAR grid active-day logic, PRN add paths, DOB display/age). Re-open only if a new repro appears on live after deploy.
-4. **[PENDING]** Multiple administration times per day for a single **vital** row.
+4. **[DONE]** Multiple administration times per day for a single **vital** row.
 5. **[DONE]** PRN library + PRN records selection workflow (not free-typing every row).
 6. **[DONE]** PRN activity feeds **Progress Notes** (signed PRNs only): linked `progress_note_entries` row, sync on save/update; migrations **064**/**065** for column + backfill; PRN **date** constrained to MAR month.
 7. **[DONE]** Stepwise PRN completion guidance (time → result → initials → sign).
@@ -134,15 +134,15 @@ Additional items from team notes. **Not** sequenced with §5 items 1–8 above; 
 1. **DONE** — Standardize **Progress Notes** labels: tab buttons **Notes & Addendum** / **Monthly Summary** (no “Page 1/2”); Monthly Summary screen/print title **MONTHLY SUMMARY**. Shared **PatientStickyBar**: **Name**, **DOB**, **Sex** labels (same accent as Record No.).
 2. **DONE** — Physician/APRN or Clinic: **+ Add** / **Add New** pattern; column + print use `physician_name` per note; **Existing notes** section has its own header row (Date / Physician/APRN or Clinic / Notes / Signature); TBD shows blank; debounced patient sync uses empty string (NOT NULL). PRN → Progress Notes: new sync omits **Initials** / **Documentation** lines (signature column is enough); UI strips legacy tail for `source_mar_prn_record_id` rows.
 3. **DONE** — MAR / calendar **date display and grid logic** aligned with §5 #3 fix (`parseLocalDateFromYMD` / `localTodayYMD` / `formatCalendarDate`). Optional: second tester in US timezones post-deploy.
-4. Multi-time vitals (same theme as task 4 above).
+4. **DONE** — Multi-time vitals (same theme as §5 #4).
 5. **DONE** — **Linear** PRN UX (MAR PRN Records table): columns ordered **Entry # → Date → Medication → Dosage → Reason/Indication → Time → Result → Initials → Signature** (on-screen + print; print keeps **Note** last). **Rule 1:** if **Time** is not set, **Result** is disabled with same UX as **Initials** / **Signature** prerequisites (`Set Time first`, non-clickable, muted). Further linear nudges (modal order, extra copy) remain optional.
 6. **DONE** — **Prescription/start date** on PRN definitions shipped: `mar_prn_medications.start_date` (rename from `date_added`) and PRN record `start_date` support via migration **066**; MAR PRN flows read/write this field.
-7. **Design change:** PRNs as **main MAR rows**, sortable like other rows.
-8. **Add above/below** row insertion for PRNs like meds/vitals.
-9. **Remove** separate PRN record section once integrated.
+7. **DONE** — PRNs as **main MAR rows**, sortable like other rows.
+8. **DONE** — **Add above/below** row insertion for PRNs like meds/vitals.
+9. **DONE** — **Remove** separate PRN record section once integrated (retired from MAR UI in favor of main-row PRN workflow).
 10. Auto PRN lines in Progress Notes (**done** — signed PRNs only; see §5 #6).
-11. **INCOMPLETE** — **MAR view filters (chips):** **All** / **Routine meds** / **Vitals** shipped on MAR detail (`marTableViewFilter`; PRN Records section always visible). Still needed: **PRNs only** (or equivalent) filter — **intentionally not built yet**; owner will explain rationale before implementation.
-12. **PRN refused** → document in Progress Notes, not as med admin.
+11. **DONE** — **MAR view filters (chips):** **All** / **Routine meds** / **Vitals** / **PRNs only** (or equivalent) on MAR detail (`marTableViewFilter`); behavior matches product sign-off.
+12. **DONE** — **PRN refused** → document in Progress Notes, not as med admin.
 13. **DONE** — How PRN auto-entries **sort vs. the full note timeline** was settled during **signed PRN → Progress Notes** sync work (§5 #6; `progress_note_entries` / `source_mar_prn_record_id`). No separate “decide” task remains.
 14. **DONE** — **MAR row reorder (DnD):** Only the **first `<tr>` of each medication group** is sortable; extra administration-time rows are plain `<tr>`s so drops occur **between whole groups**, not inside multi-time stacks. **`handleDragEnd`** inserts **before** or **after** the full target group (`targetGroupMeds.length`). Shared **`getMarMedicationGroupKey`**. Drop indicator + `DragOverlay` for multi-time groups. **Repair Table View** UI button removed (2026-03-29); group reorder + persisted `display_order` replace that workflow.
 
