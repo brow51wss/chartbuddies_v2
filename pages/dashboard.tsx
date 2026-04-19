@@ -11,6 +11,7 @@ import type { UserProfile, Patient } from '../types/auth'
 import { parsePatientNameParts, computeAgeFromISODate } from '../lib/patientName'
 import { PatientProfileFormFields, type PatientProfileFormValues } from '../components/PatientProfileFormFields'
 import { PatientPhotoCaptureField } from '../components/PatientPhotoCaptureField'
+import { PatientSummaryCard } from '../components/PatientSummaryCard'
 import { missingFieldsForPatientProfileWizardStep1 } from '../lib/patientProfileWizardValidation'
 import { formatCalendarDate } from '../lib/calendarDate'
 
@@ -42,11 +43,8 @@ export default function Dashboard() {
   const [message, setMessage] = useState('')
   const [sortColumn, setSortColumn] = useState<SortColumn>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
-  const [patientsView, setPatientsView] = useState<PatientsViewMode>(() => {
-    if (typeof window === 'undefined') return 'list'
-    const stored = window.localStorage.getItem(PATIENTS_VIEW_STORAGE_KEY)
-    return stored === 'cards' ? 'cards' : 'list'
-  })
+  const [patientsView, setPatientsView] = useState<PatientsViewMode>('cards')
+  const patientsViewPersistReadyRef = useRef(false)
   const [showNameSortMenu, setShowNameSortMenu] = useState(false)
   const [editingPatientId, setEditingPatientId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EditPatientFormState | null>(null)
@@ -78,7 +76,16 @@ export default function Dashboard() {
   }, [showNameSortMenu])
 
   useEffect(() => {
+    const stored = window.localStorage.getItem(PATIENTS_VIEW_STORAGE_KEY)
+    if (stored === 'list') setPatientsView('list')
+  }, [])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return
+    if (!patientsViewPersistReadyRef.current) {
+      patientsViewPersistReadyRef.current = true
+      return
+    }
     window.localStorage.setItem(PATIENTS_VIEW_STORAGE_KEY, patientsView)
   }, [patientsView])
 
@@ -595,6 +602,27 @@ export default function Dashboard() {
                   >
                     <button
                       type="button"
+                      onClick={() => setPatientsView('cards')}
+                      className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-md p-2 transition-colors ${
+                        patientsView === 'cards'
+                          ? 'bg-white text-lasso-navy shadow-sm dark:bg-gray-800 dark:text-white'
+                          : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                      }`}
+                      aria-pressed={patientsView === 'cards'}
+                      aria-label="Card view"
+                      title="Card view"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setPatientsView('list')}
                       className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-md p-2 transition-colors ${
                         patientsView === 'list'
@@ -615,27 +643,6 @@ export default function Dashboard() {
                         <circle cx="5" cy="6" r="1.25" fill="currentColor" stroke="none" />
                         <circle cx="5" cy="12" r="1.25" fill="currentColor" stroke="none" />
                         <circle cx="5" cy="18" r="1.25" fill="currentColor" stroke="none" />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPatientsView('cards')}
-                      className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-md p-2 transition-colors ${
-                        patientsView === 'cards'
-                          ? 'bg-white text-lasso-navy shadow-sm dark:bg-gray-800 dark:text-white'
-                          : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
-                      }`}
-                      aria-pressed={patientsView === 'cards'}
-                      aria-label="Card view"
-                      title="Card view"
-                    >
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
-                        />
                       </svg>
                     </button>
                   </div>
@@ -845,45 +852,13 @@ export default function Dashboard() {
                     <div className="p-4 sm:p-6">
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         {sortedPatients.map((patient) => (
-                          <div
+                          <PatientSummaryCard
                             key={patient.id}
-                            className="flex flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800/90"
-                          >
-                            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                              {patient.patient_name}
-                            </h3>
-                            <dl className="mt-3 flex-1 space-y-5 text-sm">
-                              <div>
-                                <dt className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                  Date of birth
-                                </dt>
-                                <dd className="mt-1 text-gray-800 dark:text-gray-200">
-                                  {formatCalendarDate(patient.date_of_birth)}
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                  Date added
-                                </dt>
-                                <dd className="mt-1 text-gray-800 dark:text-gray-200">
-                                  {formatCalendarDate(patient.created_at)}
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                  Diagnosis
-                                </dt>
-                                <dd className="mt-1 text-gray-800 dark:text-gray-200">
-                                  {patient.diagnosis || (
-                                    <span className="text-gray-400 dark:text-gray-500 italic">N/A</span>
-                                  )}
-                                </dd>
-                              </div>
-                            </dl>
-                            <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-700">
-                              {renderPatientActions(patient)}
-                            </div>
-                          </div>
+                            patient={patient}
+                            nameHeading="h3"
+                            className="transition-shadow hover:shadow-md"
+                            footer={renderPatientActions(patient)}
+                          />
                         ))}
                       </div>
                     </div>

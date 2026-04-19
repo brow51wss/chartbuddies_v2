@@ -7,6 +7,7 @@ import AppHeader from '../../../components/AppHeader'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../lib/auth'
 import type { Patient } from '../../../types/auth'
+import { PatientSummaryCard } from '../../../components/PatientSummaryCard'
 
 interface EHRModule {
   id: string
@@ -258,95 +259,104 @@ export default function PatientHub() {
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-6">
             Select a module to access records and documentation for this patient
           </p>
-          <div className="mt-8 bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowActivityStatus((prev) => !prev)}
-              className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
-              aria-expanded={showActivityStatus}
-              aria-controls="activity-status-panel"
-            >
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Activity Status</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Quick per-module status for this patient.
-                </p>
-              </div>
-              <svg
-                className={`w-5 h-5 text-gray-500 dark:text-gray-300 transition-transform ${showActivityStatus ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] lg:items-start">
+            <PatientSummaryCard
+              as="section"
+              aria-label="Patient details"
+              patient={patient}
+              showPatientName={false}
+            />
+
+            <div className="min-w-0 bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowActivityStatus((prev) => !prev)}
+                className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
+                aria-expanded={showActivityStatus}
+                aria-controls="activity-status-panel"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            {showActivityStatus && (
-              <div
-                id="activity-status-panel"
-                className="border-t border-gray-200 dark:border-gray-700 px-4 py-6 sm:px-6"
-              >
-                {activityRows.length === 0 ? (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 py-1">
-                    No recent MAR or Progress Notes activity to show yet.
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Activity Status</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Quick per-module status for this patient.
                   </p>
-                ) : (
-                  <div className="overflow-x-auto pb-1">
-                    <ul className="relative z-[1] m-0 flex min-w-min list-none flex-row items-start gap-0 px-1 py-2">
-                      {activityRows.map((row, index) => {
-                        const actionAvailable = row.moduleId === 'mar' || row.moduleId === 'progress'
-                        const isFirst = index === 0
-                        const isLast = index === activityRows.length - 1
-                        return (
-                          <li
-                            key={row.moduleId}
-                            className="flex w-[min(280px,calc(100vw-3rem))] shrink-0 flex-col items-center px-3 sm:w-72 sm:px-4"
-                          >
-                            {/* Bleed past horizontal padding so line segments meet between columns */}
-                            <div className="mb-3 flex w-[calc(100%+1.5rem)] max-w-none items-center -mx-3 sm:w-[calc(100%+2rem)] sm:-mx-4">
-                              <div
-                                className={`h-0.5 min-h-[2px] flex-1 rounded-full ${isFirst ? 'bg-transparent' : 'bg-gray-300 dark:bg-gray-600'}`}
-                                aria-hidden
-                              />
-                              <div
-                                className="mx-1 h-4 w-4 shrink-0 rounded-full border-4 border-white bg-lasso-teal shadow-md ring-1 ring-gray-200 dark:border-gray-800 dark:ring-gray-600"
-                                aria-hidden
-                              />
-                              <div
-                                className={`h-0.5 min-h-[2px] flex-1 rounded-full ${isLast ? 'bg-transparent' : 'bg-gray-300 dark:bg-gray-600'}`}
-                                aria-hidden
-                              />
-                            </div>
-                            <div className="w-full rounded-lg border border-gray-200 bg-gray-50/90 p-4 text-center shadow-sm dark:border-gray-600 dark:bg-gray-900/50">
-                              <h3 className="text-sm font-semibold leading-snug text-gray-900 dark:text-white">
-                                {row.moduleName}
-                              </h3>
-                              <p className="mt-2 text-xs leading-snug text-gray-600 dark:text-gray-400">{row.statusLabel}</p>
-                              <p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500">
-                                Last activity
-                              </p>
-                              <p className="mt-0.5 text-xs font-medium text-gray-800 dark:text-gray-200">{row.lastActivityLabel}</p>
-                              <div className="mt-4">
-                                {actionAvailable && row.href ? (
-                                  <Link
-                                    href={row.href}
-                                    className="text-sm font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue"
-                                  >
-                                    Open
-                                  </Link>
-                                ) : (
-                                  <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
-                                )}
+                </div>
+                <svg
+                  className={`w-5 h-5 text-gray-500 dark:text-gray-300 transition-transform shrink-0 ml-2 ${showActivityStatus ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showActivityStatus && (
+                <div
+                  id="activity-status-panel"
+                  className="border-t border-gray-200 dark:border-gray-700 px-4 py-6 sm:px-6"
+                >
+                  {activityRows.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 py-1">
+                      No recent MAR or Progress Notes activity to show yet.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto pb-1">
+                      <ul className="relative z-[1] m-0 flex min-w-min list-none flex-row items-start gap-0 px-1 py-2">
+                        {activityRows.map((row, index) => {
+                          const actionAvailable = row.moduleId === 'mar' || row.moduleId === 'progress'
+                          const isFirst = index === 0
+                          const isLast = index === activityRows.length - 1
+                          return (
+                            <li
+                              key={row.moduleId}
+                              className="flex w-[min(280px,calc(100vw-3rem))] shrink-0 flex-col items-center px-3 sm:w-72 sm:px-4"
+                            >
+                              {/* Bleed past horizontal padding so line segments meet between columns */}
+                              <div className="mb-3 flex w-[calc(100%+1.5rem)] max-w-none items-center -mx-3 sm:w-[calc(100%+2rem)] sm:-mx-4">
+                                <div
+                                  className={`h-0.5 min-h-[2px] flex-1 rounded-full ${isFirst ? 'bg-transparent' : 'bg-gray-300 dark:bg-gray-600'}`}
+                                  aria-hidden
+                                />
+                                <div
+                                  className="mx-1 h-4 w-4 shrink-0 rounded-full border-4 border-white bg-lasso-teal shadow-md ring-1 ring-gray-200 dark:border-gray-800 dark:ring-gray-600"
+                                  aria-hidden
+                                />
+                                <div
+                                  className={`h-0.5 min-h-[2px] flex-1 rounded-full ${isLast ? 'bg-transparent' : 'bg-gray-300 dark:bg-gray-600'}`}
+                                  aria-hidden
+                                />
                               </div>
-                            </div>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
+                              <div className="w-full rounded-lg border border-gray-200 bg-gray-50/90 p-4 text-center shadow-sm dark:border-gray-600 dark:bg-gray-900/50">
+                                <h3 className="text-sm font-semibold leading-snug text-gray-900 dark:text-white">
+                                  {row.moduleName}
+                                </h3>
+                                <p className="mt-2 text-xs leading-snug text-gray-600 dark:text-gray-400">{row.statusLabel}</p>
+                                <p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500">
+                                  Last activity
+                                </p>
+                                <p className="mt-0.5 text-xs font-medium text-gray-800 dark:text-gray-200">{row.lastActivityLabel}</p>
+                                <div className="mt-4">
+                                  {actionAvailable && row.href ? (
+                                    <Link
+                                      href={row.href}
+                                      className="text-sm font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue"
+                                    >
+                                      Open
+                                    </Link>
+                                  ) : (
+                                    <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                                  )}
+                                </div>
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">

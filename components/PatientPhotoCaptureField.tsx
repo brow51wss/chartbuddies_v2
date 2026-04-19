@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { compressImageFileToDataUrl } from '../lib/compressImageToDataUrl'
+import { PATIENT_SUMMARY_PHOTO_PLACEHOLDER } from './PatientSummaryCard'
 
 type Props = {
   /**
@@ -132,7 +133,11 @@ export function PatientPhotoCaptureField({ patientId, value, onChange, disabled 
           {value && (value.startsWith('data:image') || value.startsWith('http')) ? (
             <img src={value} alt="Patient" className="h-full w-full object-cover" />
           ) : (
-            <span className="px-2 text-center text-xs text-gray-400">No photo</span>
+            <img
+              src={PATIENT_SUMMARY_PHOTO_PLACEHOLDER}
+              alt=""
+              className="h-full w-full object-cover"
+            />
           )}
         </div>
       </div>
