@@ -188,6 +188,74 @@ Captured from product review notes/screenshots; default status is **TODO** unles
 
 ---
 
+### MAR & Patient Binder — team intake (2026-05-12)
+
+Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 6, 2026). **Target rollout:** June 6, 2026. Items below were **not** already tracked above (skipped: multi-form print refinement → **Navigation & UI Polish #2**; hover legend → **#4**; MAR search scope question only partially overlaps shipped MAR search; PRN → Progress Notes / initials path → **§6a**; monthly MAR duplication build → **§6a**; field validation hard-stop → **§6a Critical**; phone masking → admissions **DONE**).
+
+#### Critical / pre-launch
+
+1. **TODO** — **Printed MAR must not include Progress Notes body**; notes print via their own flow (separate from “refine multi-form print view”).
+2. **TODO** — **Read-only inspection mode:** verify **all** command actions are hidden (delete, add, plus notes, etc.) before launch.
+3. **TODO** — **Finalize user-role definitions** before rollout (who can do what across binder / MAR / notes).
+
+#### Rollout / operations (non-code)
+
+1. **TODO** — Schedule and run follow-up meeting (per May 6 plan) to verify finalized launch items.
+2. **TODO** — Communicate June 6 rollout timeline to the team.
+
+#### Data validation & account UX
+
+1. **TODO** — Strengthen validation for **email, state, and address** (invalid values currently accepted); complements §6a “hard-stop” / required-field work.
+2. **TODO** — **Forgot password** entry point below the read-only mode password prompt (recovery path when locked for inspection).
+3. **TODO** — **Physician selection:** enforce required patient/context fields **before** physician entry is allowed (selection-order bug).
+
+#### MAR layout & UI
+
+1. **TODO** — **MAR grid:** show **3 days of columns** at a time (reduce crowding); keep **15-column** maximum per product rule.
+2. **TODO** — **On-screen** small **color key** for MAR status colors (persistent key, not only hover); see also Navigation & UI Polish #4 for hover legend.
+3. **TODO** — **ADA-compliant contrast** and branding fixes from automated UX test findings.
+4. **TODO** — **In-page patient edit (modal/pop-up):** auto-advance to step 2 and **focus/highlight** the editable field.
+5. **TODO** — Show **validation errors adjacent to inputs** (avoid scrolling to discover errors).
+
+#### PRN & MAR legend
+
+1. **TODO** — Rename PRN control label to **Manage PRN** (or equivalent final copy).
+2. **TODO** — **Simplify MAR legend** to agreed defaults (**DC**, **W** Withheld, **R** Refused); rename **Held → Withheld**; **require notes** for Withheld and Refused; remove erroneous **Not Given** legend entry if present.
+3. **TODO** — **Refused** flows: ensure Progress Notes show an explicit **Refused** label (not only unstructured note text) where product expects it.
+4. **TODO** — **PRN list** reflects add/edit/delete **in real time** without stale UI.
+5. **TODO** — **PRN default time = 12:00** (still editable via time control); confirm with caregivers.
+6. **TODO (product)** — Caregiver-facing **PRN/legend wording** pass (owner: finalize labels and removals/consolidations).
+
+#### Past-month MARs & duplication (policy + build)
+
+1. **TODO** — **Re-enable editing** of **prior months’** MARs (if currently restricted by policy/UX).
+2. **TODO** — **Warn on past-month edits:** edits to historical months **do not** auto-populate future months.
+3. **TODO** — **Back-dated documentation:** for applicable entries, Progress Notes record **date only** (no time), with **PRNs** as the agreed exception.
+4. **TODO** — **Pre-duplication hygiene:** clean up misdocumented rows before copying a month.
+5. **TODO** — **Define monthly MAR duplication rules** (what carries: PRNs, layout, legend, etc.) — pairs with §6a **MAR duplication** feature.
+
+#### Deleted records / retention
+
+1. **TODO** — **Configurable purge** for deleted patients (e.g. proposed **7-year** retention); legal/compliance sign-off.
+2. **TODO** — **Search + sort** for deleted patients (parity with active list patterns).
+3. **TODO** — **Strict delete/retention checks** for **custom legend** data before allowing deletion.
+
+#### Testing & QA (team checklist)
+
+1. **TODO** — Repro **missing-note** bug: medication with **3 administration times** × **NG / DC / H / R** dropdowns (document findings).
+2. **TODO** — After **3-day column** change: re-check dropdown behavior and note overflow.
+3. **TODO** — Standing: **2–3 hours/week** hands-on across meds / PRN / vitals; paired **break-test** of med + PRN flows; **consolidated bug/usability list** on a fixed cadence.
+4. **NOTE** — Team doc excluded **print** and **duplicate-the-mark** from a short cycle; print remains in Navigation #2 + Critical above; duplication in §6a + Past-month section.
+
+#### Open questions (product)
+
+1. Should **status pop-ups** apply to **all** initials cells or **PRN-only**?
+2. Should MAR support **one day per printed page** for readability?
+3. Is **12:00 PRN default** acceptable to all caregivers?
+4. Should **MAR search** include **vitals** or stay **medications-focused**?
+
+---
+
 ## 6) Known/Observed Errors From Current Session (Reference)
 
 These are from recent local/dev observations and prior troubleshooting. Treat as reference until confirmed on live.
@@ -352,5 +420,5 @@ Only after all P0/P1 live issues are closed:
 ## 12) Session Notes
 
 - Billing/e-commerce work is intentionally paused until live stability is restored.
-- Live homepage incidents: **§3** tracker + **§4** line-by-line actions. Product work: **§5** (ordered 1–8 + extended backlog). Dev observations: **§6**. Partner checklist: **§6a** (2026-04-18).
+- Live homepage incidents: **§3** tracker + **§4** line-by-line actions. Product work: **§5** (ordered 1–8 + extended backlog + **MAR & Patient Binder — team intake 2026-05-12**). Dev observations: **§6**. Partner checklist: **§6a** (2026-04-18).
 
