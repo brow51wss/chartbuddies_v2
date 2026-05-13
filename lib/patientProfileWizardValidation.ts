@@ -11,6 +11,7 @@ const PATIENT_PROFILE_ERROR_FIELD_ORDER: (keyof PatientProfileFormValues)[] = [
   'streetAddress',
   'city',
   'state',
+  'zipCode',
   'homePhone',
   'email',
   'physicianName',
@@ -25,11 +26,28 @@ function isEmailLike(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 }
 
+const US_STATE_CODES = new Set([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+  'DC',
+])
+
+export const DEFAULT_PATIENT_STATE = 'HI'
+
 export function formatPatientPhoneInput(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 10)
   if (digits.length <= 3) return digits
   if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+}
+
+export function formatPatientZipInput(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 9)
+  if (digits.length <= 5) return digits
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`
 }
 
 /** Contact fields that must be valid before a patient can be added or edited. */
@@ -52,6 +70,13 @@ export function validatePatientContactFields(v: PatientProfileFormValues): Patie
     errors.physicianPhone = 'Physician phone must contain 10 digits, or leave it blank.'
   }
 
+  if (v.zipCode.trim()) {
+    const zipDigits = digitCount(v.zipCode)
+    if (zipDigits !== 5 && zipDigits !== 9) {
+      errors.zipCode = 'ZIP code must contain 5 or 9 digits, or leave it blank.'
+    }
+  }
+
   return errors
 }
 
@@ -64,7 +89,12 @@ export function validatePatientProfileWizardStep1Fields(v: PatientProfileFormVal
   if (!v.dateOfBirth) errors.dateOfBirth = 'Date of birth is required.'
   if (!v.sex) errors.sex = 'Sex is required.'
   if (!v.dateOfAdmission) errors.dateOfAdmission = 'Date of admission is required.'
-  if (!v.state.trim()) errors.state = 'State is required.'
+  const state = v.state.trim().toUpperCase()
+  if (!state) {
+    errors.state = 'State is required.'
+  } else if (!/^[A-Z]{2}$/.test(state) || !US_STATE_CODES.has(state)) {
+    errors.state = 'State must be a valid 2-letter US state code.'
+  }
 
   return { ...errors, ...validatePatientContactFields(v) }
 }

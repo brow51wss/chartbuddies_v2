@@ -14,7 +14,9 @@ import {
 } from '../components/PatientProfileFormFields'
 import { PatientPhotoCaptureField } from '../components/PatientPhotoCaptureField'
 import {
+  DEFAULT_PATIENT_STATE,
   formatPatientPhoneInput,
+  formatPatientZipInput,
   patientProfileFieldErrorMessages,
   validatePatientProfileWizardStep1Fields,
   type PatientProfileFieldErrors,
@@ -35,7 +37,8 @@ export default function Admissions() {
     dateOfAdmission: '',
     streetAddress: '',
     city: '',
-    state: '',
+    state: DEFAULT_PATIENT_STATE,
+    zipCode: '',
     homePhone: '',
     email: '',
     diagnosis: '',
@@ -157,7 +160,9 @@ export default function Admissions() {
     const { name, value } = e.target
     const nextValue = name === 'homePhone' || name === 'physicianPhone'
       ? formatPatientPhoneInput(value)
-      : value
+      : name === 'zipCode'
+        ? formatPatientZipInput(value)
+        : value
     setFormData((prev) => ({ ...prev, [name]: nextValue }))
     setFieldErrors((prev) => {
       const field = name as keyof PatientProfileFormValues
@@ -193,7 +198,8 @@ export default function Admissions() {
     dateOfAdmission: localTodayYMD(),
     streetAddress: '',
     city: '',
-    state: '',
+    state: DEFAULT_PATIENT_STATE,
+    zipCode: '',
     homePhone: '',
     email: '',
     diagnosis: '',
@@ -355,7 +361,8 @@ export default function Admissions() {
         created_by: activeProfile.id,
         street_address: formData.streetAddress?.trim() || null,
         city: formData.city?.trim() || null,
-        state: formData.state?.trim() || null,
+        state: formData.state?.trim().toUpperCase() || null,
+        zip_code: formData.zipCode?.trim() || null,
         home_phone: formData.homePhone?.trim() || null,
         email: formData.email?.trim() || null,
         admission_date: formData.dateOfAdmission || null,

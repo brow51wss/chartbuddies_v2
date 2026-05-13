@@ -13,6 +13,7 @@ export type PatientProfileFormValues = {
   streetAddress: string
   city: string
   state: string
+  zipCode: string
   homePhone: string
   email: string
   diagnosis: string
@@ -32,6 +33,7 @@ export const PATIENT_PROFILE_FIELD_IDS: Record<keyof PatientProfileFormValues, s
   streetAddress: 'pp-streetAddress',
   city: 'pp-city',
   state: 'pp-state',
+  zipCode: 'pp-zipCode',
   homePhone: 'pp-homePhone',
   email: 'pp-email',
   diagnosis: 'pp-diagnosis',
@@ -51,6 +53,7 @@ export const PATIENT_PROFILE_FIELD_STEPS: Partial<Record<keyof PatientProfileFor
   streetAddress: 1,
   city: 1,
   state: 1,
+  zipCode: 1,
   homePhone: 1,
   email: 1,
   diagnosis: 2,
@@ -70,6 +73,7 @@ const PATIENT_PROFILE_FIELD_LABELS: Record<keyof PatientProfileFormValues, strin
   streetAddress: 'Street address',
   city: 'City',
   state: 'State',
+  zipCode: 'ZIP code',
   homePhone: 'Home phone',
   email: 'Email',
   diagnosis: 'Diagnosis',
@@ -86,10 +90,22 @@ const PATIENT_PROFILE_FIELD_ORDER: (keyof PatientProfileFormValues)[] = [
   'sex',
   'dateOfAdmission',
   'state',
+  'zipCode',
   'homePhone',
   'email',
   'physicianPhone',
 ]
+
+const US_STATE_CODES = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+  'DC',
+]
+
+const US_STATE_CODE_SET = new Set(US_STATE_CODES)
 
 export function PatientProfileFieldErrorChips({
   fieldErrors,
@@ -180,6 +196,10 @@ export function PatientProfileFormFields({
   const hasValue = (value: string) => value.trim().length > 0
   const digitCount = (value: string) => value.replace(/\D/g, '').length
   const isEmailLike = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+  const isZipLike = (value: string) => {
+    const digits = value.replace(/\D/g, '')
+    return digits.length === 5 || digits.length === 9
+  }
   const minLen = (value: string, n: number) => value.trim().length >= n
   const isComplete = (field: keyof PatientProfileFormValues) => {
     const value = v[field] ?? ''
@@ -194,7 +214,9 @@ export function PatientProfileFormFields({
       case 'physicianName':
         return minLen(value, 2)
       case 'state':
-        return minLen(value, 2)
+        return US_STATE_CODE_SET.has(value.trim().toUpperCase())
+      case 'zipCode':
+        return isZipLike(value)
       case 'middleName':
         return minLen(value, 1)
       case 'sex':
@@ -385,7 +407,8 @@ export function PatientProfileFormFields({
             <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">
               Section 2: Contact Information
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
               <div className="md:col-span-7">
                 <label htmlFor="pp-streetAddress" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Street Address
@@ -422,26 +445,53 @@ export function PatientProfileFormFields({
                 </div>
                 {fieldError('city') && <p className={errorTextClass}>{fieldError('city')}</p>}
               </div>
-              <div className="md:col-span-4">
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-[4.25rem_5.75rem_11.5rem_minmax(12rem,1fr)] md:gap-3 ">
+              <div className="min-w-0 w-[90px]">
                 <label htmlFor="pp-state" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   State<span className="text-red-500 ml-0.5">*</span>
                 </label>
                 <div className="relative">
-                  <input
+                  <select
                     id={PATIENT_PROFILE_FIELD_IDS.state}
                     name="state"
                     value={v.state}
                     onChange={onChange}
                     required={mode.type === 'full'}
-                    className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('state')}`}
-                    placeholder="State"
+                    className={`${patientProfileInputClass} appearance-none ${showCompletionChecks ? 'pr-8' : ''} ${highlightClass('state')}`}
                     autoComplete="address-level1"
-                  />
+                  >
+                    {US_STATE_CODES.map((stateCode) => (
+                      <option key={stateCode} value={stateCode}>
+                        {stateCode}
+                      </option>
+                    ))}
+                  </select>
                   <FieldCompleteCheck show={shouldShowCheck('state')} />
                 </div>
                 {fieldError('state') && <p className={errorTextClass}>{fieldError('state')}</p>}
               </div>
-              <div className="md:col-span-4">
+              <div className="min-w-0 ml-[15px] w-[155px]">
+                <label htmlFor="pp-zipCode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  ZIP code
+                </label>
+                <div className="relative">
+                  <input
+                    id={PATIENT_PROFILE_FIELD_IDS.zipCode}
+                    name="zipCode"
+                    value={v.zipCode}
+                    onChange={onChange}
+                    inputMode="numeric"
+                    maxLength={10}
+                    className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('zipCode')}`}
+                    placeholder="96813"
+                    autoComplete="postal-code"
+                  />
+                  <FieldCompleteCheck show={shouldShowCheck('zipCode')} />
+                </div>
+                {fieldError('zipCode') && <p className={errorTextClass}>{fieldError('zipCode')}</p>}
+              </div>
+              <div className="min-w-0 ml-[73px] w-[180px]">
                 <label htmlFor="pp-homePhone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Home Phone<span className="text-red-500 ml-0.5">*</span>
                 </label>
@@ -463,7 +513,7 @@ export function PatientProfileFormFields({
                 </div>
                 {fieldError('homePhone') && <p className={errorTextClass}>{fieldError('homePhone')}</p>}
               </div>
-              <div className="md:col-span-4">
+              <div className="min-w-0 ml-[63px]">
                 <label htmlFor="pp-email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Email<span className="text-red-500 ml-0.5">*</span>
                 </label>
@@ -482,6 +532,7 @@ export function PatientProfileFormFields({
                   <FieldCompleteCheck show={shouldShowCheck('email')} />
                 </div>
                 {fieldError('email') && <p className={errorTextClass}>{fieldError('email')}</p>}
+              </div>
               </div>
             </div>
           </div>

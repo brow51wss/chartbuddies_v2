@@ -11,7 +11,9 @@ import {
 } from './PatientProfileFormFields'
 import { PatientPhotoCaptureField } from './PatientPhotoCaptureField'
 import {
+  DEFAULT_PATIENT_STATE,
   formatPatientPhoneInput,
+  formatPatientZipInput,
   patientProfileFieldErrorMessages,
   validatePatientProfileWizardStep1Fields,
   type PatientProfileFieldErrors,
@@ -30,6 +32,7 @@ export type PatientProfileUpdatePayload = {
   street_address: string | null
   city: string | null
   state: string | null
+  zip_code: string | null
   home_phone: string | null
   email: string | null
   admission_date: string | null
@@ -68,7 +71,8 @@ function patientToFormValues(patient: Patient): PatientProfileFormValues {
     dateOfAdmission: patient.admission_date?.slice(0, 10) || patient.date_of_birth?.slice(0, 10) || '',
     streetAddress: patient.street_address || '',
     city: patient.city || '',
-    state: patient.state || '',
+    state: patient.state || DEFAULT_PATIENT_STATE,
+    zipCode: patient.zip_code || '',
     homePhone: patient.home_phone || '',
     email: patient.email || '',
     diagnosis: patient.diagnosis || '',
@@ -97,7 +101,8 @@ function buildPatientProfileUpdatePayload(
     facility_name: facilityDisplayName?.trim() || null,
     street_address: form.streetAddress.trim() || null,
     city: form.city.trim() || null,
-    state: form.state.trim() || null,
+    state: form.state.trim().toUpperCase() || null,
+    zip_code: form.zipCode.trim() || null,
     home_phone: form.homePhone.trim() || null,
     email: form.email.trim() || null,
     admission_date: form.dateOfAdmission || null,
@@ -228,7 +233,9 @@ export default function EditPatientInfoModal({
   const handleFieldChange = (field: keyof PatientProfileFormValues, value: string) => {
     const nextValue = field === 'homePhone' || field === 'physicianPhone'
       ? formatPatientPhoneInput(value)
-      : value
+      : field === 'zipCode'
+        ? formatPatientZipInput(value)
+        : value
 
     setForm((prev) => {
       if (!prev) return prev
