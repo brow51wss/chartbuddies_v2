@@ -205,8 +205,8 @@ Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 
 
 #### Data validation & account UX
 
-1. **TODO** — Strengthen validation for **email, state, and address** (invalid values currently accepted); complements §6a “hard-stop” / required-field work.
-2. **TODO** — **Forgot password** entry point below the read-only mode password prompt (recovery path when locked for inspection).
+1. **PARTIAL (2026-05-13)** — Strengthen validation for **email, state, and address** (invalid values currently accepted); complements §6a “hard-stop” / required-field work. **Done:** Add/Edit Patient now validates required **Home Phone** (10 digits, numeric/phone-format input only), required **Email** format, and optional **Physician Phone** (10 digits if entered, numeric/phone-format input only) with inline field messages and clickable error chips. Edit Patient modal workflow is now shared via `components/EditPatientInfoModal.tsx` across Dashboard, MAR, and Progress Notes. **Still open:** state/address validation rules.
+2. **DONE (2026-05-13)** — **Forgot password** entry point below the read-only mode password prompt; links to existing `/auth/forgot-password` reset flow from the Exit Read-Only modal.
 3. **TODO** — **Physician selection:** enforce required patient/context fields **before** physician entry is allowed (selection-order bug).
 
 #### MAR layout & UI
@@ -214,8 +214,8 @@ Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 
 1. **DONE (2026-05-12)** — **MAR grid:** show **~3 days of columns** at a time (wider day cells via `MAR_DAY_COL_WIDTH_PX` on MAR detail); **31** day columns unchanged; print layout unchanged.
 2. **TODO** — **On-screen** small **color key** for MAR status colors (persistent key, not only hover); see also Navigation & UI Polish #4 for hover legend.
 3. **TODO** — **ADA-compliant contrast** and branding fixes from automated UX test findings.
-4. **TODO** — **In-page patient edit (modal/pop-up):** auto-advance to step 2 and **focus/highlight** the editable field.
-5. **TODO** — Show **validation errors adjacent to inputs** (avoid scrolling to discover errors).
+4. **PARTIAL (2026-05-13)** — **In-page patient edit (modal/pop-up):** shared `EditPatientInfoModal` now supports chip-driven step switching, scroll/focus, and temporary red field highlight for validation errors across Dashboard, MAR, and Progress Notes. **Still open:** product-specific auto-advance-to-step-2 edit affordance for non-error edit entry points.
+5. **DONE (2026-05-13)** — Show **validation errors adjacent to inputs** (avoid scrolling to discover errors); top error summary uses clickable chips that scroll/focus/highlight the field.
 
 #### PRN & MAR legend
 

@@ -5,17 +5,11 @@ import Link from 'next/link'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
 import AppHeader from '../../../../components/AppHeader'
 import PatientStickyBar from '../../../../components/PatientStickyBar'
-import {
-  PatientProfileFormFields,
-  type PatientProfileFormValues,
-} from '../../../../components/PatientProfileFormFields'
-import { PatientPhotoCaptureField } from '../../../../components/PatientPhotoCaptureField'
+import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../../components/EditPatientInfoModal'
 import { supabase } from '../../../../lib/supabase'
 import { formatCalendarDate, localTodayYMD } from '../../../../lib/calendarDate'
 import { getCurrentUserProfile } from '../../../../lib/auth'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
-import { parsePatientNameParts, computeAgeFromISODate } from '../../../../lib/patientName'
-import { missingFieldsForPatientProfileWizardStep1 } from '../../../../lib/patientProfileWizardValidation'
 import type { UserProfile, Patient } from '../../../../types/auth'
 import type { ProgressNoteEntry, ProgressNoteMonthlySummary } from '../../../../types/progress-notes'
 
@@ -263,14 +257,6 @@ export default function ProgressNotesPage() {
   const [physicians, setPhysicians] = useState<string[]>([])
   const [entries, setEntries] = useState<ProgressNoteEntry[]>([])
   const [showEditPatientInfoModal, setShowEditPatientInfoModal] = useState(false)
-  const [editPatientFormDraft, setEditPatientFormDraft] = useState<PatientProfileFormValues | null>(null)
-  const [editPatientAge, setEditPatientAge] = useState('')
-  const [editPatientLoading, setEditPatientLoading] = useState(false)
-  const [editPatientSaving, setEditPatientSaving] = useState(false)
-  const [editPatientModalError, setEditPatientModalError] = useState('')
-  const [editPatientStep, setEditPatientStep] = useState<1 | 2>(1)
-  const [editPatientTouchedFields, setEditPatientTouchedFields] = useState<Partial<Record<keyof PatientProfileFormValues, boolean>>>({})
-  const [editPatientPhoto, setEditPatientPhoto] = useState<string | null>(null)
   const [selectedPhysician, setSelectedPhysician] = useState<string>('')
   const [customPhysician, setCustomPhysician] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -298,7 +284,6 @@ export default function ProgressNotesPage() {
   const summaryRef = useRef<ProgressNoteMonthlySummary | null>(null)
   const saveSummaryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savePhysicianTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const editPatientSaveInFlightRef = useRef(false)
   const { isReadOnly } = useReadOnly()
   const readOnly = isReadOnly
 
@@ -448,161 +433,30 @@ export default function ProgressNotesPage() {
     if (!entriesError) setEntries((entriesData || []).map((e: ProgressNoteEntry) => ({ ...e, is_addendum: e.is_addendum ?? false })))
   }
 
-  const resetEditPatientModal = () => {
-    setShowEditPatientInfoModal(false)
-    setEditPatientFormDraft(null)
-    setEditPatientAge('')
-    setEditPatientModalError('')
-    setEditPatientLoading(false)
-    setEditPatientStep(1)
-    setEditPatientTouchedFields({})
-    setEditPatientPhoto(null)
-  }
-
   const closeEditPatientInfoModal = () => {
-    if (editPatientSaving) return
-    resetEditPatientModal()
+    setShowEditPatientInfoModal(false)
   }
 
-  const openEditPatientModal = async () => {
+  const openEditPatientModal = () => {
     if (!patientId || typeof patientId !== 'string') return
     setShowEditPatientInfoModal(true)
-    setEditPatientModalError('')
-    setEditPatientLoading(true)
-    setEditPatientFormDraft(null)
-    setEditPatientAge('')
-    setEditPatientStep(1)
-    setEditPatientTouchedFields({})
-    try {
-      const { data: p, error } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('id', patientId)
-        .single()
-      if (error) throw error
-      if (!p) throw new Error('Patient not found')
-      const loadedPatient = p as Patient
-      const nameParts = parsePatientNameParts(loadedPatient.patient_name)
-      setEditPatientFormDraft({
-        firstName: nameParts.firstName,
-        middleName: nameParts.middleName,
-        lastName: nameParts.lastName,
-        dateOfBirth: loadedPatient.date_of_birth?.slice(0, 10) || '',
-        sex: loadedPatient.sex || '',
-        dateOfAdmission:
-          loadedPatient.admission_date?.slice(0, 10) || loadedPatient.date_of_birth?.slice(0, 10) || '',
-        streetAddress: loadedPatient.street_address || '',
-        city: loadedPatient.city || '',
-        state: loadedPatient.state || '',
-        homePhone: loadedPatient.home_phone || '',
-        email: loadedPatient.email || '',
-        diagnosis: loadedPatient.diagnosis || '',
-        diet: loadedPatient.diet || '',
-        allergies: loadedPatient.allergies || '',
-        physicianName: loadedPatient.physician_name || '',
-        physicianPhone: loadedPatient.physician_phone || '',
-      })
-      setEditPatientPhoto(loadedPatient.patient_photo ?? null)
-      setEditPatientAge(computeAgeFromISODate(loadedPatient.date_of_birth?.slice(0, 10) || ''))
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to load patient'
-      setEditPatientModalError(msg)
-    } finally {
-      setEditPatientLoading(false)
-    }
   }
 
-  const handleEditPatientFieldChange = (field: keyof PatientProfileFormValues, value: string) => {
-    setEditPatientFormDraft((prev) => {
-      if (!prev) return prev
-      const next = { ...prev, [field]: value }
-      if (field === 'dateOfBirth') setEditPatientAge(computeAgeFromISODate(value))
-      return next
-    })
-    setEditPatientTouchedFields((prev) => ({ ...prev, [field]: true }))
-  }
-
-  const handleEditPatientInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    handleEditPatientFieldChange(name as keyof PatientProfileFormValues, value)
-  }
-
-  const goToEditPatientStep2 = () => {
-    if (!editPatientFormDraft) return
-    setEditPatientModalError('')
-    const missing = missingFieldsForPatientProfileWizardStep1(editPatientFormDraft)
-    if (missing.length) {
-      setEditPatientModalError(`Please complete: ${missing.join(', ')}.`)
-      return
-    }
-    setEditPatientStep(2)
-  }
-
-  const handleSavePatientEdits = async () => {
-    if (!patientId || typeof patientId !== 'string' || !editPatientFormDraft) return
-    if (editPatientSaveInFlightRef.current) return
-
-    const form = editPatientFormDraft
-    const firstName = form.firstName.trim()
-    const middleName = form.middleName.trim()
-    const lastName = form.lastName.trim()
-    const patientName = [firstName, middleName, lastName].filter(Boolean).join(' ').trim()
-
-    if (!firstName || !lastName || !patientName) {
-      setEditPatientModalError('First name and last name are required.')
-      return
-    }
-    const missingStep1 = missingFieldsForPatientProfileWizardStep1(form)
-    if (missingStep1.length) {
-      setEditPatientModalError(`Please complete: ${missingStep1.join(', ')}.`)
-      setEditPatientStep(1)
-      return
-    }
-
-    editPatientSaveInFlightRef.current = true
-    setEditPatientSaving(true)
-    setEditPatientModalError('')
-    try {
-      const payload = {
-        patient_name: patientName,
-        date_of_birth: form.dateOfBirth,
-        sex: form.sex as Patient['sex'],
-        diagnosis: form.diagnosis.trim() || null,
-        diet: form.diet.trim() || null,
-        allergies: form.allergies.trim() || 'None',
-        physician_name: form.physicianName.trim() || 'TBD',
-        physician_phone: form.physicianPhone.trim() || null,
-        street_address: form.streetAddress.trim() || null,
-        city: form.city.trim() || null,
-        state: form.state.trim() || null,
-        home_phone: form.homePhone.trim() || null,
-        email: form.email.trim() || null,
-        admission_date: form.dateOfAdmission || null,
-        patient_photo: editPatientPhoto,
+  const handleSavePatientEdits = async ({ patientId, payload }: EditPatientInfoSaveArgs): Promise<Patient> => {
+    const { data: updatedPatient, error: patientError } = await supabase
+      .from('patients')
+      .update({
+        ...payload,
         updated_at: new Date().toISOString(),
-      }
+      })
+      .eq('id', patientId)
+      .select('*')
+      .single()
 
-      const { data: updatedPatient, error: patientError } = await supabase
-        .from('patients')
-        .update(payload)
-        .eq('id', patientId)
-        .select('*')
-        .single()
+    if (patientError) throw patientError
+    if (!updatedPatient) throw new Error('No updated patient returned from server.')
 
-      if (patientError) throw patientError
-      if (!updatedPatient) throw new Error('No updated patient returned from server.')
-
-      setPatient(updatedPatient as Patient)
-      setMessage('Patient information updated.')
-      setTimeout(() => setMessage(''), 3000)
-      resetEditPatientModal()
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to update patient information'
-      setEditPatientModalError(msg)
-    } finally {
-      setEditPatientSaving(false)
-      editPatientSaveInFlightRef.current = false
-    }
+    return updatedPatient as Patient
   }
 
   const handleAddEntry = async () => {
@@ -1527,113 +1381,21 @@ export default function ProgressNotesPage() {
           )}
         </main>
 
-        {showEditPatientInfoModal && patient && (
-          <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-5xl rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
-              <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Edit Patient Details</h2>
-                <button
-                  type="button"
-                  onClick={closeEditPatientInfoModal}
-                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  aria-label="Close edit patient details modal"
-                >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="max-h-[80vh] overflow-y-auto px-6 py-5">
-                {editPatientModalError && (
-                  <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
-                    {editPatientModalError}
-                  </div>
-                )}
-
-                {editPatientLoading ? (
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Loading patient details...</p>
-                ) : editPatientFormDraft ? (
-                  <>
-                    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
-                      {patientId && typeof patientId === 'string' && (
-                        <aside className="mx-auto shrink-0 lg:mx-0 lg:pt-1">
-                          <PatientPhotoCaptureField
-                            patientId={patientId}
-                            value={editPatientPhoto}
-                            onChange={setEditPatientPhoto}
-                            disabled={editPatientSaving}
-                            readOnly={readOnly}
-                          />
-                        </aside>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <PatientProfileFormFields
-                          values={editPatientFormDraft}
-                          ageDisplay={editPatientAge}
-                          facilityDisplayName={facilityName}
-                          onChange={handleEditPatientInputChange}
-                          mode={{ type: 'wizard', step: editPatientStep }}
-                          showCompletionChecks
-                          editedFields={editPatientTouchedFields}
-                          disabled={editPatientSaving}
-                        />
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-sm text-gray-600 dark:text-gray-300">
-                    Patient details could not be loaded.
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4 dark:border-gray-700">
-                {editPatientStep === 2 && !editPatientLoading && editPatientFormDraft ? (
-                  <button
-                    type="button"
-                    onClick={() => setEditPatientStep(1)}
-                    className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                    disabled={editPatientSaving}
-                  >
-                    Back
-                  </button>
-                ) : (
-                  <span />
-                )}
-                {!editPatientLoading && editPatientFormDraft ? (
-                  editPatientStep === 1 ? (
-                    <button
-                      type="button"
-                      onClick={goToEditPatientStep2}
-                      className="rounded-md bg-lasso-navy px-4 py-2 text-sm font-medium text-white hover:bg-lasso-teal"
-                      disabled={editPatientSaving}
-                    >
-                      Next
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => void handleSavePatientEdits()}
-                      className="rounded-md bg-lasso-navy px-4 py-2 text-sm font-medium text-white hover:bg-lasso-teal disabled:cursor-not-allowed disabled:opacity-70"
-                      disabled={editPatientSaving}
-                    >
-                      {editPatientSaving ? 'Saving...' : 'Save Changes'}
-                    </button>
-                  )
-                ) : (
-                  <button
-                    type="button"
-                    onClick={closeEditPatientInfoModal}
-                    className="rounded-md bg-lasso-navy px-4 py-2 text-sm font-medium text-white hover:bg-lasso-teal"
-                  >
-                    Close
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        <EditPatientInfoModal
+          isOpen={showEditPatientInfoModal}
+          patientId={typeof patientId === 'string' ? patientId : null}
+          title="Edit Patient Details"
+          facilityDisplayName={facilityName}
+          recordNumber={patient?.record_number || ''}
+          readOnly={readOnly}
+          onClose={closeEditPatientInfoModal}
+          onSave={handleSavePatientEdits}
+          onSaved={(updatedPatient) => {
+            setPatient(updatedPatient)
+            setMessage('Patient information updated.')
+            setTimeout(() => setMessage(''), 3000)
+          }}
+        />
 
         {/* Print view: Page 2 Monthly Summary. Hidden on screen, shown when printing with body.print-view-page2. */}
         <div className="progress-notes-page2-print-view p-6 text-sm text-gray-900" style={{ display: 'none' }}>

@@ -135,13 +135,7 @@ import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../../../../lib/auth'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import type { Patient } from '../../../../types/auth'
-import {
-  PatientProfileFormFields,
-  type PatientProfileFormValues,
-} from '../../../../components/PatientProfileFormFields'
-import { PatientPhotoCaptureField } from '../../../../components/PatientPhotoCaptureField'
-import { parsePatientNameParts, computeAgeFromISODate } from '../../../../lib/patientName'
-import { missingFieldsForPatientProfileWizardStep1 } from '../../../../lib/patientProfileWizardValidation'
+import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../../components/EditPatientInfoModal'
 import {
   computeMissedMarDocumentation,
   getMarDiscontinuedBeforeDayInfo,
@@ -724,14 +718,6 @@ export default function ViewMARForm() {
   const [savingPrnLibraryEdit, setSavingPrnLibraryEdit] = useState(false)
   const [prnActionsMenuOpen, setPrnActionsMenuOpen] = useState(false)
   const [showEditPatientInfoModal, setShowEditPatientInfoModal] = useState(false)
-  const [editPatientFormDraft, setEditPatientFormDraft] = useState<PatientProfileFormValues | null>(null)
-  const [editPatientAge, setEditPatientAge] = useState('')
-  const [editPatientLoading, setEditPatientLoading] = useState(false)
-  const [editPatientSaving, setEditPatientSaving] = useState(false)
-  const [editPatientModalError, setEditPatientModalError] = useState('')
-  const [editPatientStep, setEditPatientStep] = useState<1 | 2>(1)
-  const [editPatientTouchedFields, setEditPatientTouchedFields] = useState<Partial<Record<keyof PatientProfileFormValues, boolean>>>({})
-  const [editPatientPhoto, setEditPatientPhoto] = useState<string | null>(null)
   const [showVitalSignsModal, setShowVitalSignsModal] = useState(false)
   const [editingCell, setEditingCell] = useState<{ medId: string; day: number } | null>(null)
   const [editingCellValue, setEditingCellValue] = useState<string>('') // Store the value being edited
@@ -795,7 +781,6 @@ export default function ViewMARForm() {
   const [showCustomLegendModal, setShowCustomLegendModal] = useState(false)
   const [editingCustomLegend, setEditingCustomLegend] = useState<{ id: string | null; code: string; description: string } | null>(null)
   const allowNavigationRef = useRef(false)
-  const editPatientSaveInFlightRef = useRef(false)
   const marTableScrollRef = useRef<HTMLDivElement>(null)
   const marHeaderScrollRef = useRef<HTMLDivElement>(null)
   const [printRowHeights, setPrintRowHeights] = useState<number[]>([])
@@ -803,201 +788,61 @@ export default function ViewMARForm() {
   const marMeasureTbodyRef2 = useRef<HTMLTableSectionElement>(null)
   const prnActionsMenuRef = useRef<HTMLDivElement>(null)
 
-  const resetMarEditPatientModal = useCallback(() => {
+  const closeMarEditPatientInfoModal = useCallback(() => {
     setShowEditPatientInfoModal(false)
-    setEditPatientFormDraft(null)
-    setEditPatientAge('')
-    setEditPatientModalError('')
-    setEditPatientLoading(false)
-    setEditPatientStep(1)
-    setEditPatientTouchedFields({})
-    setEditPatientPhoto(null)
   }, [])
 
-  const closeMarEditPatientInfoModal = useCallback(() => {
-    if (editPatientSaving) return
-    resetMarEditPatientModal()
-  }, [editPatientSaving, resetMarEditPatientModal])
-
-  const openMarEditPatientModal = async () => {
-    if (!marForm?.patient_id) {
-      setEditPatientModalError('This MAR is not linked to a patient record.')
-      setShowEditPatientInfoModal(true)
-      setEditPatientFormDraft(null)
-      setEditPatientStep(1)
-      return
-    }
+  const openMarEditPatientModal = () => {
     setShowEditPatientInfoModal(true)
-    setEditPatientModalError('')
-    setEditPatientLoading(true)
-    setEditPatientFormDraft(null)
-    setEditPatientAge('')
-    setEditPatientStep(1)
-    setEditPatientTouchedFields({})
-    try {
-      const { data: p, error } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('id', marForm.patient_id)
-        .single()
-      if (error) throw error
-      if (!p) throw new Error('Patient not found')
-      const patient = p as Patient
-      const nameParts = parsePatientNameParts(patient.patient_name)
-      setEditPatientFormDraft({
-        firstName: nameParts.firstName,
-        middleName: nameParts.middleName,
-        lastName: nameParts.lastName,
-        dateOfBirth: patient.date_of_birth?.slice(0, 10) || '',
-        sex: patient.sex || '',
-        dateOfAdmission:
-          patient.admission_date?.slice(0, 10) || patient.date_of_birth?.slice(0, 10) || '',
-        streetAddress: patient.street_address || '',
-        city: patient.city || '',
-        state: patient.state || '',
-        homePhone: patient.home_phone || '',
-        email: patient.email || '',
-        diagnosis: patient.diagnosis || '',
-        diet: patient.diet || '',
-        allergies: patient.allergies || '',
-        physicianName: patient.physician_name || '',
-        physicianPhone: patient.physician_phone || '',
-      })
-      setEditPatientPhoto(patient.patient_photo ?? null)
-      setEditPatientAge(computeAgeFromISODate(patient.date_of_birth?.slice(0, 10) || ''))
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to load patient'
-      setEditPatientModalError(msg)
-    } finally {
-      setEditPatientLoading(false)
-    }
   }
 
-  const handleMarEditPatientFieldChange = (field: keyof PatientProfileFormValues, value: string) => {
-    setEditPatientFormDraft((prev) => {
-      if (!prev) return prev
-      const next = { ...prev, [field]: value }
-      if (field === 'dateOfBirth') {
-        setEditPatientAge(computeAgeFromISODate(value))
-      }
-      return next
-    })
-    setEditPatientTouchedFields((prev) => ({ ...prev, [field]: true }))
-  }
-
-  const handleMarEditPatientInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    handleMarEditPatientFieldChange(name as keyof PatientProfileFormValues, value)
-  }
-
-  const goToMarEditPatientStep2 = () => {
-    if (!editPatientFormDraft) return
-    setEditPatientModalError('')
-    const missing = missingFieldsForPatientProfileWizardStep1(editPatientFormDraft)
-    if (missing.length) {
-      setEditPatientModalError(`Please complete: ${missing.join(', ')}.`)
-      return
-    }
-    setEditPatientStep(2)
-  }
-
-  const handleSaveMarPatientEdits = async () => {
-    if (!marForm?.patient_id || !editPatientFormDraft) return
-    if (editPatientSaveInFlightRef.current) return
-    const form = editPatientFormDraft
-
-    const firstName = form.firstName.trim()
-    const middleName = form.middleName.trim()
-    const lastName = form.lastName.trim()
-    const patientName = [firstName, middleName, lastName].filter(Boolean).join(' ').trim()
-
-    if (!firstName || !lastName) {
-      setEditPatientModalError('First name and last name are required.')
-      return
-    }
-    if (!patientName) {
-      setEditPatientModalError('Patient name cannot be blank.')
-      return
-    }
-    const missingStep1 = missingFieldsForPatientProfileWizardStep1(form)
-    if (missingStep1.length) {
-      setEditPatientModalError(`Please complete: ${missingStep1.join(', ')}.`)
-      setEditPatientStep(1)
-      return
+  const handleSaveMarPatientEdits = async ({ patientId, payload }: EditPatientInfoSaveArgs): Promise<Patient> => {
+    const facilityName = facilityNameFromProfile?.trim() || payload.facility_name
+    const payloadWithFacility = {
+      ...payload,
+      facility_name: facilityName,
     }
 
-    editPatientSaveInFlightRef.current = true
-    setEditPatientSaving(true)
-    setEditPatientModalError('')
-    try {
-      const facilityName = facilityNameFromProfile?.trim() || null
-      const payload = {
-        patient_name: patientName,
-        date_of_birth: form.dateOfBirth,
-        sex: form.sex as Patient['sex'],
-        diagnosis: form.diagnosis.trim() || null,
-        diet: form.diet.trim() || null,
-        allergies: form.allergies.trim() || 'None',
-        physician_name: form.physicianName.trim() || 'TBD',
-        physician_phone: form.physicianPhone.trim() || null,
-        facility_name: facilityName,
-        street_address: form.streetAddress.trim() || null,
-        city: form.city.trim() || null,
-        state: form.state.trim() || null,
-        home_phone: form.homePhone.trim() || null,
-        email: form.email.trim() || null,
-        admission_date: form.dateOfAdmission || null,
-        patient_photo: editPatientPhoto,
-      }
+    const { data: updatedPatient, error: patientError } = await supabase
+      .from('patients')
+      .update(payloadWithFacility)
+      .eq('id', patientId)
+      .select('*')
+      .single()
 
-      const { data: updatedPatient, error: patientError } = await supabase
-        .from('patients')
-        .update(payload)
-        .eq('id', marForm.patient_id)
-        .select('*')
-        .single()
+    if (patientError) throw patientError
+    if (!updatedPatient) throw new Error('No updated patient returned from server.')
 
-      if (patientError) throw patientError
-      if (!updatedPatient) throw new Error('No updated patient returned from server.')
-
-      const marSyncPayload = {
-        patient_name: payload.patient_name,
-        date_of_birth: payload.date_of_birth,
-        sex: payload.sex,
-        diagnosis: payload.diagnosis,
-        diet: payload.diet,
-        allergies: payload.allergies,
-        physician_name: payload.physician_name,
-        physician_phone: payload.physician_phone,
-        facility_name: facilityName || payload.facility_name,
-      }
-      const { error: marSyncError } = await supabase
-        .from('mar_forms')
-        .update(marSyncPayload)
-        .eq('patient_id', marForm.patient_id)
-
-      if (marSyncError) {
-        throw new Error(`Patient saved, but failed to sync MAR forms: ${marSyncError.message}`)
-      }
-
-      setMarForm((prev) =>
-        prev
-          ? {
-              ...prev,
-              ...marSyncPayload,
-            }
-          : null
-      )
-      setMessage('Patient information updated.')
-      setTimeout(() => setMessage(''), 3000)
-      resetMarEditPatientModal()
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to update patient information'
-      setEditPatientModalError(msg)
-    } finally {
-      setEditPatientSaving(false)
-      editPatientSaveInFlightRef.current = false
+    const marSyncPayload = {
+      patient_name: payloadWithFacility.patient_name,
+      date_of_birth: payloadWithFacility.date_of_birth,
+      sex: payloadWithFacility.sex,
+      diagnosis: payloadWithFacility.diagnosis,
+      diet: payloadWithFacility.diet,
+      allergies: payloadWithFacility.allergies,
+      physician_name: payloadWithFacility.physician_name,
+      physician_phone: payloadWithFacility.physician_phone,
+      facility_name: facilityName,
     }
+    const { error: marSyncError } = await supabase
+      .from('mar_forms')
+      .update(marSyncPayload)
+      .eq('patient_id', patientId)
+
+    if (marSyncError) {
+      throw new Error(`Patient saved, but failed to sync MAR forms: ${marSyncError.message}`)
+    }
+
+    setMarForm((prev) =>
+      prev
+        ? {
+            ...prev,
+            ...marSyncPayload,
+          }
+        : null
+    )
+
+    return updatedPatient as Patient
   }
 
   useEffect(() => {
@@ -6109,137 +5954,22 @@ export default function ViewMARForm() {
         </div>
       )}
 
-      {/* Edit Patient Info Modal — same sections as admissions; patients row is source of truth, then MAR forms sync */}
-      {showEditPatientInfoModal && marForm && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="mar-edit-patient-title"
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-4 shrink-0">
-              <h2 id="mar-edit-patient-title" className="text-xl font-semibold text-gray-800 dark:text-white shrink-0">
-                Edit Patient Information
-              </h2>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 sm:justify-end min-w-0">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap" aria-live="polite">
-                  Step {editPatientStep} of 2
-                </p>
-                <div
-                  className="flex gap-1.5 w-full sm:w-44 shrink-0"
-                  role="progressbar"
-                  aria-valuemin={1}
-                  aria-valuemax={2}
-                  aria-valuenow={editPatientStep}
-                  aria-label="Edit progress"
-                >
-                  <div
-                    className={`h-2.5 flex-1 rounded-sm transition-colors ${editPatientStep >= 1 ? 'bg-lasso-navy' : 'bg-gray-200 dark:bg-gray-600'}`}
-                  />
-                  <div
-                    className={`h-2.5 flex-1 rounded-sm transition-colors ${editPatientStep >= 2 ? 'bg-lasso-navy' : 'bg-gray-200 dark:bg-gray-600'}`}
-                  />
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={closeMarEditPatientInfoModal}
-                disabled={editPatientSaving}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl disabled:opacity-50 shrink-0"
-                aria-label="Close"
-              >
-                ×
-              </button>
-            </div>
-            <div className="px-6 py-4 overflow-y-auto flex-1 min-h-0">
-              {editPatientModalError && (
-                <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">
-                  {editPatientModalError}
-                </div>
-              )}
-              {editPatientLoading ? (
-                <p className="text-sm text-gray-600 dark:text-gray-400">Loading patient…</p>
-              ) : editPatientFormDraft ? (
-                <>
-                  <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
-                    {marForm?.patient_id && (
-                      <aside className="mx-auto shrink-0 lg:mx-0 lg:pt-1">
-                        <PatientPhotoCaptureField
-                          patientId={marForm.patient_id}
-                          value={editPatientPhoto}
-                          onChange={setEditPatientPhoto}
-                          disabled={editPatientSaving}
-                          readOnly={readOnly}
-                        />
-                      </aside>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <PatientProfileFormFields
-                        values={editPatientFormDraft}
-                        onChange={handleMarEditPatientInputChange}
-                        ageDisplay={editPatientAge}
-                        mode={{ type: 'wizard', step: editPatientStep }}
-                        disabled={editPatientSaving}
-                        recordNumber={marForm.record_number || ''}
-                        facilityDisplayName={facilityNameFromProfile}
-                        showCompletionChecks
-                        editedFields={editPatientTouchedFields}
-                      />
-                    </div>
-                  </div>
-                </>
-              ) : !editPatientModalError ? (
-                <p className="text-sm text-gray-600 dark:text-gray-400">Could not load patient record.</p>
-              ) : null}
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-end gap-2 shrink-0">
-              {editPatientStep === 2 && !editPatientLoading && editPatientFormDraft && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditPatientModalError('')
-                    setEditPatientStep(1)
-                  }}
-                  disabled={editPatientSaving}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50 mr-auto sm:mr-0"
-                >
-                  Back
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={closeMarEditPatientInfoModal}
-                disabled={editPatientSaving}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              {!editPatientLoading && editPatientFormDraft ? (
-                editPatientStep === 1 ? (
-                  <button
-                    type="button"
-                    onClick={goToMarEditPatientStep2}
-                    disabled={editPatientSaving}
-                    className="px-4 py-2 bg-lasso-navy text-white rounded-lg hover:bg-lasso-teal disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void handleSaveMarPatientEdits()}
-                    disabled={editPatientSaving}
-                    className="px-4 py-2 bg-lasso-navy text-white rounded-lg hover:bg-lasso-teal disabled:opacity-50"
-                  >
-                    {editPatientSaving ? 'Saving…' : 'Save changes'}
-                  </button>
-                )
-              ) : null}
-            </div>
-          </div>
-        </div>
-      )}
+      <EditPatientInfoModal
+        isOpen={showEditPatientInfoModal}
+        patientId={marForm?.patient_id}
+        title="Edit Patient Information"
+        facilityDisplayName={facilityNameFromProfile}
+        recordNumber={marForm?.record_number || ''}
+        readOnly={readOnly}
+        onClose={closeMarEditPatientInfoModal}
+        onSave={handleSaveMarPatientEdits}
+        onSaved={() => {
+          setMessage('Patient information updated.')
+          setTimeout(() => setMessage(''), 3000)
+        }}
+        loadingText="Loading patient..."
+        errorTitleId="mar-edit-patient-title"
+      />
 
 
       {/* Vital Signs Modal */}

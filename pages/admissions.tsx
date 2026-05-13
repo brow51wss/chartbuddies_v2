@@ -5,9 +5,20 @@ import ProtectedRoute from '../components/ProtectedRoute'
 import AppHeader from '../components/AppHeader'
 import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
-import { PatientProfileFormFields, type PatientProfileFormValues } from '../components/PatientProfileFormFields'
+import {
+  PATIENT_PROFILE_FIELD_IDS,
+  PATIENT_PROFILE_FIELD_STEPS,
+  PatientProfileFieldErrorChips,
+  PatientProfileFormFields,
+  type PatientProfileFormValues,
+} from '../components/PatientProfileFormFields'
 import { PatientPhotoCaptureField } from '../components/PatientPhotoCaptureField'
-import { missingFieldsForPatientProfileWizardStep1 } from '../lib/patientProfileWizardValidation'
+import {
+  formatPatientPhoneInput,
+  patientProfileFieldErrorMessages,
+  validatePatientProfileWizardStep1Fields,
+  type PatientProfileFieldErrors,
+} from '../lib/patientProfileWizardValidation'
 import { localTodayYMD } from '../lib/calendarDate'
 
 export default function Admissions() {
@@ -37,6 +48,9 @@ export default function Admissions() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitMessage, setSubmitMessage] = useState('')
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<PatientProfileFieldErrors>({})
+  const [highlightedField, setHighlightedField] = useState<keyof PatientProfileFormValues | null>(null)
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const submitUnlockAtRef = useRef(0)
   const submitInFlightRef = useRef(false)
   const [duplicateWarning, setDuplicateWarning] = useState('')
@@ -118,12 +132,44 @@ export default function Admissions() {
     return () => clearTimeout(timer)
   }, [formData.firstName, formData.lastName, formData.dateOfBirth, formData.homePhone, userProfile?.hospital_id])
 
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current)
+    }
+  }, [])
+
+  const scrollToFieldError = (field: keyof PatientProfileFormValues) => {
+    const targetStep = PATIENT_PROFILE_FIELD_STEPS[field]
+    if (targetStep) setStep(targetStep)
+    setHighlightedField(field)
+
+    window.setTimeout(() => {
+      const el = document.getElementById(PATIENT_PROFILE_FIELD_IDS[field])
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      if (el instanceof HTMLElement) el.focus({ preventScroll: true })
+    }, 80)
+
+    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current)
+    highlightTimeoutRef.current = setTimeout(() => setHighlightedField(null), 1800)
+  }
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    const nextValue = name === 'homePhone' || name === 'physicianPhone'
+      ? formatPatientPhoneInput(value)
+      : value
+    setFormData((prev) => ({ ...prev, [name]: nextValue }))
+    setFieldErrors((prev) => {
+      const field = name as keyof PatientProfileFormValues
+      if (!prev[field]) return prev
+      const next = { ...prev }
+      delete next[field]
+      if (Object.keys(next).length === 0) setError('')
+      return next
+    })
 
-    if (name === 'dateOfBirth' && value) {
-      const birthDate = new Date(value)
+    if (name === 'dateOfBirth' && nextValue) {
+      const birthDate = new Date(nextValue)
       const today = new Date()
       let calculatedAge = today.getFullYear() - birthDate.getFullYear()
       const monthDiff = today.getMonth() - birthDate.getMonth()
@@ -133,7 +179,7 @@ export default function Admissions() {
       }
 
       setAge(calculatedAge.toString())
-    } else if (name === 'dateOfBirth' && !value) {
+    } else if (name === 'dateOfBirth' && !nextValue) {
       setAge('')
     }
   }
@@ -159,9 +205,11 @@ export default function Admissions() {
 
   const goToStep2 = () => {
     setError('')
-    const missing = missingFieldsForPatientProfileWizardStep1(formData as PatientProfileFormValues)
-    if (missing.length) {
-      setError(`Please complete: ${missing.join(', ')}.`)
+    const step1Errors = validatePatientProfileWizardStep1Fields(formData as PatientProfileFormValues)
+    const messages = patientProfileFieldErrorMessages(step1Errors)
+    setFieldErrors(step1Errors)
+    if (messages.length) {
+      setError(messages.join(' '))
       return
     }
     // Prevent the same click that advances to step 2 from immediately triggering submit.
@@ -174,6 +222,15 @@ export default function Admissions() {
     if (step !== 2) return
     if (Date.now() < submitUnlockAtRef.current) return
     if (submitInFlightRef.current) return
+
+    const step1Errors = validatePatientProfileWizardStep1Fields(formData as PatientProfileFormValues)
+    const step1Messages = patientProfileFieldErrorMessages(step1Errors)
+    if (step1Messages.length) {
+      setFieldErrors(step1Errors)
+      setError(step1Messages.join(' '))
+      if (step1Errors.homePhone || step1Errors.email) setStep(1)
+      return
+    }
 
     if (duplicateWarning) {
       const proceed = window.confirm(`${duplicateWarning}\n\nDo you still want to submit this patient?`)
@@ -332,6 +389,7 @@ export default function Admissions() {
 
       setSubmitMessage('Admission record saved successfully!')
       setFormData(emptyForm())
+      setFieldErrors({})
       setAdmissionPatientPhoto(null)
       setAge('')
       setStep(1)
@@ -406,7 +464,11 @@ export default function Admissions() {
 
               {error && (
                 <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-                  <p className="text-red-800 dark:text-red-200">{error}</p>
+                  {patientProfileFieldErrorMessages(fieldErrors).length ? (
+                    <PatientProfileFieldErrorChips fieldErrors={fieldErrors} onFieldClick={scrollToFieldError} />
+                  ) : (
+                    <p className="text-red-800 dark:text-red-200">{error}</p>
+                  )}
                 </div>
               )}
 
@@ -447,6 +509,8 @@ export default function Admissions() {
                       disabled={isSubmitting}
                       facilityDisplayName={resolvedFacilityName}
                       showCompletionChecks
+                      fieldErrors={fieldErrors}
+                      highlightedField={highlightedField}
                     />
                   </div>
                 </div>
@@ -477,6 +541,7 @@ export default function Admissions() {
                       submitUnlockAtRef.current = 0
                       setSubmitMessage('')
                       setError('')
+                      setFieldErrors({})
                     }}
                     disabled={isSubmitting}
                   >

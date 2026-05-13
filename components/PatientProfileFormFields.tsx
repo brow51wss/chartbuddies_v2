@@ -22,6 +22,102 @@ export type PatientProfileFormValues = {
   physicianPhone: string
 }
 
+export const PATIENT_PROFILE_FIELD_IDS: Record<keyof PatientProfileFormValues, string> = {
+  firstName: 'pp-firstName',
+  middleName: 'pp-middleName',
+  lastName: 'pp-lastName',
+  dateOfBirth: 'pp-dateOfBirth',
+  sex: 'pp-sex',
+  dateOfAdmission: 'pp-dateOfAdmission',
+  streetAddress: 'pp-streetAddress',
+  city: 'pp-city',
+  state: 'pp-state',
+  homePhone: 'pp-homePhone',
+  email: 'pp-email',
+  diagnosis: 'pp-diagnosis',
+  diet: 'pp-diet',
+  allergies: 'pp-allergies',
+  physicianName: 'pp-physicianName',
+  physicianPhone: 'pp-physicianPhone',
+}
+
+export const PATIENT_PROFILE_FIELD_STEPS: Partial<Record<keyof PatientProfileFormValues, 1 | 2>> = {
+  firstName: 1,
+  middleName: 1,
+  lastName: 1,
+  dateOfBirth: 1,
+  sex: 1,
+  dateOfAdmission: 1,
+  streetAddress: 1,
+  city: 1,
+  state: 1,
+  homePhone: 1,
+  email: 1,
+  diagnosis: 2,
+  diet: 2,
+  allergies: 2,
+  physicianName: 2,
+  physicianPhone: 2,
+}
+
+const PATIENT_PROFILE_FIELD_LABELS: Record<keyof PatientProfileFormValues, string> = {
+  firstName: 'First name',
+  middleName: 'Middle name',
+  lastName: 'Last name',
+  dateOfBirth: 'Date of birth',
+  sex: 'Sex',
+  dateOfAdmission: 'Date of admission',
+  streetAddress: 'Street address',
+  city: 'City',
+  state: 'State',
+  homePhone: 'Home phone',
+  email: 'Email',
+  diagnosis: 'Diagnosis',
+  diet: 'Diet',
+  allergies: 'Allergies',
+  physicianName: 'Physician',
+  physicianPhone: 'Physician phone',
+}
+
+const PATIENT_PROFILE_FIELD_ORDER: (keyof PatientProfileFormValues)[] = [
+  'firstName',
+  'lastName',
+  'dateOfBirth',
+  'sex',
+  'dateOfAdmission',
+  'state',
+  'homePhone',
+  'email',
+  'physicianPhone',
+]
+
+export function PatientProfileFieldErrorChips({
+  fieldErrors,
+  onFieldClick,
+}: {
+  fieldErrors: Partial<Record<keyof PatientProfileFormValues, string>>
+  onFieldClick: (field: keyof PatientProfileFormValues) => void
+}) {
+  const fields = PATIENT_PROFILE_FIELD_ORDER.filter((field) => Boolean(fieldErrors[field]))
+  if (!fields.length) return null
+
+  return (
+    <div className="flex flex-wrap gap-2" aria-label="Fields that need attention">
+      {fields.map((field) => (
+        <button
+          key={field}
+          type="button"
+          onClick={() => onFieldClick(field)}
+          className="rounded-full border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-400 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200 dark:hover:bg-red-900/40"
+          title={fieldErrors[field]}
+        >
+          {PATIENT_PROFILE_FIELD_LABELS[field]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 type Mode = { type: 'wizard'; step: 1 | 2 } | { type: 'full' }
 
 type Props = {
@@ -42,6 +138,10 @@ type Props = {
   recordNumber?: string
   /** Shown in Section 3; not an input. */
   facilityDisplayName?: string | null
+  /** Field-level validation messages shown directly below inputs. */
+  fieldErrors?: Partial<Record<keyof PatientProfileFormValues, string>>
+  /** Temporary field highlight used after clicking an error chip. */
+  highlightedField?: keyof PatientProfileFormValues | null
 }
 
 function FieldCompleteCheck({ show, rightClassName = 'right-3' }: { show: boolean; rightClassName?: string }) {
@@ -72,6 +172,8 @@ export function PatientProfileFormFields({
   editedFields,
   recordNumber,
   facilityDisplayName,
+  fieldErrors,
+  highlightedField,
 }: Props) {
   const showBasicContact = mode.type === 'full' || mode.step === 1
   const showClinical = mode.type === 'full' || mode.step === 2
@@ -110,6 +212,12 @@ export function PatientProfileFormFields({
   }
   const shouldShowCheck = (field: keyof PatientProfileFormValues) =>
     showCompletionChecks && isComplete(field) && (editedFields == null || !!editedFields[field])
+  const fieldError = (field: keyof PatientProfileFormValues) => fieldErrors?.[field]
+  const errorTextClass = 'mt-1 text-xs font-medium text-red-600 dark:text-red-400'
+  const highlightClass = (field: keyof PatientProfileFormValues) =>
+    highlightedField === field
+      ? 'border-red-400 ring-2 ring-red-500/70 shadow-[0_0_0_4px_rgba(239,68,68,0.20)] transition-[box-shadow,border-color] duration-500'
+      : 'transition-[box-shadow,border-color] duration-500'
 
   return (
     <fieldset disabled={disabled} className={`space-y-10 ${disabled ? 'opacity-75' : ''}`}>
@@ -128,17 +236,18 @@ export function PatientProfileFormFields({
                     </label>
                     <div className="relative">
                       <input
-                        id="pp-firstName"
+                        id={PATIENT_PROFILE_FIELD_IDS.firstName}
                         name="firstName"
                         value={v.firstName}
                         onChange={onChange}
                         required={mode.type === 'full'}
-                        className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''}`}
+                        className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('firstName')}`}
                         placeholder="First Name"
                         autoComplete="given-name"
                       />
                       <FieldCompleteCheck show={shouldShowCheck('firstName')} />
                     </div>
+                    {fieldError('firstName') && <p className={errorTextClass}>{fieldError('firstName')}</p>}
                   </div>
                   <div className="md:col-span-4">
                     <label htmlFor="pp-middleName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -146,11 +255,11 @@ export function PatientProfileFormFields({
                     </label>
                     <div className="relative">
                       <input
-                        id="pp-middleName"
+                        id={PATIENT_PROFILE_FIELD_IDS.middleName}
                         name="middleName"
                         value={v.middleName}
                         onChange={onChange}
-                        className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''}`}
+                        className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('middleName')}`}
                         placeholder="Middle Name"
                         autoComplete="additional-name"
                       />
@@ -163,17 +272,18 @@ export function PatientProfileFormFields({
                     </label>
                     <div className="relative">
                       <input
-                        id="pp-lastName"
+                        id={PATIENT_PROFILE_FIELD_IDS.lastName}
                         name="lastName"
                         value={v.lastName}
                         onChange={onChange}
                         required={mode.type === 'full'}
-                        className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''}`}
+                        className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('lastName')}`}
                         placeholder="Last Name"
                         autoComplete="family-name"
                       />
                       <FieldCompleteCheck show={shouldShowCheck('lastName')} />
                     </div>
+                    {fieldError('lastName') && <p className={errorTextClass}>{fieldError('lastName')}</p>}
                   </div>
                 </div>
               </div>
@@ -187,15 +297,16 @@ export function PatientProfileFormFields({
                     <div className="relative min-w-0 w-full overflow-x-clip">
                       <input
                         type="date"
-                        id="pp-dateOfBirth"
+                        id={PATIENT_PROFILE_FIELD_IDS.dateOfBirth}
                         name="dateOfBirth"
                         value={v.dateOfBirth}
                         onChange={onChange}
                         required={mode.type === 'full'}
-                        className={`${patientProfileInputClass} min-w-0 w-full pr-8`}
+                        className={`${patientProfileInputClass} min-w-0 w-full pr-8 ${highlightClass('dateOfBirth')}`}
                       />
                       <FieldCompleteCheck show={shouldShowCheck('dateOfBirth')} />
                     </div>
+                    {fieldError('dateOfBirth') && <p className={errorTextClass}>{fieldError('dateOfBirth')}</p>}
                   </div>
                   <div className="min-w-0 w-full">
                     <label htmlFor="pp-age" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -217,12 +328,12 @@ export function PatientProfileFormFields({
                     </label>
                     <div className="relative">
                       <select
-                        id="pp-sex"
+                        id={PATIENT_PROFILE_FIELD_IDS.sex}
                         name="sex"
                         value={v.sex}
                         onChange={onChange}
                         required={mode.type === 'full'}
-                        className={`${patientProfileInputClass} min-w-0 w-full ${showCompletionChecks ? 'pr-10' : ''}`}
+                        className={`${patientProfileInputClass} min-w-0 w-full ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('sex')}`}
                       >
                         <option value="">Legal Sex</option>
                         <option value="Male">Male</option>
@@ -231,6 +342,7 @@ export function PatientProfileFormFields({
                       </select>
                       <FieldCompleteCheck show={shouldShowCheck('sex')} rightClassName="right-8" />
                     </div>
+                    {fieldError('sex') && <p className={errorTextClass}>{fieldError('sex')}</p>}
                   </div>
                   <div className="min-w-0 w-full md:w-[175px] md:max-w-[175px]">
                     <label htmlFor="pp-dateOfAdmission" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -239,15 +351,16 @@ export function PatientProfileFormFields({
                     <div className="relative min-w-0 w-full overflow-x-clip">
                       <input
                         type="date"
-                        id="pp-dateOfAdmission"
+                        id={PATIENT_PROFILE_FIELD_IDS.dateOfAdmission}
                         name="dateOfAdmission"
                         value={v.dateOfAdmission}
                         onChange={onChange}
                         required={mode.type === 'full'}
-                        className={`${patientProfileInputClass} min-w-0 w-full pr-8`}
+                        className={`${patientProfileInputClass} min-w-0 w-full pr-8 ${highlightClass('dateOfAdmission')}`}
                       />
                       <FieldCompleteCheck show={shouldShowCheck('dateOfAdmission')} />
                     </div>
+                    {fieldError('dateOfAdmission') && <p className={errorTextClass}>{fieldError('dateOfAdmission')}</p>}
                   </div>
                 </div>
               </div>
@@ -289,6 +402,7 @@ export function PatientProfileFormFields({
                   />
                   <FieldCompleteCheck show={shouldShowCheck('streetAddress')} />
                 </div>
+                {fieldError('streetAddress') && <p className={errorTextClass}>{fieldError('streetAddress')}</p>}
               </div>
               <div className="md:col-span-5">
                 <label htmlFor="pp-city" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -306,6 +420,7 @@ export function PatientProfileFormFields({
                   />
                   <FieldCompleteCheck show={shouldShowCheck('city')} />
                 </div>
+                {fieldError('city') && <p className={errorTextClass}>{fieldError('city')}</p>}
               </div>
               <div className="md:col-span-4">
                 <label htmlFor="pp-state" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -313,17 +428,18 @@ export function PatientProfileFormFields({
                 </label>
                 <div className="relative">
                   <input
-                    id="pp-state"
+                    id={PATIENT_PROFILE_FIELD_IDS.state}
                     name="state"
                     value={v.state}
                     onChange={onChange}
                     required={mode.type === 'full'}
-                    className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''}`}
+                    className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('state')}`}
                     placeholder="State"
                     autoComplete="address-level1"
                   />
                   <FieldCompleteCheck show={shouldShowCheck('state')} />
                 </div>
+                {fieldError('state') && <p className={errorTextClass}>{fieldError('state')}</p>}
               </div>
               <div className="md:col-span-4">
                 <label htmlFor="pp-homePhone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -332,17 +448,20 @@ export function PatientProfileFormFields({
                 <div className="relative">
                   <input
                     type="tel"
-                    id="pp-homePhone"
+                    id={PATIENT_PROFILE_FIELD_IDS.homePhone}
                     name="homePhone"
                     value={v.homePhone}
                     onChange={onChange}
                     required={mode.type === 'full'}
-                    className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''}`}
+                    inputMode="numeric"
+                    maxLength={14}
+                    className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('homePhone')}`}
                     placeholder="(555) 555-5555"
                     autoComplete="tel"
                   />
                   <FieldCompleteCheck show={shouldShowCheck('homePhone')} />
                 </div>
+                {fieldError('homePhone') && <p className={errorTextClass}>{fieldError('homePhone')}</p>}
               </div>
               <div className="md:col-span-4">
                 <label htmlFor="pp-email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -351,17 +470,18 @@ export function PatientProfileFormFields({
                 <div className="relative">
                   <input
                     type="email"
-                    id="pp-email"
+                    id={PATIENT_PROFILE_FIELD_IDS.email}
                     name="email"
                     value={v.email}
                     onChange={onChange}
                     required={mode.type === 'full'}
-                    className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''}`}
+                    className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('email')}`}
                     placeholder="Email"
                     autoComplete="email"
                   />
                   <FieldCompleteCheck show={shouldShowCheck('email')} />
                 </div>
+                {fieldError('email') && <p className={errorTextClass}>{fieldError('email')}</p>}
               </div>
             </div>
           </div>
@@ -459,16 +579,19 @@ export function PatientProfileFormFields({
               <div className="relative">
                 <input
                   type="tel"
-                  id="pp-physicianPhone"
+                  id={PATIENT_PROFILE_FIELD_IDS.physicianPhone}
                   name="physicianPhone"
                   value={v.physicianPhone}
                   onChange={onChange}
-                  className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''}`}
+                  inputMode="numeric"
+                  maxLength={14}
+                  className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('physicianPhone')}`}
                   placeholder="(555) 555-5555"
                   autoComplete="tel"
                 />
                 <FieldCompleteCheck show={shouldShowCheck('physicianPhone')} />
               </div>
+              {fieldError('physicianPhone') && <p className={errorTextClass}>{fieldError('physicianPhone')}</p>}
             </div>
           </div>
         </div>

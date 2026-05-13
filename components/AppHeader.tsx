@@ -256,6 +256,19 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
               onKeyDown={(e) => e.key === 'Enter' && handleExitReadOnly()}
             />
             {exitError && <p className="text-sm text-red-600 dark:text-red-400 mb-2">{exitError}</p>}
+            <div className="mb-4 text-right">
+              <Link
+                href="/auth/forgot-password"
+                onClick={() => {
+                  setShowExitReadOnlyModal(false)
+                  setExitPassword('')
+                  setExitError('')
+                }}
+                className="text-sm font-medium text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue dark:hover:text-lasso-blue/80"
+              >
+                Forgot your password?
+              </Link>
+            </div>
             <div className="flex gap-2 mt-4">
               <button
                 type="button"
