@@ -139,6 +139,7 @@ import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../../
 import {
   computeMissedMarDocumentation,
   getMarDiscontinuedBeforeDayInfo,
+  getMarDiscontinuedBeforeSlotInfo,
   isMarRowActiveOnDayColumn,
 } from '../../../../lib/marMissedDocumentation'
 import type {
@@ -4783,11 +4784,17 @@ export default function ViewMARForm() {
                               const isWithheld = initialsForLogic === 'W' || initialsForLogic === 'H'
                               const hasParameter = !!med.parameter
 
-                              const { isDiscontinued, dcDay } = getMarDiscontinuedBeforeDayInfo(
-                                medAdmin,
-                                day,
-                                isVitalsEntry
-                              )
+                              const { isDiscontinued, dcDay } = parsedMarMonthForRow
+                                ? getMarDiscontinuedBeforeSlotInfo(
+                                    group.meds,
+                                    administrations,
+                                    med,
+                                    day,
+                                    parsedMarMonthForRow.y,
+                                    parsedMarMonthForRow.m,
+                                    isVitalsEntry
+                                  )
+                                : { isDiscontinued: false, dcDay: null }
                               const isMedActive =
                                 !!parsedMarMonthForRow &&
                                 isMarRowActiveOnDayColumn(med, day, parsedMarMonthForRow.y, parsedMarMonthForRow.m)

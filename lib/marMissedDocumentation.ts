@@ -48,6 +48,56 @@ export function getMarDiscontinuedBeforeDayInfo(
   return { isDiscontinued: false, dcDay: null }
 }
 
+function marMedicationDiscontinueGroupKey(med: MARMedication): string {
+  const isVitalsEntry = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
+  return isVitalsEntry
+    ? `vitals|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
+    : `${med.medication_name}|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
+}
+
+function marSlotTimeMs(
+  formYear: number,
+  formMonth1Based: number,
+  day: number,
+  hourStr: string | null | undefined,
+  fallbackHour: number
+): number {
+  const parsed = parseMarHourToLocalDate(formYear, formMonth1Based, day, hourStr)
+  if (parsed) return parsed.getTime()
+  return new Date(formYear, formMonth1Based - 1, day, fallbackHour, 0, 0, 0).getTime()
+}
+
+export function getMarDiscontinuedBeforeSlotInfo(
+  groupMeds: MARMedication[],
+  administrations: { [medId: string]: { [day: number]: MARAdministration | undefined } },
+  med: MARMedication,
+  day: number,
+  formYear: number,
+  formMonth1Based: number,
+  isVitalsEntry: boolean
+): { isDiscontinued: boolean; dcDay: number | null } {
+  if (isVitalsEntry) return { isDiscontinued: false, dcDay: null }
+
+  const groupKey = marMedicationDiscontinueGroupKey(med)
+  const currentTime = marSlotTimeMs(formYear, formMonth1Based, day, med.hour, 23)
+
+  for (const groupMed of groupMeds) {
+    if (marMedicationDiscontinueGroupKey(groupMed) !== groupKey) continue
+    const medAdmin = administrations[groupMed.id] || {}
+
+    for (let checkDay = 1; checkDay <= day; checkDay++) {
+      const checkAdmin = medAdmin[checkDay]
+      const checkRaw = checkAdmin?.initials ?? ''
+      if (checkRaw.startsWith('data:image') || checkRaw.trim().toUpperCase() !== 'DC') continue
+
+      const dcTime = marSlotTimeMs(formYear, formMonth1Based, checkDay, groupMed.hour, 0)
+      if (dcTime < currentTime) return { isDiscontinued: true, dcDay: checkDay }
+    }
+  }
+
+  return { isDiscontinued: false, dcDay: null }
+}
+
 export function isDiscontinuedBeforeMedDay(
   medAdmin: { [day: number]: MARAdministration | undefined },
   day: number,
@@ -194,7 +244,15 @@ export function computeMissedMarDocumentation(
       if (!isMarDayColumnEligibleForMissedCheck(formYear, formMonth1Based, day, now)) continue
       if (!isMarAdministrationSlotPastDue(formYear, formMonth1Based, day, med.hour, now)) continue
       const isMedActive = isMarRowActiveOnDayColumn(med, day, formYear, formMonth1Based)
-      const isDiscontinued = isDiscontinuedBeforeMedDay(medAdmin, day, isVitalsEntry)
+      const isDiscontinued = getMarDiscontinuedBeforeSlotInfo(
+        meds,
+        administrations,
+        med,
+        day,
+        formYear,
+        formMonth1Based,
+        isVitalsEntry
+      ).isDiscontinued
       const admin = medAdmin[day]
       if (!isMarAdminCellDocumentationMissing(admin, isMedActive, isDiscontinued)) continue
       const dateLabel = new Date(formYear, formMonth1Based - 1, day).toLocaleDateString('en-US', {
