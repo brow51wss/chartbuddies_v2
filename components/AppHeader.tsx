@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
 import { useReadOnly } from '../contexts/ReadOnlyContext'
+import { togglePatientStickyBar } from './PatientStickyBar'
 import type { UserProfile } from '../types/auth'
 
 interface AppHeaderProps {
@@ -101,20 +102,22 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
                 className="h-10 w-auto"
               />
             </Link>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {userProfile?.full_name ?? 'Loading...'} • {(userProfile?.role ?? '').replace('_', ' ').toUpperCase()}
-              {isReadOnly && <span className="ml-2 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 rounded text-xs font-medium">Read-Only View</span>}
-            </p>
+            {patientName && (
+              <p className="min-w-0 text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500">Patient Name:</span>{' '}
+                <span className="font-medium text-gray-800 dark:text-gray-200">{patientName}</span>
+              </p>
+            )}
           </div>
           <div className="flex items-center space-x-3">
-            {!isReadOnly && (
-              <Link
-                href="/admissions"
+            {patientId && (
+              <button
+                type="button"
+                onClick={togglePatientStickyBar}
                 className="px-4 py-2 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue text-sm font-medium shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
               >
-                <span>+</span>
-                <span>Add Patient</span>
-              </Link>
+                <span>Patient info</span>
+              </button>
             )}
             {patientId && (
               <div className="relative" ref={menuRef}>
@@ -170,6 +173,19 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
               </button>
               {userMenuOpen && (
                 <div className="absolute right-0 top-full mt-1 py-1 w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-app-header-dropdown">
+                  <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-600">
+                    <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                      {userProfile?.full_name ?? 'Loading...'}
+                    </p>
+                    <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      {(userProfile?.role ?? '').replace('_', ' ') || '—'}
+                    </p>
+                    {isReadOnly && (
+                      <span className="mt-2 inline-flex rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                        Read-Only View
+                      </span>
+                    )}
+                  </div>
                   {!isReadOnly && userProfile?.role === 'superadmin' && (
                     <Link
                       href="/invites"

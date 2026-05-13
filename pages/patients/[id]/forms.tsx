@@ -4,6 +4,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
 import AppHeader from '../../../components/AppHeader'
+import PatientStickyBar from '../../../components/PatientStickyBar'
 import TimeInput from '../../../components/TimeInput'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../lib/auth'
@@ -505,6 +506,14 @@ export default function PatientForms() {
         <AppHeader
           patientId={typeof id === 'string' ? id : Array.isArray(id) ? id[0] : undefined}
           patientName={patient?.patient_name}
+        />
+        <PatientStickyBar
+          patientId={typeof id === 'string' ? id : Array.isArray(id) ? id[0] : undefined}
+          patientName={patient?.patient_name}
+          dateOfBirth={patient?.date_of_birth}
+          sex={patient?.sex}
+          allergies={patient?.allergies}
+          recordNumber={patient?.record_number}
         />
 
         <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [patientsView, setPatientsView] = useState<PatientsViewMode>('cards')
   const patientsViewPersistReadyRef = useRef(false)
   const [showNameSortMenu, setShowNameSortMenu] = useState(false)
+  const [showAddPatientModal, setShowAddPatientModal] = useState(false)
   const [editingPatientId, setEditingPatientId] = useState<string | null>(null)
   const nameSortRef = useRef<HTMLTableCellElement>(null)
   const { isReadOnly } = useReadOnly()
@@ -340,8 +341,44 @@ export default function Dashboard() {
     setEditingPatientId(patient.id)
   }
 
+  const handleCreatePatient = async ({ payload }: EditPatientInfoSaveArgs): Promise<Patient> => {
+    if (!userProfile) throw new Error('User profile not found.')
+    if (!userProfile.hospital_id) {
+      throw new Error('Hospital ID is missing. Please use the admissions page or contact support.')
+    }
+
+    const recordNumber = `REC-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`
+    const row = {
+      hospital_id: userProfile.hospital_id,
+      record_number: recordNumber,
+      created_by: userProfile.id,
+      ...payload,
+      facility_name: userFacilityName || payload.facility_name,
+    }
+
+    const { data, error: insertError } = await supabase
+      .from('patients')
+      .insert([row])
+      .select('*')
+      .single()
+
+    if (insertError) throw insertError
+    if (!data) throw new Error('No patient returned from server.')
+
+    if (userProfile.role === 'nurse') {
+      await supabase.from('nurse_patient_assignments').insert({
+        nurse_id: userProfile.id,
+        patient_id: data.id,
+        assigned_by: userProfile.id,
+      })
+    }
+
+    return data as Patient
+  }
+
   const handleSavePatientEdits = async ({ patientId, payload }: EditPatientInfoSaveArgs): Promise<Patient> => {
     if (!userProfile) throw new Error('User profile not found.')
+    if (!patientId) throw new Error('Patient ID is missing.')
     if (userProfile.role !== 'head_nurse' && userProfile.role !== 'superadmin') {
       throw new Error('You do not have permission to edit patient details.')
     }
@@ -462,6 +499,16 @@ export default function Dashboard() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-3">
+                {!isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPatientModal(true)}
+                    className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+                  >
+                    <span aria-hidden="true">+</span>
+                    <span>Add Patient</span>
+                  </button>
+                )}
                 {patients.length > 0 && (
                   <div
                     className="inline-flex rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50/80 dark:bg-gray-900/40 p-0.5 shadow-sm"
@@ -535,12 +582,16 @@ export default function Dashboard() {
                   <p className="text-gray-600 dark:text-gray-400 mb-6">
                     Add your first patient to start creating MAR forms
                   </p>
-                  <Link
-                    href="/admissions"
-                    className="inline-block px-6 py-3 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue font-medium shadow-md hover:shadow-lg transition-all duration-200"
-                  >
-                    Add Patient
-                  </Link>
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddPatientModal(true)}
+                      className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-6 py-3 font-medium text-white shadow-md transition-colors hover:bg-green-700"
+                    >
+                      <span aria-hidden="true">+</span>
+                      Add Patient
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="max-w-7xl mx-auto">
@@ -735,6 +786,23 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+
+            <EditPatientInfoModal
+              isOpen={showAddPatientModal}
+              mode="create"
+              patientId={null}
+              title="Add Patient"
+              facilityDisplayName={userFacilityName || null}
+              recordNumber="Auto-generated"
+              readOnly={isReadOnly}
+              onClose={() => setShowAddPatientModal(false)}
+              onSave={handleCreatePatient}
+              onSaved={(createdPatient) => {
+                setPatients(prev => [createdPatient, ...prev])
+                setMessage('Patient added.')
+                setTimeout(() => setMessage(''), 3000)
+              }}
+            />
 
             <EditPatientInfoModal
               isOpen={Boolean(editingPatientId)}

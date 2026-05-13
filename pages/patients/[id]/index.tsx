@@ -4,6 +4,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
 import AppHeader from '../../../components/AppHeader'
+import PatientStickyBar from '../../../components/PatientStickyBar'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../lib/auth'
 import type { Patient } from '../../../types/auth'
@@ -151,7 +152,7 @@ export default function PatientHub() {
       }
       setPatient(data)
 
-      const [marRes, progressRes] = await Promise.all([
+      const [marRes, progressRes, patientMarFormsRes] = await Promise.all([
         supabase
           .from('mar_forms')
           .select('id, status, month_year, updated_at, created_at')
@@ -164,12 +165,59 @@ export default function PatientHub() {
           .eq('patient_id', loadPatientId)
           .order('updated_at', { ascending: false })
           .limit(1),
+        supabase
+          .from('mar_forms')
+          .select('id, month_year')
+          .eq('patient_id', loadPatientId),
       ])
 
       if (cancelled) return
 
       const latestMar = marRes.data?.[0]
       const latestProgressEntry = progressRes.data?.[0]
+      const patientMarForms = patientMarFormsRes.data || []
+      const patientMarFormIds = patientMarForms.map((form) => form.id)
+      const monthByMarFormId = new Map(patientMarForms.map((form) => [form.id, form.month_year]))
+
+      let latestVitalsActivity:
+        | {
+            mar_form_id: string
+            day_number?: number | null
+            updated_at?: string | null
+            created_at?: string | null
+            source: 'reading' | 'entry'
+          }
+        | null = null
+
+      if (patientMarFormIds.length > 0) {
+        const [vitalsReadingRes, vitalsEntryRes] = await Promise.all([
+          supabase
+            .from('mar_vital_signs')
+            .select('mar_form_id, day_number, updated_at, created_at')
+            .in('mar_form_id', patientMarFormIds)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from('mar_medications')
+            .select('mar_form_id, updated_at, created_at')
+            .in('mar_form_id', patientMarFormIds)
+            .or('medication_name.eq.VITALS,notes.eq.Vital Signs Entry')
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ])
+
+        const latestReading = vitalsReadingRes.data
+          ? { ...vitalsReadingRes.data, source: 'reading' as const }
+          : null
+        const latestEntry = vitalsEntryRes.data
+          ? { ...vitalsEntryRes.data, source: 'entry' as const }
+          : null
+        const readingMs = activityTimestampMs(latestReading?.updated_at || latestReading?.created_at)
+        const entryMs = activityTimestampMs(latestEntry?.updated_at || latestEntry?.created_at)
+        latestVitalsActivity = readingMs >= entryMs ? latestReading : latestEntry
+      }
 
       const rows: BinderActivityRow[] = []
 
@@ -197,6 +245,23 @@ export default function PatientHub() {
           lastActivityLabel: formatDateTimeLabel(progressRaw),
           href: progressModule.href ? `/patients/${loadPatientId}/${progressModule.href}` : undefined,
           lastActivitySortMs: activityTimestampMs(progressRaw),
+        })
+      }
+
+      const vitalsModule = MODULES.find((module) => module.id === 'vitals')
+      if (latestVitalsActivity && vitalsModule) {
+        const vitalsRaw = latestVitalsActivity.updated_at || latestVitalsActivity.created_at || null
+        const vitalsMonth = monthByMarFormId.get(latestVitalsActivity.mar_form_id)
+        rows.push({
+          moduleId: vitalsModule.id,
+          moduleName: vitalsModule.name,
+          statusLabel:
+            latestVitalsActivity.source === 'reading' && latestVitalsActivity.day_number
+              ? `Vitals recorded, day ${latestVitalsActivity.day_number}${vitalsMonth ? ` (${vitalsMonth})` : ''}`
+              : `Vitals entry added${vitalsMonth ? ` (${vitalsMonth})` : ''}`,
+          lastActivityLabel: formatDateTimeLabel(vitalsRaw),
+          href: `/patients/${loadPatientId}/mar/${latestVitalsActivity.mar_form_id}`,
+          lastActivitySortMs: activityTimestampMs(vitalsRaw),
         })
       }
 
@@ -244,6 +309,14 @@ export default function PatientHub() {
       </Head>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <AppHeader patientId={patient.id} patientName={patient.patient_name} />
+        <PatientStickyBar
+          patientId={patient.id}
+          patientName={patient.patient_name}
+          dateOfBirth={patient.date_of_birth}
+          sex={patient.sex}
+          allergies={patient.allergies}
+          recordNumber={patient.record_number}
+        />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Link
@@ -303,7 +376,7 @@ export default function PatientHub() {
                     <div className="overflow-x-auto pb-1">
                       <ul className="relative z-[1] m-0 flex min-w-min list-none flex-row items-start gap-0 px-1 py-2">
                         {activityRows.map((row, index) => {
-                          const actionAvailable = row.moduleId === 'mar' || row.moduleId === 'progress'
+                          const actionAvailable = Boolean(row.href)
                           const isFirst = index === 0
                           const isLast = index === activityRows.length - 1
                           return (

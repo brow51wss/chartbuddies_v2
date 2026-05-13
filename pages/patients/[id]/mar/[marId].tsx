@@ -3497,6 +3497,7 @@ export default function ViewMARForm() {
             />
         </div>
         <PatientStickyBar
+          patientId={marForm?.patient_id}
           patientName={marForm?.patient_name}
           dateOfBirth={marForm?.date_of_birth}
           sex={marForm?.sex}

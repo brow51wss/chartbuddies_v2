@@ -747,9 +747,11 @@ export default function ProgressNotesPage() {
           />
         </div>
         <PatientStickyBar
+          patientId={typeof router.query.id === 'string' ? router.query.id : Array.isArray(router.query.id) ? router.query.id[0] : undefined}
           patientName={patient?.patient_name}
           dateOfBirth={patient?.date_of_birth}
           sex={patient?.sex}
+          allergies={patient?.allergies}
           recordNumber={patient?.record_number}
           onEditPatient={readOnly ? undefined : () => void openEditPatientModal()}
           editPatientLabel="Patient Details"

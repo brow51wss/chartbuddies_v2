@@ -4,6 +4,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
 import AppHeader from '../../../../components/AppHeader'
+import PatientStickyBar from '../../../../components/PatientStickyBar'
 import { supabase } from '../../../../lib/supabase'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import type { Patient } from '../../../../types/auth'
@@ -108,6 +109,14 @@ export default function ProgressNotesIndex() {
         <AppHeader
           patientId={typeof patientId === 'string' ? patientId : Array.isArray(patientId) ? patientId[0] : undefined}
           patientName={patient.patient_name}
+        />
+        <PatientStickyBar
+          patientId={typeof patientId === 'string' ? patientId : Array.isArray(patientId) ? patientId[0] : undefined}
+          patientName={patient.patient_name}
+          dateOfBirth={patient.date_of_birth}
+          sex={patient.sex}
+          allergies={patient.allergies}
+          recordNumber={patient.record_number}
         />
 
         <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

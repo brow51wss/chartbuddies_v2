@@ -18,6 +18,7 @@ import {
   validatePatientProfileWizardStep1Fields,
   type PatientProfileFieldErrors,
 } from '../lib/patientProfileWizardValidation'
+import { localTodayYMD } from '../lib/calendarDate'
 
 export type PatientProfileUpdatePayload = {
   patient_name: string
@@ -40,7 +41,7 @@ export type PatientProfileUpdatePayload = {
 }
 
 export type EditPatientInfoSaveArgs = {
-  patientId: string
+  patientId: string | null
   payload: PatientProfileUpdatePayload
   form: PatientProfileFormValues
   patientName: string
@@ -49,6 +50,7 @@ export type EditPatientInfoSaveArgs = {
 type Props = {
   isOpen: boolean
   patientId: string | null | undefined
+  mode?: 'edit' | 'create'
   title?: string
   facilityDisplayName?: string | null
   recordNumber?: string | null
@@ -58,6 +60,28 @@ type Props = {
   onSaved?: (updatedPatient: Patient) => void
   loadingText?: string
   errorTitleId?: string
+}
+
+function emptyPatientFormValues(): PatientProfileFormValues {
+  return {
+    firstName: '',
+    middleName: '',
+    lastName: '',
+    dateOfBirth: '',
+    sex: '',
+    dateOfAdmission: localTodayYMD(),
+    streetAddress: '',
+    city: '',
+    state: DEFAULT_PATIENT_STATE,
+    zipCode: '',
+    homePhone: '',
+    email: '',
+    diagnosis: '',
+    diet: '',
+    allergies: '',
+    physicianName: '',
+    physicianPhone: '',
+  }
 }
 
 function patientToFormValues(patient: Patient): PatientProfileFormValues {
@@ -113,6 +137,7 @@ function buildPatientProfileUpdatePayload(
 export default function EditPatientInfoModal({
   isOpen,
   patientId,
+  mode = 'edit',
   title = 'Edit Patient Details',
   facilityDisplayName = null,
   recordNumber = null,
@@ -162,6 +187,19 @@ export default function EditPatientInfoModal({
       return
     }
 
+    if (mode === 'create') {
+      setLoading(false)
+      setModalError('')
+      setForm(emptyPatientFormValues())
+      setAgeDisplay('')
+      setPatientPhoto(null)
+      setStep(1)
+      setFieldErrors({})
+      setHighlightedField(null)
+      setTouchedFields({})
+      return
+    }
+
     if (!patientId) {
       resetState()
       setModalError('This view is not linked to a patient record.')
@@ -206,7 +244,7 @@ export default function EditPatientInfoModal({
     return () => {
       cancelled = true
     }
-  }, [isOpen, patientId, resetState])
+  }, [isOpen, patientId, resetState, mode])
 
   if (!isOpen) return null
 
@@ -272,7 +310,8 @@ export default function EditPatientInfoModal({
   }
 
   const handleSave = async () => {
-    if (!patientId || !form || saveInFlightRef.current) return
+    if (!form || saveInFlightRef.current) return
+    if (mode === 'edit' && !patientId) return
 
     const firstName = form.firstName.trim()
     const middleName = form.middleName.trim()
@@ -305,11 +344,11 @@ export default function EditPatientInfoModal({
     setModalError('')
 
     try {
-      const updatedPatient = await onSave({ patientId, payload, form, patientName })
+      const updatedPatient = await onSave({ patientId: patientId ?? null, payload, form, patientName })
       onSaved?.(updatedPatient)
       onClose()
     } catch (err: unknown) {
-      setModalError(err instanceof Error ? err.message : 'Failed to update patient information')
+      setModalError(err instanceof Error ? err.message : 'Failed to save patient information')
     } finally {
       setSaving(false)
       saveInFlightRef.current = false
@@ -338,7 +377,7 @@ export default function EditPatientInfoModal({
               aria-valuemin={1}
               aria-valuemax={2}
               aria-valuenow={step}
-              aria-label="Edit progress"
+              aria-label="Patient information progress"
             >
               <div className={`h-2.5 flex-1 rounded-sm transition-colors ${step >= 1 ? 'bg-lasso-navy' : 'bg-gray-200 dark:bg-gray-600'}`} />
               <div className={`h-2.5 flex-1 rounded-sm transition-colors ${step >= 2 ? 'bg-lasso-navy' : 'bg-gray-200 dark:bg-gray-600'}`} />
@@ -349,7 +388,7 @@ export default function EditPatientInfoModal({
             onClick={close}
             disabled={saving}
             className="shrink-0 text-gray-500 hover:text-gray-700 disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-200"
-            aria-label="Close edit patient details modal"
+            aria-label="Close patient details modal"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -372,7 +411,7 @@ export default function EditPatientInfoModal({
             <p className="text-sm text-gray-600 dark:text-gray-300">{loadingText}</p>
           ) : form ? (
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
-              {patientId && (
+              {mode === 'edit' && patientId && (
                 <aside className="mx-auto shrink-0 lg:mx-0 lg:pt-1">
                   <PatientPhotoCaptureField
                     patientId={patientId}
@@ -443,7 +482,7 @@ export default function EditPatientInfoModal({
                 disabled={saving}
                 className="rounded-lg bg-lasso-navy px-4 py-2 text-white hover:bg-lasso-teal disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {saving ? 'Saving...' : 'Save changes'}
+                {saving ? 'Saving...' : mode === 'create' ? 'Add patient' : 'Save changes'}
               </button>
             )
           ) : null}

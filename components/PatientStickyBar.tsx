@@ -1,7 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { formatCalendarDate } from '../lib/calendarDate'
+import { parsePatientNameParts, computeAgeFromISODate } from '../lib/patientName'
+import { supabase } from '../lib/supabase'
+import type { Patient } from '../types/auth'
+
+const TOGGLE_PATIENT_STICKY_BAR_EVENT = 'lasso:toggle-patient-sticky-bar'
+
+export function togglePatientStickyBar() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new Event(TOGGLE_PATIENT_STICKY_BAR_EVENT))
+}
 
 interface PatientStickyBarProps {
+  patientId?: string | null
   patientName?: string | null
   dateOfBirth?: string | null
   sex?: string | null
@@ -13,110 +24,228 @@ interface PatientStickyBarProps {
   editPatientLabel?: string
 }
 
+function displayValue(value?: string | null) {
+  const trimmed = String(value ?? '').trim()
+  return trimmed || '—'
+}
+
+function InfoCard({
+  label,
+  value,
+  className = '',
+}: {
+  label: string
+  value?: string | null
+  className?: string
+}) {
+  return (
+    <div className={`rounded-xl border border-white/10 bg-white/5 p-4 ${className}`.trim()}>
+      <dt className="mb-1 text-xs font-semibold uppercase tracking-wide text-lasso-blue/90">{label}</dt>
+      <dd className="whitespace-pre-wrap break-words font-medium text-white">{displayValue(value)}</dd>
+    </div>
+  )
+}
+
 /**
- * Shared sticky patient identity bar used across modules.
+ * Shared patient information drawer used across modules.
  * Keep styling/behavior centralized here so updates apply everywhere.
  */
 export default function PatientStickyBar({
+  patientId,
   patientName,
   dateOfBirth,
   sex,
   recordNumber,
   allergies,
   className = '',
-  onEditPatient,
-  editPatientLabel = 'Patient Details',
 }: PatientStickyBarProps) {
-  const formattedDob = dateOfBirth ? formatCalendarDate(dateOfBirth) : '—'
-  const [showAllergiesModal, setShowAllergiesModal] = useState(false)
-  const normalizedAllergies = (allergies ?? '').trim() || 'None'
-  const ALLERGY_PREVIEW_LIMIT = 38
-  const shouldTruncateAllergies = normalizedAllergies.length > ALLERGY_PREVIEW_LIMIT
-  const allergiesPreview = shouldTruncateAllergies
-    ? `${normalizedAllergies.slice(0, ALLERGY_PREVIEW_LIMIT)}...`
-    : normalizedAllergies
+  const [isVisible, setIsVisible] = useState(false)
+  const [patientDetails, setPatientDetails] = useState<Patient | null>(null)
+  const [loadingDetails, setLoadingDetails] = useState(false)
+  const [detailsError, setDetailsError] = useState('')
+
+  const resolvedPatientName = patientDetails?.patient_name ?? patientName ?? null
+  const resolvedDateOfBirth = patientDetails?.date_of_birth ?? dateOfBirth ?? null
+  const resolvedSex = patientDetails?.sex ?? sex ?? null
+  const resolvedRecordNumber = patientDetails?.record_number ?? recordNumber ?? null
+  const resolvedAllergies = patientDetails?.allergies ?? allergies ?? null
+  const nameParts = parsePatientNameParts(resolvedPatientName || '')
+  const formattedDob = resolvedDateOfBirth ? formatCalendarDate(resolvedDateOfBirth) : '—'
+  const formattedAdmissionDate = patientDetails?.admission_date ? formatCalendarDate(patientDetails.admission_date) : '—'
+  const ageDisplay = resolvedDateOfBirth ? computeAgeFromISODate(resolvedDateOfBirth.slice(0, 10)) : ''
+  const normalizedAllergies = (resolvedAllergies ?? '').trim() || 'None'
+
+  useEffect(() => {
+    const handleToggle = () => {
+      setIsVisible((current) => !current)
+    }
+    window.addEventListener(TOGGLE_PATIENT_STICKY_BAR_EVENT, handleToggle)
+    return () => window.removeEventListener(TOGGLE_PATIENT_STICKY_BAR_EVENT, handleToggle)
+  }, [])
+
+  useEffect(() => {
+    if (!isVisible || !patientId) return
+
+    let cancelled = false
+    setLoadingDetails(true)
+    setDetailsError('')
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('patients')
+          .select('*')
+          .eq('id', patientId)
+          .single()
+
+        if (error) throw error
+        if (!cancelled) setPatientDetails((data as Patient) ?? null)
+      } catch (err) {
+        if (!cancelled) {
+          setDetailsError(err instanceof Error ? err.message : 'Failed to load full patient details.')
+        }
+      } finally {
+        if (!cancelled) setLoadingDetails(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isVisible, patientId])
+
+  const closePanel = () => {
+    setIsVisible(false)
+  }
 
   return (
     <>
-      <div className={`no-print sticky top-0 z-[99999] w-full bg-lasso-navy text-white border-b border-lasso-blue/30 ${className}`.trim()}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 text-xs font-semibold flex-wrap">
-            <span>
-              <span className="uppercase tracking-wide text-lasso-blue/90 mr-2">Name</span>
-              <span>{patientName || 'Unknown Patient'}</span>
-            </span>
-            <span>
-              <span className="uppercase tracking-wide text-lasso-blue/90 mr-2">DOB</span>
-              <span>{formattedDob}</span>
-            </span>
-            <span>
-              <span className="uppercase tracking-wide text-lasso-blue/90 mr-2">Sex</span>
-              <span>{sex || '—'}</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 min-w-0 max-w-[360px]">
-              <span className="uppercase tracking-wide text-lasso-blue/90 mr-0.5 shrink-0">Allergies</span>
-              <span className="truncate">{allergiesPreview}</span>
-              {shouldTruncateAllergies && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllergiesModal(true)}
-                  className="text-lasso-blue/90 hover:text-lasso-blue underline underline-offset-2 shrink-0"
-                >
-                  MORE
-                </button>
-              )}
-            </span>
+      <aside
+        className={`no-print fixed right-[2.5vw] top-[2.5vh] z-[2147483647] h-[95vh] w-[85vw] max-w-[800px] overflow-hidden rounded-2xl border border-gray-700 bg-gray-800 text-white shadow-2xl transition-transform duration-300 ease-out ${
+          isVisible ? 'translate-x-0' : 'translate-x-[calc(100%+5vw)] pointer-events-none'
+        } ${className}`.trim()}
+        aria-hidden={!isVisible}
+      >
+        <div className="flex h-full flex-col">
+          <div className="flex items-center border-b border-gray-700 px-4 py-4 sm:px-5">
+            <button
+              type="button"
+              onClick={closePanel}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/20 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+              aria-label="Close patient info"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-          <div className="text-xs font-semibold flex items-center gap-3 sm:gap-4 shrink-0">
-            {onEditPatient && (
-              <button
-                type="button"
-                onClick={onEditPatient}
-                className="text-lasso-blue/90 hover:text-lasso-blue underline underline-offset-2 whitespace-nowrap"
-              >
-                {editPatientLabel}
-              </button>
-            )}
-            <div className="h-4 w-px bg-white/25 hidden sm:block" aria-hidden />
-            <span>
-              <span className="uppercase tracking-wide text-lasso-blue/90 mr-2">Record No.</span>
-              <span>{recordNumber || '—'}</span>
-            </span>
-          </div>
-        </div>
-      </div>
 
-      {showAllergiesModal && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-xl rounded-xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-700 dark:bg-gray-800">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Patient Allergies</h3>
-              <button
-                type="button"
-                onClick={() => setShowAllergiesModal(false)}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                aria-label="Close allergies modal"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+          <div className="patient-info-drawer-scroll min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+            {loadingDetails && (
+              <div className="mb-4 rounded-lg border border-lasso-blue/30 bg-lasso-blue/10 px-4 py-3 text-sm font-medium text-lasso-blue">
+                Loading full patient information...
+              </div>
+            )}
+            {detailsError && (
+              <div className="mb-4 rounded-lg border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm font-medium text-amber-200">
+                Could not load the full patient record. Showing available patient information.
+              </div>
+            )}
+
+            <div className="mb-5 flex flex-col gap-4 rounded-xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center">
+              {patientDetails?.patient_photo ? (
+                <img
+                  src={patientDetails.patient_photo}
+                  alt={`${resolvedPatientName || 'Patient'} photo`}
+                  className="h-24 w-24 shrink-0 rounded-full border border-white/20 object-cover"
+                />
+              ) : (
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/60">
+                  <svg className="h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0ZM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7Z" />
+                  </svg>
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-lasso-blue/90">Full Name</p>
+                <p className="break-words text-2xl font-semibold text-white">{resolvedPatientName || 'Unknown Patient'}</p>
+                <p className="mt-1 text-sm font-medium text-white/70">
+                  Record No. {displayValue(resolvedRecordNumber)}
+                </p>
+              </div>
             </div>
-            <div className="max-h-[50vh] overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 whitespace-pre-wrap">
-              {normalizedAllergies}
-            </div>
-            <div className="mt-5 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowAllergiesModal(false)}
-                className="rounded-lg bg-lasso-navy px-4 py-2 text-sm font-medium text-white hover:bg-lasso-teal"
-              >
-                Close
-              </button>
-            </div>
+
+            <section className="mb-6">
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/70">Basic Information</h3>
+              <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+                <InfoCard label="First name" value={nameParts.firstName} />
+                <InfoCard label="Middle name" value={nameParts.middleName} />
+                <InfoCard label="Last name" value={nameParts.lastName} />
+                <InfoCard label="Date of birth" value={formattedDob} />
+                <InfoCard label="Age" value={ageDisplay} />
+                <InfoCard label="Sex" value={resolvedSex} />
+                <InfoCard label="Date of admission" value={formattedAdmissionDate} />
+                <InfoCard label="Record No." value={resolvedRecordNumber} />
+              </dl>
+            </section>
+
+            <section className="mb-6">
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/70">Contact Information</h3>
+              <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+                <InfoCard label="Street address" value={patientDetails?.street_address} className="sm:col-span-2" />
+                <InfoCard label="City" value={patientDetails?.city} />
+                <InfoCard label="State" value={patientDetails?.state} />
+                <InfoCard label="ZIP code" value={patientDetails?.zip_code} />
+                <InfoCard label="Home phone" value={patientDetails?.home_phone} />
+                <InfoCard label="Email" value={patientDetails?.email} className="sm:col-span-2" />
+              </dl>
+            </section>
+
+            <section className="mb-6">
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/70">Clinical Information</h3>
+              <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+                <InfoCard label="Diagnosis" value={patientDetails?.diagnosis} />
+                <InfoCard label="Diet" value={patientDetails?.diet} />
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4 sm:col-span-2">
+                  <dt className="mb-1 text-xs font-semibold uppercase tracking-wide text-lasso-blue/90">Allergies</dt>
+                  <dd className="flex min-w-0 flex-wrap items-center gap-2 whitespace-pre-wrap break-words font-medium text-white">
+                    <span>{normalizedAllergies}</span>
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            <section>
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/70">Physician & Facility</h3>
+              <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+                <InfoCard label="Physician" value={patientDetails?.physician_name} />
+                <InfoCard label="Physician phone" value={patientDetails?.physician_phone} />
+                <InfoCard label="Facility" value={patientDetails?.facility_name} className="sm:col-span-2" />
+              </dl>
+            </section>
           </div>
         </div>
-      )}
+      </aside>
+
+      <style jsx>{`
+        .patient-info-drawer-scroll {
+          scrollbar-color: #ffffff #1f2937;
+        }
+
+        .patient-info-drawer-scroll::-webkit-scrollbar {
+          width: 12px;
+        }
+
+        .patient-info-drawer-scroll::-webkit-scrollbar-track {
+          background: #1f2937;
+        }
+
+        .patient-info-drawer-scroll::-webkit-scrollbar-thumb {
+          background: #ffffff;
+          border-radius: 9999px;
+          border: 3px solid #1f2937;
+        }
+      `}</style>
     </>
   )
 }

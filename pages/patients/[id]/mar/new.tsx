@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
+import AppHeader from '../../../../components/AppHeader'
+import PatientStickyBar from '../../../../components/PatientStickyBar'
 import TimeInput from '../../../../components/TimeInput'
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../../lib/auth'
@@ -323,8 +325,21 @@ export default function NewMARForm() {
       <Head>
         <title>New MAR Form - Lasso</title>
       </Head>
-      <div className="min-h-screen py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen">
+        <AppHeader
+          userProfile={userProfile}
+          patientId={typeof patientId === 'string' ? patientId : Array.isArray(patientId) ? patientId[0] : undefined}
+          patientName={patient.patient_name}
+        />
+        <PatientStickyBar
+          patientId={patient.id}
+          patientName={patient.patient_name}
+          dateOfBirth={patient.date_of_birth}
+          sex={patient.sex}
+          allergies={patient.allergies}
+          recordNumber={patient.record_number}
+        />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header */}
           <div className="mb-6">
             <button
