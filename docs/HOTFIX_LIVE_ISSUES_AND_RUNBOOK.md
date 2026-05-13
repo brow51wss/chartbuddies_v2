@@ -220,7 +220,7 @@ Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 
 #### PRN & MAR legend
 
 1. **TODO** — Rename PRN control label to **Manage PRN** (or equivalent final copy).
-2. **TODO** — **Simplify MAR legend** to agreed defaults (**DC**, **W** Withheld, **R** Refused); rename **Held → Withheld**; **require notes** for Withheld and Refused; remove erroneous **Not Given** legend entry if present.
+2. **DONE (2026-05-13)** — **Simplify MAR legend** to agreed defaults (**DC**, **W** Withheld, **R** Refused). Renamed **Held → Withheld** in the MAR dropdown, cell display, print text, and legend while preserving legacy `H` records as displayed `W`; MAR-triggered Progress Notes include the triggering legend label after the `(from MAR, time)` prefix; **W Withheld** and **R Refused** show the note option; erroneous **Not Given** and **PRN** legend entries were removed.
 3. **TODO** — **Refused** flows: ensure Progress Notes show an explicit **Refused** label (not only unstructured note text) where product expects it.
 4. **TODO** — **PRN list** reflects add/edit/delete **in real time** without stale UI.
 5. **TODO** — **PRN default time = 12:00** (still editable via time control); confirm with caregivers.
@@ -242,7 +242,7 @@ Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 
 
 #### Testing & QA (team checklist)
 
-1. **TODO** — Repro **missing-note** bug: medication with **3 administration times** × **NG / DC / H / R** dropdowns (document findings).
+1. **TODO** — Repro **missing-note** bug: medication with **3 administration times** × **NG / DC / W / R** dropdowns (document findings).
 2. **TODO** — After **3-day column** change: re-check dropdown behavior and note overflow.
 3. **TODO** — Standing: **2–3 hours/week** hands-on across meds / PRN / vitals; paired **break-test** of med + PRN flows; **consolidated bug/usability list** on a fixed cadence.
 4. **NOTE** — Team doc excluded **print** and **duplicate-the-mark** from a short cycle; print remains in Navigation #2 + Critical above; duplication in §6a + Past-month section.

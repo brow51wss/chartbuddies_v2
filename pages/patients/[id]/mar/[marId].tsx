@@ -1226,6 +1226,7 @@ export default function ViewMARForm() {
       }
 
       const initialsToSave = initials || userProfile.staff_initials || ''
+      let savedAdmin: MARAdministration | null = null
 
       if (existingAdmin) {
         const { data: adminData, error } = await supabase
@@ -1242,6 +1243,7 @@ export default function ViewMARForm() {
 
         if (error) throw error
         if (adminData) {
+          savedAdmin = adminData as MARAdministration
           setAdministrations(prev => ({
             ...prev,
             [medId]: {
@@ -1265,6 +1267,7 @@ export default function ViewMARForm() {
 
         if (error) throw error
         if (adminData) {
+          savedAdmin = adminData as MARAdministration
           setAdministrations(prev => ({
             ...prev,
             [medId]: {
@@ -1321,6 +1324,22 @@ export default function ViewMARForm() {
               }))
             }
           }
+        }
+      }
+
+      if (savedAdmin?.notes?.trim() && marForm?.patient_id && marForm?.month_year) {
+        const legendLabel = getMARLegendProgressNoteLabel(savedAdmin.initials)
+        if (legendLabel) {
+          const med = medications.find((m) => m.id === medId)
+          const timeLabel = med?.hour ? formatTimeDisplay(med.hour) : undefined
+          await syncMARNoteToProgressNotes(
+            marForm.patient_id,
+            marForm.month_year,
+            day,
+            savedAdmin.notes,
+            timeLabel,
+            legendLabel
+          )
         }
       }
 
@@ -1932,7 +1951,7 @@ export default function ViewMARForm() {
     const isPRN = status === 'PRN'
     const isDC = initialsForLogic === 'DC'
     const isRefused = initialsForLogic === 'R'
-    const isHeld = initialsForLogic === 'H'
+    const isWithheld = initialsForLogic === 'W' || initialsForLogic === 'H'
     let isDiscontinued = false
     if (!isVitalsEntry) {
       for (let checkDay = 1; checkDay < day; checkDay++) {
@@ -1947,11 +1966,31 @@ export default function ViewMARForm() {
     if (isDiscontinued && !isDC) return '—'
     if (isDC) return 'DC'
     if (isRefused) return 'R'
-    if (isHeld) return 'H'
+    if (isWithheld) return 'W'
     if (isGiven && initials) return initials
     if (isNotGiven && initials) return `○${initials}`
     if (isPRN) return 'PRN'
     return '—'
+  }
+
+  const getMARLegendProgressNoteLabel = (rawInitials: string | null | undefined): string | null => {
+    if (!rawInitials || rawInitials.startsWith('data:image')) return null
+    const code = rawInitials.trim().toUpperCase()
+    if (!code) return null
+
+    const standardLegendLabels: Record<string, string> = {
+      DC: 'DC - Discontinued',
+      R: 'R - Refused',
+      W: 'W - Withheld',
+      H: 'W - Withheld',
+    }
+
+    if (standardLegendLabels[code]) return standardLegendLabels[code]
+
+    const customLegend = customLegends.find((legend) => legend.code.trim().toUpperCase() === code)
+    if (customLegend) return `${customLegend.code.trim().toUpperCase()} - ${customLegend.description.trim()}`
+
+    return null
   }
 
   /** Sync MAR day note to Progress Notes Page 1. Includes time so each administration can be updated in place. */
@@ -1960,7 +1999,8 @@ export default function ViewMARForm() {
     monthYear: string,
     day: number,
     note: string | null,
-    timeLabel?: string
+    timeLabel?: string,
+    legendLabel?: string | null
   ) => {
     if (!userProfile?.id) throw new Error('User profile not loaded; cannot sync to Progress Notes.')
     const parsed = parseMARMonthYear(monthYear)
@@ -1990,7 +2030,9 @@ export default function ViewMARForm() {
     }
 
     if (note?.trim()) {
-      const marBlock = `${prefixWithTime} ${note.trim()}`
+      const marBlock = legendLabel
+        ? `${prefixWithTime} ${legendLabel}: ${note.trim()}`
+        : `${prefixWithTime} ${note.trim()}`
       if (existing) {
         let prev = (existing.notes || '').trim()
         if (timeLabel) prev = removeLinesForTime(prev, timeLabel)
@@ -2062,7 +2104,8 @@ export default function ViewMARForm() {
       if (marForm?.patient_id && marForm?.month_year) {
         const med = medications.find((m) => m.id === medId)
         const timeLabel = med?.hour ? formatTimeDisplay(med.hour) : undefined
-        await syncMARNoteToProgressNotes(marForm.patient_id, marForm.month_year, day, note ?? null, timeLabel)
+        const legendLabel = getMARLegendProgressNoteLabel(existingAdmin?.initials || 'R')
+        await syncMARNoteToProgressNotes(marForm.patient_id, marForm.month_year, day, note ?? null, timeLabel, legendLabel)
       }
 
       await loadMARForm()
@@ -4737,7 +4780,7 @@ export default function ViewMARForm() {
                               const isPRN = status === 'PRN'
                               const isDC = initialsForLogic === 'DC'
                               const isRefused = initialsForLogic === 'R'
-                              const isHeld = initialsForLogic === 'H'
+                              const isWithheld = initialsForLogic === 'W' || initialsForLogic === 'H'
                               const hasParameter = !!med.parameter
 
                               const { isDiscontinued, dcDay } = getMarDiscontinuedBeforeDayInfo(
@@ -4877,8 +4920,7 @@ export default function ViewMARForm() {
                                                   <option value={userInitials.value}>{userInitials.label}</option>
                                                 )}
                                                 <option value="DC">DC (Discontinued)</option>
-                                                <option value="NG">NG (Not Given)</option>
-                                                <option value="H">H (Held)</option>
+                                                <option value="W">W (Withheld)</option>
                                                 <option value="R">R (Refused)</option>
                                                 {customLegends.map(legend => (
                                                   <option key={legend.id} value={legend.code}>
@@ -4950,14 +4992,14 @@ export default function ViewMARForm() {
                                               </div>
                                               )
                                             )}
-                                            {isHeld && !isDC && (
+                                            {isWithheld && !isDC && (
                                               readOnly ? (
-                                                <div className="font-bold text-orange-600 dark:text-orange-400">H</div>
+                                                <div className="font-bold text-orange-600 dark:text-orange-400">W</div>
                                               ) : (
                                               <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                 <div className="flex items-center justify-center gap-1">
                                                   <div className="font-bold text-orange-600 dark:text-orange-400">
-                                                    H
+                                                    W
                                                   </div>
                                                   <button
                                                     onClick={(e) => {
@@ -4974,7 +5016,7 @@ export default function ViewMARForm() {
                                               </div>
                                               )
                                             )}
-                                            {isGiven && !isDC && !isRefused && !isHeld && (
+                                            {isGiven && !isDC && !isRefused && !isWithheld && (
                                               hasParameter && initials && !readOnly ? (
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
@@ -5000,7 +5042,7 @@ export default function ViewMARForm() {
                                                 </div>
                                               )
                                           )}
-                                            {isNotGiven && initials && !isDC && !isRefused && !isHeld && (
+                                            {isNotGiven && initials && !isDC && !isRefused && !isWithheld && (
                                               hasParameter && !readOnly ? (
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
@@ -5066,12 +5108,12 @@ export default function ViewMARForm() {
                                               {notes}
                                             </div>
                                           )}
-                                          {isHeld && notes && (
+                                          {isWithheld && notes && (
                                             <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600 px-1">
                                               {notes}
                                             </div>
                                           )}
-                                          {hasParameter && !isRefused && !isHeld && !isDC && notes && (
+                                          {hasParameter && !isRefused && !isWithheld && !isDC && notes && (
                                             <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600 px-1">
                                               {notes}
                                             </div>
@@ -5144,13 +5186,11 @@ export default function ViewMARForm() {
                           </div>
                         )}
                         <div>DC = Discontinued</div>
-                        <div>NG = Not Given</div>
-                        <div>PRN = As Needed</div>
-                        <div>H = Held</div>
+                        <div>W = Withheld</div>
                         <div>R = Refused</div>
                         {customLegends.map(legend => (
                           <div key={legend.id} className="flex items-center justify-between group">
-                            <span className="text-gray-700 dark:text-gray-300">
+                            <span className="block relative text-gray-700 dark:text-gray-300">
                               {legend.code} = {legend.description}
                             </span>
                             {!readOnly && (
@@ -5173,7 +5213,7 @@ export default function ViewMARForm() {
                               setEditingCustomLegend({ id: null, code: '', description: '' })
                               setShowCustomLegendModal(true)
                             }}
-                            className="mt-2 text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors"
+                            className="relative top-4 text-xs px-2 py-1 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors"
                           >
                             + Add Custom Legend
                           </button>
@@ -5820,22 +5860,13 @@ export default function ViewMARForm() {
                   <div className="text-[0.7rem] text-gray-800 space-y-0.5 pt-6">
                       <div className="font-bold uppercase mb-1">Legend:</div>
                       <div>
-                        <strong>◯</strong> = Not Given
-                      </div>
-                      <div>
-                        <strong>PRN</strong> = As Needed
-                      </div>
-                      <div>
-                        <strong>H</strong> = Held
+                        <strong>W</strong> = Withheld
                       </div>
                       <div>
                         <strong>R</strong> = Refused
                       </div>
                       <div>
                         <strong>DC</strong> = Discontinued
-                      </div>
-                      <div>
-                        <strong>NG</strong> = Not Given
                       </div>
                       <div>
                         <strong>ABC</strong> = Absent From Care
@@ -6489,7 +6520,7 @@ export default function ViewMARForm() {
         </div>
       )}
 
-      {/* Administration Note Modal (for R - Refused and H - Held) */}
+      {/* Administration Note Modal (for R - Refused and W - Withheld) */}
       {showAdministrationNoteModal && editingAdministrationNote && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
