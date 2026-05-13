@@ -570,10 +570,11 @@ function DragHandleButton({ medId, readOnly, reorderLocked }: { medId: string; r
 const MAR_GRID_DAY_NUMBERS: readonly number[] = Array.from({ length: 31 }, (_, i) => i + 1)
 
 /**
- * Horizontal scroll step for day columns (must match `MAR_COL.day` below).
- * Used on load (scroll to today) and when jumping to a missed cell so day N sits just after the Hour column.
+ * Fixed width for each MAR calendar-day column (scrollable grid only; print uses its own layout).
+ * Wider columns so roughly **three** day columns are visible at once on a typical laptop viewport
+ * (was 100px → ~8 days visible). Must match `MAR_COL.day` and scroll math: `(day - 1) * this value`.
  */
-const MAR_DAY_COL_WIDTH_PX = 100
+const MAR_DAY_COL_WIDTH_PX = 240
 
 export default function ViewMARForm() {
   const router = useRouter()

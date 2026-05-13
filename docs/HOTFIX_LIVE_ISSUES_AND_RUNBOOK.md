@@ -211,7 +211,7 @@ Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 
 
 #### MAR layout & UI
 
-1. **TODO** — **MAR grid:** show **3 days of columns** at a time (reduce crowding); keep **15-column** maximum per product rule.
+1. **DONE (2026-05-12)** — **MAR grid:** show **~3 days of columns** at a time (wider day cells via `MAR_DAY_COL_WIDTH_PX` on MAR detail); **31** day columns unchanged; print layout unchanged.
 2. **TODO** — **On-screen** small **color key** for MAR status colors (persistent key, not only hover); see also Navigation & UI Polish #4 for hover legend.
 3. **TODO** — **ADA-compliant contrast** and branding fixes from automated UX test findings.
 4. **TODO** — **In-page patient edit (modal/pop-up):** auto-advance to step 2 and **focus/highlight** the editable field.
