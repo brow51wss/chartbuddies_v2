@@ -107,6 +107,15 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
             </p>
           </div>
           <div className="flex items-center space-x-3">
+            {!isReadOnly && (
+              <Link
+                href="/admissions"
+                className="px-4 py-2 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue text-sm font-medium shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
+              >
+                <span>+</span>
+                <span>Add Patient</span>
+              </Link>
+            )}
             {patientId && (
               <div className="relative" ref={menuRef}>
                 <button
@@ -139,15 +148,6 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
                   </div>
                 )}
               </div>
-            )}
-            {!isReadOnly && (
-              <Link
-                href="/admissions"
-                className="px-4 py-2 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue text-sm font-medium shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
-              >
-                <span>+</span>
-                <span>Add Patient</span>
-              </Link>
             )}
             <Link
               href="/dashboard"

@@ -15,6 +15,8 @@ interface TimeInputProps {
    * text instead of solid blue/navy fill. The compact row still uses one outer white card (`rounded-md border …`).
    */
   whiteAmPmBox?: boolean
+  /** Compact mode: render separate AM and PM buttons instead of one AM/PM toggle. */
+  splitAmPm?: boolean
 }
 
 // Helper to parse various time formats into { hour12, minute, period }
@@ -150,6 +152,7 @@ export default function TimeInput({
   compact = false,
   plain = false,
   whiteAmPmBox = false,
+  splitAmPm = false,
 }: TimeInputProps) {
   const parsed = parseTimeValue(value)
   const [hour, setHour] = useState(parsed.hour12.toString())
@@ -242,7 +245,7 @@ export default function TimeInput({
 
   if (compact) {
     const wrapClass = plain
-      ? `relative z-auto inline-flex items-center gap-1 shrink-0 ${className}`
+      ? `relative z-auto ${splitAmPm ? 'flex flex-wrap' : 'inline-flex'} items-center gap-1 max-w-full ${className}`
       : `relative z-[999] inline-flex items-center gap-1 shrink-0 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1.5 shadow-lg w-[147px] ${className}`
     const digitClass = plain
       ? 'w-9 min-w-[2rem] text-center text-xs border border-gray-500/45 dark:border-gray-500 rounded px-1.5 py-1 bg-white/30 dark:bg-gray-900/35 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal'
@@ -260,6 +263,25 @@ export default function TimeInput({
     const periodSelectedPMClass = whiteAmPmBox
       ? 'bg-white text-lasso-navy border-2 border-lasso-navy font-semibold dark:bg-gray-800 dark:text-lasso-navy'
       : 'bg-lasso-navy text-white'
+    const choosePeriod = (nextPeriod: 'AM' | 'PM') => {
+      if (period === nextPeriod) return
+      setPeriod(nextPeriod)
+      const h = parseInt(hour, 10) || 12
+      const m = parseInt(minute, 10) || 0
+      onChange(formatTime12(h, m, nextPeriod))
+    }
+    const compactPeriodButtonClass = (nextPeriod: 'AM' | 'PM') => {
+      const selectedClass = nextPeriod === 'AM' ? periodSelectedAMClass : periodSelectedPMClass
+      return `min-w-[2rem] px-1.5 py-1 text-xs font-medium rounded transition-colors ${
+        period === nextPeriod ? selectedClass : periodIdleClass
+      } ${
+        disabled
+          ? 'opacity-50 cursor-not-allowed'
+          : whiteAmPmBox
+            ? 'hover:bg-gray-50 dark:hover:bg-gray-700/90'
+            : 'hover:opacity-80'
+      }`
+    }
     return (
       <div className={wrapClass.trim()}>
         <input
@@ -289,35 +311,53 @@ export default function TimeInput({
           maxLength={2}
           className={digitClass}
         />
-        <button
-          type="button"
-          onClick={() => {
-            if (period === null) {
-              setPeriod('AM')
-              const h = parseInt(hour, 10) || 12
-              const m = parseInt(minute, 10) || 0
-              onChange(formatTime12(h, m, 'AM'))
-            } else {
-              togglePeriod()
-            }
-          }}
-          disabled={disabled}
-          className={`min-w-[2.25rem] px-2 py-1 text-xs font-medium rounded transition-colors ${
-            period === null
-              ? periodIdleClass
-              : period === 'AM'
-                ? periodSelectedAMClass
-                : periodSelectedPMClass
-          } ${
-            disabled
-              ? 'opacity-50 cursor-not-allowed'
-              : whiteAmPmBox
-                ? 'hover:bg-gray-50 dark:hover:bg-gray-700/90'
-                : 'hover:opacity-80'
-          }`}
-        >
-          {period ?? 'AM/PM'}
-        </button>
+        {splitAmPm ? (
+          <div className="inline-flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => choosePeriod('AM')}
+              disabled={disabled}
+              className={compactPeriodButtonClass('AM')}
+            >
+              AM
+            </button>
+            <button
+              type="button"
+              onClick={() => choosePeriod('PM')}
+              disabled={disabled}
+              className={compactPeriodButtonClass('PM')}
+            >
+              PM
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              if (period === null) {
+                choosePeriod('AM')
+              } else {
+                togglePeriod()
+              }
+            }}
+            disabled={disabled}
+            className={`min-w-[2.25rem] px-2 py-1 text-xs font-medium rounded transition-colors ${
+              period === null
+                ? periodIdleClass
+                : period === 'AM'
+                  ? periodSelectedAMClass
+                  : periodSelectedPMClass
+            } ${
+              disabled
+                ? 'opacity-50 cursor-not-allowed'
+                : whiteAmPmBox
+                  ? 'hover:bg-gray-50 dark:hover:bg-gray-700/90'
+                  : 'hover:opacity-80'
+            }`}
+          >
+            {period ?? 'AM/PM'}
+          </button>
+        )}
       </div>
     )
   }

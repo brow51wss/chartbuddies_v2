@@ -219,7 +219,7 @@ Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 
 
 #### PRN & MAR legend
 
-1. **TODO** — Rename PRN control label to **Manage PRN** (or equivalent final copy).
+1. **DONE (2026-05-13)** — Rename PRN control label to **Manage PRN**; removed the PRN dropdown and made the button open the view/manage PRN modal directly. Adding a PRN from that modal returns to the refreshed Manage PRN list.
 2. **DONE (2026-05-13)** — **Simplify MAR legend** to agreed defaults (**DC**, **W** Withheld, **R** Refused). Renamed **Held → Withheld** in the MAR dropdown, cell display, print text, and legend while preserving legacy `H` records as displayed `W`; MAR-triggered Progress Notes include the triggering legend label after the `(from MAR, time)` prefix; **W Withheld** and **R Refused** show the note option; erroneous **Not Given** and **PRN** legend entries were removed.
 3. **TODO** — **Refused** flows: ensure Progress Notes show an explicit **Refused** label (not only unstructured note text) where product expects it.
 4. **TODO** — **PRN list** reflects add/edit/delete **in real time** without stale UI.

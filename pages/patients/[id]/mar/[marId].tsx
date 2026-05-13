@@ -710,6 +710,7 @@ export default function ViewMARForm() {
   const [showAddMedModal, setShowAddMedModal] = useState(false)
   const [showAddPRNModal, setShowAddPRNModal] = useState(false)
   const [showAddPRNRecordModal, setShowAddPRNRecordModal] = useState(false)
+  const [selectedPRNRecordMedicationId, setSelectedPRNRecordMedicationId] = useState<string | null>(null)
   const showPrnRecordsSection = false // temporary: hide PRN Records section on MAR
   const [showManagePRNListModal, setShowManagePRNListModal] = useState(false)
   const [prnListDeleteTarget, setPrnListDeleteTarget] = useState<MARPRNMedication | null>(null)
@@ -717,7 +718,6 @@ export default function ViewMARForm() {
   const [prnListEditTarget, setPrnListEditTarget] = useState<MARPRNMedication | null>(null)
   const [deletingPrnLibraryItem, setDeletingPrnLibraryItem] = useState(false)
   const [savingPrnLibraryEdit, setSavingPrnLibraryEdit] = useState(false)
-  const [prnActionsMenuOpen, setPrnActionsMenuOpen] = useState(false)
   const [showEditPatientInfoModal, setShowEditPatientInfoModal] = useState(false)
   const [showVitalSignsModal, setShowVitalSignsModal] = useState(false)
   const [editingCell, setEditingCell] = useState<{ medId: string; day: number } | null>(null)
@@ -787,7 +787,6 @@ export default function ViewMARForm() {
   const [printRowHeights, setPrintRowHeights] = useState<number[]>([])
   const marMeasureTbodyRef = useRef<HTMLTableSectionElement>(null)
   const marMeasureTbodyRef2 = useRef<HTMLTableSectionElement>(null)
-  const prnActionsMenuRef = useRef<HTMLDivElement>(null)
 
   const closeMarEditPatientInfoModal = useCallback(() => {
     setShowEditPatientInfoModal(false)
@@ -966,10 +965,6 @@ export default function ViewMARForm() {
   useEffect(() => {
     const handleEscKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (prnActionsMenuOpen) {
-          setPrnActionsMenuOpen(false)
-          return
-        }
         if (showAddMedModal) {
           setShowAddMedModal(false)
         } else if (showEditPatientInfoModal) {
@@ -980,6 +975,7 @@ export default function ViewMARForm() {
           setShowAddPRNModal(false)
         } else if (showAddPRNRecordModal) {
           setShowAddPRNRecordModal(false)
+          setSelectedPRNRecordMedicationId(null)
         } else if (prnListEditTarget) {
           setPrnListEditTarget(null)
         } else if (prnListDeleteTarget) {
@@ -1017,7 +1013,6 @@ export default function ViewMARForm() {
       window.removeEventListener('keydown', handleEscKey)
     }
   }, [
-    prnActionsMenuOpen,
     showAddMedModal,
     showEditPatientInfoModal,
     showVitalSignsModal,
@@ -1036,16 +1031,6 @@ export default function ViewMARForm() {
     showLeaveConfirmModal,
     closeMarEditPatientInfoModal,
   ])
-
-  useEffect(() => {
-    if (!prnActionsMenuOpen) return
-    const onPointerDown = (e: MouseEvent | PointerEvent) => {
-      const el = prnActionsMenuRef.current
-      if (el && !el.contains(e.target as Node)) setPrnActionsMenuOpen(false)
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    return () => document.removeEventListener('mousedown', onPointerDown)
-  }, [prnActionsMenuOpen])
 
   const loadUserProfile = async () => {
     const profile = await getCurrentUserProfile()
@@ -1486,8 +1471,8 @@ export default function ViewMARForm() {
     medication: string
     dosage: string | null
     reason: string
-  }) => {
-    if (!userProfile || !marFormId) return
+  }): Promise<boolean> => {
+    if (!userProfile || !marFormId) return false
 
     try {
       setSaving(true)
@@ -1506,6 +1491,7 @@ export default function ViewMARForm() {
       await loadMARForm()
       setMessage('PRN medication added to list successfully!')
       setTimeout(() => setMessage(''), 3000)
+      return true
     } catch (err: any) {
       if (err.message?.includes('does not exist')) {
         setError('PRN list table is not available yet. Please run the latest database migration first.')
@@ -1513,6 +1499,7 @@ export default function ViewMARForm() {
         setError(err.message || 'Failed to add PRN medication to list')
       }
       setTimeout(() => setError(''), 5000)
+      return false
     } finally {
       setSaving(false)
     }
@@ -3535,13 +3522,6 @@ export default function ViewMARForm() {
                 <span>Medication Administration Record (MAR)</span>
               </h1>
               <div className="flex space-x-3">
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm font-medium"
-                >
-                  Print
-                </button>
                 {!readOnly && (
                   <>
                     <button
@@ -3560,70 +3540,17 @@ export default function ViewMARForm() {
                     >
                       + Vital Signs
                     </button>
-                    <div className="relative" ref={prnActionsMenuRef}>
-                      <button
-                        type="button"
-                        aria-expanded={prnActionsMenuOpen}
-                        aria-haspopup="menu"
-                        aria-controls="mar-prn-actions-menu"
-                        onClick={() => setPrnActionsMenuOpen((open) => !open)}
-                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium inline-flex items-center gap-1.5"
-                      >
-                        PRN
-                        <svg
-                          className="w-4 h-4 shrink-0"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          aria-hidden
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                      {prnActionsMenuOpen && (
-                        <div
-                          id="mar-prn-actions-menu"
-                          role="menu"
-                          className="absolute right-0 mt-1 z-app-header-dropdown min-w-[16rem] rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg py-1"
-                        >
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="w-full text-left px-4 py-2 text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
-                            onClick={() => {
-                              setPrnActionsMenuOpen(false)
-                              setShowAddPRNModal(true)
-                            }}
-                          >
-                            Add PRN to List
-                          </button>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="w-full text-left px-4 py-2 text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
-                            onClick={() => {
-                              setPrnActionsMenuOpen(false)
-                              setShowAddPRNRecordModal(true)
-                            }}
-                          >
-                            Add PRN Record
-                          </button>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="w-full text-left px-4 py-2 text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
-                            onClick={() => {
-                              setPrnActionsMenuOpen(false)
-                              setPrnListDeleteTarget(null)
-                              setPrnListEditTarget(null)
-                              setShowManagePRNListModal(true)
-                            }}
-                          >
-                            View/Manage PRN List
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrnListDeleteTarget(null)
+                        setPrnListEditTarget(null)
+                        setShowManagePRNListModal(true)
+                      }}
+                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
+                    >
+                      Manage PRN
+                    </button>
                   </>
                 )}
               </div>
@@ -3950,7 +3877,7 @@ export default function ViewMARForm() {
                           const prnChartStickyStart =
                             'sticky z-10 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]'
                           const prnChartBg =
-                            'bg-[#d8f0e0] dark:bg-[#14532d]/35 hover:brightness-[0.97] dark:hover:brightness-110'
+                            'bg-[#d8f0e0] dark:bg-[#14532d] hover:brightness-[0.97] dark:hover:brightness-110'
                           const startLabel = template.start_date
                             ? formatCalendarDate(template.start_date, 'en-US', {
                                 month: 'short',
@@ -4212,7 +4139,7 @@ export default function ViewMARForm() {
                                             editingPRNField.surface === 'chart' ? (
                                               <div
                                                 onClick={(e) => e.stopPropagation()}
-                                                className="relative z-[999] w-full max-w-[13rem] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 shadow-lg ring-1 ring-black/5 dark:ring-white/10 flex flex-col gap-1.5"
+                                                className="relative z-0 flex w-full flex-col items-start gap-1"
                                               >
                                                 <TimeInput
                                                   value={editingPRNValue}
@@ -4231,12 +4158,15 @@ export default function ViewMARForm() {
                                                     setEditingPRNValue('')
                                                   }}
                                                   compact
+                                                  plain
+                                                  className="w-full justify-start"
                                                   whiteAmPmBox
+                                                  splitAmPm
                                                 />
                                                 <button
                                                   type="button"
                                                   onClick={() => handlePRNFieldCancel()}
-                                                  className="text-[10px] text-gray-500 hover:text-gray-700 self-start"
+                                                  className="text-[10px] text-gray-500 hover:text-gray-700"
                                                 >
                                                   Cancel
                                                 </button>
@@ -6081,14 +6011,21 @@ export default function ViewMARForm() {
             <AddPRNMedicationForm
               onSubmit={async (prnData) => {
                 try {
-                  await addPRNMedication(prnData)
+                  const added = await addPRNMedication(prnData)
+                  if (!added) return
                   setShowAddPRNModal(false)
+                  setPrnListDeleteTarget(null)
+                  setPrnListEditTarget(null)
+                  setShowManagePRNListModal(true)
                 } catch (err) {
                   console.error('Error adding PRN medication:', err)
                   // Don't close modal on error so user can fix and retry
                 }
               }}
-              onCancel={() => setShowAddPRNModal(false)}
+              onCancel={() => {
+                setShowAddPRNModal(false)
+                setShowManagePRNListModal(true)
+              }}
               defaultDate={localTodayYMD()}
             />
           </div>
@@ -6104,7 +6041,11 @@ export default function ViewMARForm() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 dark:text-white">Add PRN Record</h2>
               <button
-                onClick={() => setShowAddPRNRecordModal(false)}
+                onClick={() => {
+                  setShowAddPRNRecordModal(false)
+                  setSelectedPRNRecordMedicationId(null)
+                  setShowManagePRNListModal(true)
+                }}
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                 aria-label="Close"
               >
@@ -6116,15 +6057,22 @@ export default function ViewMARForm() {
                 try {
                   await addPRNRecord(prnData)
                   setShowAddPRNRecordModal(false)
+                  setSelectedPRNRecordMedicationId(null)
+                  setShowManagePRNListModal(true)
                 } catch (err) {
                   console.error('Error adding PRN record:', err)
                 }
               }}
-              onCancel={() => setShowAddPRNRecordModal(false)}
+              onCancel={() => {
+                setShowAddPRNRecordModal(false)
+                setSelectedPRNRecordMedicationId(null)
+                setShowManagePRNListModal(true)
+              }}
               defaultDate={clampDateToMarMonth(localTodayYMD(), marForm?.month_year)}
               dateMin={getMarMonthDateRangeISO(marForm?.month_year || '')?.min}
               dateMax={getMarMonthDateRangeISO(marForm?.month_year || '')?.max}
               prnMedicationList={prnMedicationList}
+              initialPrnMedicationId={selectedPRNRecordMedicationId}
             />
           </div>
         </div>
@@ -6162,7 +6110,7 @@ export default function ViewMARForm() {
               </p>
               {prnMedicationList.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-                  No PRN medications in the list yet. Use <strong className="font-medium">Add PRN to List</strong> from the PRN menu to add one.
+                  No PRN medications in the list yet. Use <strong className="font-medium">Add PRN to List</strong> below to add one.
                 </p>
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-600">
@@ -6196,6 +6144,17 @@ export default function ViewMARForm() {
                           <td className="px-3 py-2 align-top text-right whitespace-nowrap">
                             <button
                               type="button"
+                              className="text-green-700 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 text-xs font-medium mr-3"
+                              onClick={() => {
+                                setSelectedPRNRecordMedicationId(item.id)
+                                setShowManagePRNListModal(false)
+                                setShowAddPRNRecordModal(true)
+                              }}
+                            >
+                              Add record
+                            </button>
+                            <button
+                              type="button"
                               className="text-lasso-teal hover:text-lasso-blue dark:text-lasso-teal dark:hover:text-lasso-blue text-xs font-medium mr-3"
                               onClick={() => setPrnListEditTarget(item)}
                             >
@@ -6217,6 +6176,18 @@ export default function ViewMARForm() {
               )}
             </div>
             <div className="p-6 border-t border-gray-200 dark:border-gray-600 flex flex-wrap gap-3 justify-end shrink-0">
+              <button
+                type="button"
+                disabled={prnMedicationList.length === 0}
+                onClick={() => {
+                  setSelectedPRNRecordMedicationId(null)
+                  setShowManagePRNListModal(false)
+                  setShowAddPRNRecordModal(true)
+                }}
+                className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Add PRN Record
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -7666,6 +7637,7 @@ function AddPRNRecordForm({
   dateMin,
   dateMax,
   prnMedicationList,
+  initialPrnMedicationId,
 }: { 
   onSubmit: (data: {
     date: string
@@ -7682,6 +7654,7 @@ function AddPRNRecordForm({
   dateMin?: string
   dateMax?: string
   prnMedicationList: MARPRNMedication[]
+  initialPrnMedicationId?: string | null
 }) {
   const [formData, setFormData] = useState({
     date: defaultDate,
@@ -7708,6 +7681,12 @@ function AddPRNRecordForm({
       startDate: ymdFromDateInput(selected.start_date),
     }))
   }
+
+  useEffect(() => {
+    if (initialPrnMedicationId) {
+      handleSelectPRNMedication(initialPrnMedicationId)
+    }
+  }, [initialPrnMedicationId, prnMedicationList])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
