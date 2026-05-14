@@ -715,6 +715,10 @@ export default function ProgressNotesPage() {
         return d.startsWith(monthFilterKey)
       })
     : allMainEntries
+  const selectedPhysicianDisplay = physicianDisplayText(effectivePhysicianName(selectedPhysician, customPhysician))
+  const showPhysicianColumn = Boolean(selectedPhysicianDisplay)
+  const existingNotesColumnCount = 4
+  const hasNewNoteText = newNotes.trim().length > 0
 
   const handlePrintAllNotes = async () => {
     document.body.classList.add('print-view-notes')
@@ -869,12 +873,25 @@ export default function ProgressNotesPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full table-fixed">
+                <colgroup>
+                  <col className="w-[16%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[52%]" />
+                  <col className="w-[16%]" />
+                </colgroup>
                 <thead>
                   <tr className="bg-gray-100 dark:bg-gray-700">
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-28">Date</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-40">Physician/APRN or Clinic</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Notes</th>
+                    {showPhysicianColumn && (
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-40">Physician/APRN or Clinic</th>
+                    )}
+                    <th
+                      colSpan={showPhysicianColumn ? 1 : 2}
+                      className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300"
+                    >
+                      Notes
+                    </th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-32">Signature</th>
                   </tr>
                 </thead>
@@ -894,10 +911,12 @@ export default function ProgressNotesPage() {
                         className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
                     </td>
-                    <td className="px-4 py-2 align-top text-xs text-gray-700 dark:text-gray-300">
-                      {physicianDisplayText(effectivePhysicianName(selectedPhysician, customPhysician))}
-                    </td>
-                    <td className="px-4 py-2 align-top">
+                    {showPhysicianColumn && (
+                      <td className="px-4 py-2 align-top text-xs text-gray-700 dark:text-gray-300">
+                        {selectedPhysicianDisplay}
+                      </td>
+                    )}
+                    <td colSpan={showPhysicianColumn ? 1 : 2} className="px-4 py-2 align-top">
                       <textarea
                         value={newNotes}
                         onChange={(e) => setNewNotes(e.target.value)}
@@ -926,7 +945,8 @@ export default function ProgressNotesPage() {
                         <button
                           type="button"
                           onClick={() => { setNewNoteSigned(true); setError(''); }}
-                          className="px-2 py-1 text-sm font-medium text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10 dark:hover:bg-lasso-teal/20"
+                          disabled={!hasNewNoteText}
+                          className="px-2 py-1 text-sm font-medium text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400 disabled:bg-gray-100 dark:hover:bg-lasso-teal/20 dark:disabled:border-gray-600 dark:disabled:bg-gray-700 dark:disabled:text-gray-500"
                         >
                           Sign
                         </button>
@@ -936,13 +956,13 @@ export default function ProgressNotesPage() {
                     </td>
                   </tr>
                   )}
-                  {!readOnly && (
+                  {!readOnly && newNoteSigned && (
                   <tr>
                     <td colSpan={4} className="px-4 py-2">
                       <button
                         type="button"
                         onClick={handleAddEntry}
-                        disabled={saving || !newNotes.trim() || !newNoteSigned}
+                        disabled={saving || !hasNewNoteText}
                         className="px-4 py-2 bg-lasso-teal text-white rounded-lg text-sm font-medium hover:bg-lasso-blue disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {saving ? 'Saving...' : 'Add Note'}
@@ -951,7 +971,7 @@ export default function ProgressNotesPage() {
                   </tr>
                   )}
                   <tr className="border-t-2 border-gray-300 dark:border-gray-600">
-                    <td colSpan={4} className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
+                    <td colSpan={existingNotesColumnCount} className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Existing notes</h3>
                         <div className="flex items-center gap-2">
@@ -985,7 +1005,7 @@ export default function ProgressNotesPage() {
                         {formatCalendarDate(entry.note_date, 'en-US')}
                       </td>
                       <td className="px-4 py-2 align-top text-sm text-gray-900 dark:text-white whitespace-nowrap">
-                        {physicianDisplayText(entry.physician_name)}
+                        {physicianDisplayText(entry.physician_name) || 'n/a'}
                       </td>
                       <td className="px-4 py-2 align-top">
                         {readOnly ? (
@@ -1536,10 +1556,12 @@ export default function ProgressNotesPage() {
             <div><strong>Name of ARCH:</strong> {facilityName || '—'}</div>
             <div><strong>Primary Care Giver:</strong> {userProfile?.full_name ?? '—'}</div>
             <div><strong>Resident:</strong> {patient?.patient_name ?? '—'}</div>
-            <div>
-              <strong>Physician/APRN or Clinic:</strong>{' '}
-              {physicianDisplayText(effectivePhysicianName(selectedPhysician, customPhysician))}
-            </div>
+            {showPhysicianColumn && (
+              <div>
+                <strong>Physician/APRN or Clinic:</strong>{' '}
+                {selectedPhysicianDisplay}
+              </div>
+            )}
           </div>
           <table className="w-full border border-gray-400" style={{ borderCollapse: 'collapse' }}>
             <thead>
@@ -1553,13 +1575,13 @@ export default function ProgressNotesPage() {
             <tbody>
               {allMainEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="border border-gray-400 px-3 py-4 text-gray-500">No progress notes.</td>
+                  <td colSpan={existingNotesColumnCount} className="border border-gray-400 px-3 py-4 text-gray-500">No progress notes.</td>
                 </tr>
               ) : (
                 allMainEntries.map((entry) => (
                   <tr key={entry.id}>
                     <td className="border border-gray-400 px-3 py-2 whitespace-nowrap">{formatCalendarDate(entry.note_date, 'en-US')}</td>
-                    <td className="border border-gray-400 px-3 py-2 whitespace-nowrap align-top">{physicianDisplayText(entry.physician_name)}</td>
+                    <td className="border border-gray-400 px-3 py-2 whitespace-nowrap align-top">{physicianDisplayText(entry.physician_name) || 'n/a'}</td>
                     <td className="border border-gray-400 px-3 py-2 whitespace-pre-wrap align-top">{page1EntryNotesDisplay(entry)}</td>
                     <td className="border border-gray-400 px-3 py-2 align-top">
                       {(entry.signature || (entry.created_by === userProfile?.id && userProfile?.staff_signature)) ? (
