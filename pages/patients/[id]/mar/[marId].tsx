@@ -79,6 +79,7 @@ function InitialsOrSignatureDisplay({
     ensureSignatureFontsLoaded(font)
     return (
       <span
+        className={`lasso-signature-mark lasso-signature-mark--text lasso-signature-mark--${variant}`}
         style={{
           fontFamily: `"${font}", cursive`,
           fontSize: variant === 'initials' ? '1.35em' : '1.4em',
@@ -96,6 +97,7 @@ function InitialsOrSignatureDisplay({
         <img
           src={drawnSrc}
           alt="Initials"
+          className="lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--initials"
           style={{
             maxHeight: '3em',
             maxWidth: '7em',
@@ -111,11 +113,12 @@ function InitialsOrSignatureDisplay({
       <img
         src={value}
         alt={variant === 'initials' ? 'Initials' : 'Signature'}
+        className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
         style={{ maxHeight: variant === 'initials' ? '3em' : '3em', maxWidth: variant === 'initials' ? '7em' : '7em', verticalAlign: 'middle', display: 'inline-block' }}
       />
     )
   }
-  return <span>{value}</span>
+  return <span className={`lasso-signature-mark lasso-signature-mark--plain lasso-signature-mark--${variant}`}>{value}</span>
 }
 
 /** Current user's initials for matching PRN rows (when signed_by is null). Prefer profile text, else derive from name. */

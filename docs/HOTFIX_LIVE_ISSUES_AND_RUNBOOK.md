@@ -165,8 +165,13 @@ Captured from product review notes/screenshots; default status is **TODO** unles
 
 1. **DONE** — Sticky allergy header: move allergies to top of MAR and keep visible while scrolling.
 2. **DONE** — Highlight today's date in the 31-day medication grid.
-3. **TODO (spike/prototype)** — Medication-allergy conflict pop-up; evaluate AI vs internal rules/database check (include reliability/cost assessment).
-4. **TODO** — Alerts for missed dates with jump-to-entry + edit flow.
+3. **DONE (2026-05-15)** — Alerts for missed dates with jump-to-entry + edit flow.
+
+#### HOLD
+
+1. **HOLD** — Medication-allergy conflict pop-up spike/prototype; evaluate AI vs internal rules/database check (include reliability/cost assessment).
+2. **HOLD** — **Printed MAR must not include Progress Notes body**; notes print via their own flow.
+3. **HOLD** — Refine multi-form print view for cleaner audit printing.
 
 #### Technical / Bug Fixes
 
@@ -177,10 +182,9 @@ Captured from product review notes/screenshots; default status is **TODO** unles
 #### Navigation & UI Polish
 
 1. **DONE** — Grey out inactive modules/features not yet active.
-2. **TODO** — Refine multi-form print view for cleaner audit printing.
-3. **TODO** — Add quick status/table view for per-patient activity status (e.g., active, draft).
-4. **TODO** — Add hover legend showing code meanings.
-5. **TODO** — PRN UI clarity: clarify that recent doses are shown, not a required "doses per day" count.
+2. **TODO** — Add quick status/table view for per-patient activity status (e.g., active, draft).
+3. **TODO** — Add hover legend showing code meanings.
+4. **TODO** — PRN UI clarity: clarify that recent doses are shown, not a required "doses per day" count.
 
 #### Testing & QA
 
@@ -190,13 +194,12 @@ Captured from product review notes/screenshots; default status is **TODO** unles
 
 ### MAR & Patient Binder — team intake (2026-05-12)
 
-Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 6, 2026). **Target rollout:** June 6, 2026. Items below were **not** already tracked above (skipped: multi-form print refinement → **Navigation & UI Polish #2**; hover legend → **#4**; MAR search scope question only partially overlaps shipped MAR search; PRN → Progress Notes / initials path → **§6a**; monthly MAR duplication build → **§6a**; field validation hard-stop → **§6a Critical**; phone masking → admissions **DONE**).
+Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 6, 2026). **Target rollout:** June 6, 2026. Items below were **not** already tracked above (skipped: multi-form print refinement → **HOLD**; hover legend → **Navigation & UI Polish #3**; MAR search scope question only partially overlaps shipped MAR search; PRN → Progress Notes / initials path → **§6a**; monthly MAR duplication build → **§6a**; field validation hard-stop → **§6a Critical**; phone masking → admissions **DONE**).
 
 #### Critical / pre-launch
 
-1. **TODO** — **Printed MAR must not include Progress Notes body**; notes print via their own flow (separate from “refine multi-form print view”).
-2. **TODO** — **Read-only inspection mode:** verify **all** command actions are hidden (delete, add, plus notes, etc.) before launch.
-3. **TODO** — **Finalize user-role definitions** before rollout (who can do what across binder / MAR / notes).
+1. **TODO** — **Read-only inspection mode:** verify **all** command actions are hidden (delete, add, plus notes, etc.) before launch.
+2. **TODO** — **Finalize user-role definitions** before rollout (who can do what across binder / MAR / notes).
 
 #### Rollout / operations (non-code)
 
@@ -222,7 +225,7 @@ Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 
 1. **DONE (2026-05-13)** — Rename PRN control label to **Manage PRN**; removed the PRN dropdown and made the button open the view/manage PRN modal directly. Adding a PRN from that modal returns to the refreshed Manage PRN list.
 2. **DONE (2026-05-13)** — **Simplify MAR legend** to agreed defaults (**DC**, **W** Withheld, **R** Refused). Renamed **Held → Withheld** in the MAR dropdown, cell display, print text, and legend while preserving legacy `H` records as displayed `W`; MAR-triggered Progress Notes include the triggering legend label after the `(from MAR, time)` prefix; **W Withheld** and **R Refused** show the note option; erroneous **Not Given** and **PRN** legend entries were removed.
 3. **TODO** — **Refused** flows: ensure Progress Notes show an explicit **Refused** label (not only unstructured note text) where product expects it.
-4. **TODO** — **PRN list** reflects add/edit/delete **in real time** without stale UI.
+4. **DONE (2026-05-15)** — **PRN list** reflects add/edit/delete **in real time** without stale UI.
 5. **TODO** — **PRN default time = 12:00** (still editable via time control); confirm with caregivers.
 6. **TODO (product)** — Caregiver-facing **PRN/legend wording** pass (owner: finalize labels and removals/consolidations).
 
@@ -245,7 +248,7 @@ Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 
 1. **TODO** — Repro **missing-note** bug: medication with **3 administration times** × **NG / DC / W / R** dropdowns (document findings).
 2. **TODO** — After **3-day column** change: re-check dropdown behavior and note overflow.
 3. **TODO** — Standing: **2–3 hours/week** hands-on across meds / PRN / vitals; paired **break-test** of med + PRN flows; **consolidated bug/usability list** on a fixed cadence.
-4. **NOTE** — Team doc excluded **print** and **duplicate-the-mark** from a short cycle; print remains in Navigation #2 + Critical above; duplication in §6a + Past-month section.
+4. **NOTE** — Team doc excluded **print** and **duplicate-the-mark** from a short cycle; print items are currently tracked under **HOLD**; duplication remains in §6a + Past-month section.
 
 #### Open questions (product)
 
@@ -305,12 +308,12 @@ Sourced from partner notes / screenshots. Track here alongside §5 unless an ite
 ### Critical bugs — fix first
 
 - [ ] **Validation bypass:** Forms must **hard-stop** submit when required fields are incomplete (e.g. phone number missing a digit); no silent acceptance.
-- [ ] **Pop-up layering (MAR):** Modals/dropdowns must always render **above** sticky bars and chart chrome (z-index / stacking contexts).
+- [x] **Pop-up layering (MAR):** Modals/dropdowns must always render **above** sticky bars and chart chrome (z-index / stacking contexts).
 - [x] **Progress Notes date bug:** Notes saving or displaying the **wrong calendar day** (e.g. 4/13 → 4/12); audit default date handling and timezone. **Addressed in code** with same `lib/calendarDate` approach as MAR (local `YYYY-MM-DD` parsing + local “today” for defaults); reopen if live repro after deploy.
 
 ### Pre-release cleanup (before going public)
 
-- [ ] **Remove temporary “original PRN records” table** used only for migration checking.
+- [x] **Remove temporary “original PRN records” table** used only for migration checking.
 - [x] **Remove PRN from routine-meds dropdown** (cleanup missed earlier).
 - [x] **Edit Patient Details** → **Patient Details** (sticky bar link; `PatientStickyBar` default + MAR + Progress Notes).
 - [ ] **Relabel ambiguous fields — remaining:** Vitals **Notes** → **Parameter** or **Vital Name**; confirm **Substitute** vs **Secondary** caregiver wording everywhere.

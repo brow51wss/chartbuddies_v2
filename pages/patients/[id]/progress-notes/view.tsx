@@ -50,6 +50,7 @@ function InitialsOrSignatureDisplay({
     ensureSignatureFontsLoaded(font)
     return (
       <span
+        className={`lasso-signature-mark lasso-signature-mark--text lasso-signature-mark--${variant}`}
         style={{
           fontFamily: `"${font}", cursive`,
           fontSize: variant === 'initials' ? '1.1em' : '1.75em',
@@ -65,11 +66,12 @@ function InitialsOrSignatureDisplay({
       <img
         src={value}
         alt={variant === 'initials' ? 'Initials' : 'Signature'}
+        className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
         style={{ maxHeight: variant === 'initials' ? '1.25em' : '2.5em', maxWidth: variant === 'initials' ? '3em' : '12em', verticalAlign: 'middle', display: 'inline-block' }}
       />
     )
   }
-  return <span>{value}</span>
+  return <span className={`lasso-signature-mark lasso-signature-mark--plain lasso-signature-mark--${variant}`}>{value}</span>
 }
 
 function parsePatientName(fullName: string): { firstName: string; lastName: string } {
