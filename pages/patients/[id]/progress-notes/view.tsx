@@ -9,6 +9,10 @@ import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../../
 import { supabase } from '../../../../lib/supabase'
 import { formatCalendarDate, localTodayYMD } from '../../../../lib/calendarDate'
 import { getCurrentUserProfile } from '../../../../lib/auth'
+import {
+  isPatientRecordStep1Complete,
+  PHYSICIAN_SELECTION_BLOCKED_HINT,
+} from '../../../../lib/patientProfileWizardValidation'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import type { UserProfile, Patient } from '../../../../types/auth'
 import type { ProgressNoteEntry, ProgressNoteMonthlySummary } from '../../../../types/progress-notes'
@@ -357,27 +361,33 @@ export default function ProgressNotesPage() {
       const entriesList = entriesError ? [] : ((entriesData || []) as ProgressNoteEntry[]).map(e => ({ ...e, is_addendum: e.is_addendum ?? false }))
       setEntries(entriesList)
 
-      // Pre-fill Physician/APRN: localStorage (most reliable) > last note > patient record
-      const storageKey = `progress-notes-physician-${patientId}`
-      const stored = (typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null)?.trim() || ''
-      const lastPhysician =
-        entriesList.find((e) => !isTbdOrEmptyPhysician(e.physician_name))?.physician_name?.trim() || ''
-      const patientPhysician = isTbdOrEmptyPhysician(patientData.physician_name)
-        ? ''
-        : patientData.physician_name!.trim()
-      const physicianToUse = !isTbdOrEmptyPhysician(stored)
-        ? stored
-        : lastPhysician || patientPhysician
-      if (physicianToUse) {
-        if (distinct.includes(physicianToUse)) {
-          setSelectedPhysician(physicianToUse)
-          setCustomPhysician('')
-        } else {
-          setSelectedPhysician(PHYSICIAN_SELECT_ADD_OTHER)
-          setCustomPhysician(physicianToUse)
+      const profileStep1Complete = isPatientRecordStep1Complete(patientData as Patient)
+      if (profileStep1Complete) {
+        // Pre-fill Physician/APRN: localStorage (most reliable) > last note > patient record
+        const storageKey = `progress-notes-physician-${patientId}`
+        const stored = (typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null)?.trim() || ''
+        const lastPhysician =
+          entriesList.find((e) => !isTbdOrEmptyPhysician(e.physician_name))?.physician_name?.trim() || ''
+        const patientPhysician = isTbdOrEmptyPhysician(patientData.physician_name)
+          ? ''
+          : patientData.physician_name!.trim()
+        const physicianToUse = !isTbdOrEmptyPhysician(stored)
+          ? stored
+          : lastPhysician || patientPhysician
+        if (physicianToUse) {
+          if (distinct.includes(physicianToUse)) {
+            setSelectedPhysician(physicianToUse)
+            setCustomPhysician('')
+          } else {
+            setSelectedPhysician(PHYSICIAN_SELECT_ADD_OTHER)
+            setCustomPhysician(physicianToUse)
+          }
+        } else if (patientData.physician_name && distinct.includes(patientData.physician_name)) {
+          setSelectedPhysician(patientData.physician_name)
         }
-      } else if (patientData.physician_name && distinct.includes(patientData.physician_name)) {
-        setSelectedPhysician(patientData.physician_name)
+      } else {
+        setSelectedPhysician('')
+        setCustomPhysician('')
       }
 
       setLoading(false)
@@ -388,6 +398,7 @@ export default function ProgressNotesPage() {
   // Debounced save of Physician/APRN to patient record so typed value persists
   useEffect(() => {
     if (!patientId || typeof patientId !== 'string' || !patient) return
+    if (!isPatientRecordStep1Complete(patient)) return
     const physician = effectivePhysicianName(selectedPhysician, customPhysician)
     const prevRaw = patient.physician_name?.trim() || ''
     const prevNorm = isTbdOrEmptyPhysician(prevRaw) ? '' : prevRaw
@@ -717,6 +728,7 @@ export default function ProgressNotesPage() {
         return d.startsWith(monthFilterKey)
       })
     : allMainEntries
+  const physicianSelectionLocked = !isPatientRecordStep1Complete(patient)
   const selectedPhysicianDisplay = physicianDisplayText(effectivePhysicianName(selectedPhysician, customPhysician))
   const showPhysicianColumn = Boolean(selectedPhysicianDisplay)
   const existingNotesColumnCount = 4
@@ -849,8 +861,8 @@ export default function ProgressNotesPage() {
                         setSelectedPhysician(v)
                         if (!v || v !== PHYSICIAN_SELECT_ADD_OTHER) setCustomPhysician('')
                       }}
-                      disabled={readOnly}
-                      className={`w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal ${readOnly ? 'cursor-not-allowed opacity-90' : ''}`}
+                      disabled={readOnly || physicianSelectionLocked}
+                      className={`w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal ${readOnly || physicianSelectionLocked ? 'cursor-not-allowed opacity-60' : ''}`}
                     >
                       <option value="">Select</option>
                       {physicians.map(p => (
@@ -858,7 +870,7 @@ export default function ProgressNotesPage() {
                       ))}
                       <option value={PHYSICIAN_SELECT_ADD_OTHER}>+ Add</option>
                     </select>
-                    {!readOnly && selectedPhysician === PHYSICIAN_SELECT_ADD_OTHER && (
+                    {!readOnly && !physicianSelectionLocked && selectedPhysician === PHYSICIAN_SELECT_ADD_OTHER && (
                       <input
                         type="text"
                         placeholder="Add New"
@@ -868,6 +880,18 @@ export default function ProgressNotesPage() {
                         }}
                         className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
                       />
+                    )}
+                    {physicianSelectionLocked && !readOnly && (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100">
+                        <p>{PHYSICIAN_SELECTION_BLOCKED_HINT}</p>
+                        <button
+                          type="button"
+                          onClick={openEditPatientModal}
+                          className="mt-2 font-medium text-lasso-teal hover:underline"
+                        >
+                          Complete patient details
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

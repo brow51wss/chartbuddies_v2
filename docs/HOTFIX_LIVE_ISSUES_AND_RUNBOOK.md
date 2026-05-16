@@ -210,7 +210,7 @@ Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 
 
 1. **DONE (2026-05-13)** — Strengthen validation for **email, state, and address** (invalid values currently accepted); complements §6a “hard-stop” / required-field work. Add/Edit Patient now validates required **Home Phone** (10 digits, numeric/phone-format input only), required **Email** format, optional **Physician Phone** (10 digits if entered, numeric/phone-format input only), required **State** as a 2-letter US state code with **HI** as the default, and optional **ZIP code** (5 or 9 digits if entered). **Street Address** and **City** remain optional. Validation uses inline field messages and clickable error chips. Edit Patient modal workflow is shared via `components/EditPatientInfoModal.tsx` across Dashboard, MAR, and Progress Notes.
 2. **DONE (2026-05-13)** — **Forgot password** entry point below the read-only mode password prompt; links to existing `/auth/forgot-password` reset flow from the Exit Read-Only modal.
-3. **TODO** — **Physician selection:** enforce required patient/context fields **before** physician entry is allowed (selection-order bug).
+3. **DONE (2026-05-15)** — **Physician selection:** enforce required patient/context fields **before** physician entry is allowed (selection-order bug). Progress Notes locks physician dropdown until step-1 profile fields pass validation; Add/Edit Patient step 2 disables physician fields with the same rule (`lib/patientProfileWizardValidation.ts`, `PatientProfileFormFields`, Progress Notes view).
 
 #### MAR layout & UI
 

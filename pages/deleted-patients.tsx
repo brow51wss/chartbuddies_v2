@@ -10,6 +10,16 @@ import { useReadOnly } from '../contexts/ReadOnlyContext'
 import type { UserProfile } from '../types/auth'
 import { formatCalendarDate } from '../lib/calendarDate'
 
+type SortColumn = 'date_of_birth' | 'created_at' | 'first_name' | 'last_name' | null
+type SortDirection = 'asc' | 'desc'
+
+const parsePatientName = (fullName: string) => {
+  const parts = fullName.trim().split(/\s+/)
+  const firstName = parts[0] || ''
+  const lastName = parts.length > 1 ? parts[parts.length - 1] : ''
+  return { firstName, lastName }
+}
+
 interface DeletedPatient {
   id: string
   hospital_id: string
@@ -29,7 +39,62 @@ export default function DeletedPatientsPage() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [restoringId, setRestoringId] = useState<string | null>(null)
+  const [sortColumn, setSortColumn] = useState<SortColumn>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const { isReadOnly } = useReadOnly()
+
+  const sortedPatients = [...patients].sort((a, b) => {
+    if (!sortColumn) return 0
+
+    let compareA: string | number
+    let compareB: string | number
+
+    if (sortColumn === 'first_name') {
+      compareA = parsePatientName(a.patient_name).firstName.toLowerCase()
+      compareB = parsePatientName(b.patient_name).firstName.toLowerCase()
+    } else if (sortColumn === 'last_name') {
+      compareA = parsePatientName(a.patient_name).lastName.toLowerCase()
+      compareB = parsePatientName(b.patient_name).lastName.toLowerCase()
+    } else {
+      compareA = new Date(a[sortColumn]).getTime()
+      compareB = new Date(b[sortColumn]).getTime()
+    }
+
+    if (typeof compareA === 'string' && typeof compareB === 'string') {
+      const result = compareA.localeCompare(compareB)
+      return sortDirection === 'asc' ? result : -result
+    }
+    const result = (compareA as number) - (compareB as number)
+    return sortDirection === 'asc' ? result : -result
+  })
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const SortIcon = ({ column }: { column: SortColumn }) => {
+    if (sortColumn !== column) {
+      return (
+        <svg className="w-4 h-4 ml-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      )
+    }
+    return sortDirection === 'asc' ? (
+      <svg className="w-4 h-4 ml-1 text-lasso-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+      </svg>
+    ) : (
+      <svg className="w-4 h-4 ml-1 text-lasso-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    )
+  }
 
   useEffect(() => {
     if (isReadOnly) {
@@ -170,6 +235,47 @@ export default function DeletedPatientsPage() {
             </div>
           ) : (
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
+              <div className="flex flex-wrap items-center gap-2 justify-between border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 px-4 py-3 sm:px-6">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                    Sort
+                  </span>
+                  {(
+                    [
+                      ['first_name', 'First name'],
+                      ['last_name', 'Last name'],
+                      ['date_of_birth', 'Date of birth'],
+                      ['created_at', 'Date added'],
+                    ] as const
+                  ).map(([col, label]) => (
+                    <button
+                      key={col}
+                      type="button"
+                      onClick={() => handleSort(col)}
+                      className={`inline-flex items-center rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        sortColumn === col
+                          ? 'border-lasso-teal bg-lasso-teal text-white dark:border-lasso-teal dark:bg-lasso-teal [&_svg]:text-white'
+                          : 'border-gray-200 bg-white text-gray-700 hover:border-lasso-blue/40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-lasso-teal/40'
+                      }`}
+                    >
+                      {label}
+                      <SortIcon column={col} />
+                    </button>
+                  ))}
+                </div>
+                {sortColumn && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSortColumn(null)
+                      setSortDirection('asc')
+                    }}
+                    className="text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                  >
+                    Clear sort
+                  </button>
+                )}
+              </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
@@ -195,7 +301,7 @@ export default function DeletedPatientsPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {patients.map((patient) => (
+                    {sortedPatients.map((patient) => (
                       <tr key={patient.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
                           {patient.patient_name}

@@ -1,4 +1,8 @@
 import React from 'react'
+import {
+  PHYSICIAN_SELECTION_BLOCKED_HINT,
+  canEditPhysicianFields,
+} from '../lib/patientProfileWizardValidation'
 
 export const patientProfileInputClass =
   'w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white'
@@ -193,6 +197,7 @@ export function PatientProfileFormFields({
 }: Props) {
   const showBasicContact = mode.type === 'full' || mode.step === 1
   const showClinical = mode.type === 'full' || mode.step === 2
+  const physicianFieldsLocked = showClinical && !canEditPhysicianFields(v)
   const hasValue = (value: string) => value.trim().length > 0
   const digitCount = (value: string) => value.replace(/\D/g, '').length
   const isEmailLike = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
@@ -616,7 +621,8 @@ export function PatientProfileFormFields({
                   name="physicianName"
                   value={v.physicianName}
                   onChange={onChange}
-                  className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''}`}
+                  disabled={disabled || physicianFieldsLocked}
+                  className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${physicianFieldsLocked ? 'cursor-not-allowed opacity-60' : ''}`}
                   placeholder="TBD"
                   autoComplete="off"
                 />
@@ -634,9 +640,10 @@ export function PatientProfileFormFields({
                   name="physicianPhone"
                   value={v.physicianPhone}
                   onChange={onChange}
+                  disabled={disabled || physicianFieldsLocked}
                   inputMode="numeric"
                   maxLength={14}
-                  className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('physicianPhone')}`}
+                  className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('physicianPhone')} ${physicianFieldsLocked ? 'cursor-not-allowed opacity-60' : ''}`}
                   placeholder="(555) 555-5555"
                   autoComplete="tel"
                 />
@@ -644,6 +651,11 @@ export function PatientProfileFormFields({
               </div>
               {fieldError('physicianPhone') && <p className={errorTextClass}>{fieldError('physicianPhone')}</p>}
             </div>
+            {physicianFieldsLocked && (
+              <p className="md:col-span-12 text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+                {PHYSICIAN_SELECTION_BLOCKED_HINT}
+              </p>
+            )}
           </div>
         </div>
       )}

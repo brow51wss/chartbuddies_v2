@@ -1,4 +1,9 @@
 import type { PatientProfileFormValues } from '../components/PatientProfileFormFields'
+import { parsePatientNameParts } from './patientName'
+import type { Patient } from '../types/auth'
+
+export const PHYSICIAN_SELECTION_BLOCKED_HINT =
+  'Complete the patient’s name, date of birth, sex, admission date, state, home phone, and email before choosing a physician.'
 
 export type PatientProfileFieldErrors = Partial<Record<keyof PatientProfileFormValues, string>>
 
@@ -132,4 +137,41 @@ export function missingFieldsForPatientProfileWizardStep1(v: PatientProfileFormV
   if (!v.homePhone.trim()) missing.push('Home phone')
   if (!v.email.trim()) missing.push('Email')
   return missing
+}
+
+export function patientToProfileFormValues(patient: Patient): PatientProfileFormValues {
+  const nameParts = parsePatientNameParts(patient.patient_name)
+  return {
+    firstName: nameParts.firstName,
+    middleName: nameParts.middleName,
+    lastName: nameParts.lastName,
+    dateOfBirth: patient.date_of_birth?.slice(0, 10) || '',
+    sex: patient.sex || '',
+    dateOfAdmission: patient.admission_date?.slice(0, 10) || patient.date_of_birth?.slice(0, 10) || '',
+    streetAddress: patient.street_address || '',
+    city: patient.city || '',
+    state: patient.state || DEFAULT_PATIENT_STATE,
+    zipCode: patient.zip_code || '',
+    homePhone: patient.home_phone || '',
+    email: patient.email || '',
+    diagnosis: patient.diagnosis || '',
+    diet: patient.diet || '',
+    allergies: patient.allergies || '',
+    physicianName: patient.physician_name || '',
+    physicianPhone: patient.physician_phone || '',
+  }
+}
+
+/** True when step-1 patient identity/contact fields pass wizard validation. */
+export function isPatientProfileStep1Complete(v: PatientProfileFormValues): boolean {
+  return patientProfileFieldErrorMessages(validatePatientProfileWizardStep1Fields(v)).length === 0
+}
+
+export function isPatientRecordStep1Complete(patient: Patient): boolean {
+  return isPatientProfileStep1Complete(patientToProfileFormValues(patient))
+}
+
+/** Step-1 fields must be complete before physician name/phone can be edited. */
+export function canEditPhysicianFields(v: PatientProfileFormValues): boolean {
+  return isPatientProfileStep1Complete(v)
 }

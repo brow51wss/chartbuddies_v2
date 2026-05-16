@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { computeAgeFromISODate, parsePatientNameParts } from '../lib/patientName'
+import { computeAgeFromISODate } from '../lib/patientName'
 import type { Patient } from '../types/auth'
 import {
   PATIENT_PROFILE_FIELD_IDS,
@@ -15,6 +15,7 @@ import {
   formatPatientPhoneInput,
   formatPatientZipInput,
   patientProfileFieldErrorMessages,
+  patientToProfileFormValues,
   validatePatientProfileWizardStep1Fields,
   type PatientProfileFieldErrors,
 } from '../lib/patientProfileWizardValidation'
@@ -81,29 +82,6 @@ function emptyPatientFormValues(): PatientProfileFormValues {
     allergies: '',
     physicianName: '',
     physicianPhone: '',
-  }
-}
-
-function patientToFormValues(patient: Patient): PatientProfileFormValues {
-  const nameParts = parsePatientNameParts(patient.patient_name)
-  return {
-    firstName: nameParts.firstName,
-    middleName: nameParts.middleName,
-    lastName: nameParts.lastName,
-    dateOfBirth: patient.date_of_birth?.slice(0, 10) || '',
-    sex: patient.sex || '',
-    dateOfAdmission: patient.admission_date?.slice(0, 10) || patient.date_of_birth?.slice(0, 10) || '',
-    streetAddress: patient.street_address || '',
-    city: patient.city || '',
-    state: patient.state || DEFAULT_PATIENT_STATE,
-    zipCode: patient.zip_code || '',
-    homePhone: patient.home_phone || '',
-    email: patient.email || '',
-    diagnosis: patient.diagnosis || '',
-    diet: patient.diet || '',
-    allergies: patient.allergies || '',
-    physicianName: patient.physician_name || '',
-    physicianPhone: patient.physician_phone || '',
   }
 }
 
@@ -230,7 +208,7 @@ export default function EditPatientInfoModal({
         if (cancelled) return
 
         const patient = data as Patient
-        setForm(patientToFormValues(patient))
+        setForm(patientToProfileFormValues(patient))
         setPatientPhoto(patient.patient_photo ?? null)
         setAgeDisplay(computeAgeFromISODate(patient.date_of_birth?.slice(0, 10) || ''))
       } catch (err: unknown) {
