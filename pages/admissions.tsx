@@ -18,6 +18,7 @@ import {
   formatPatientPhoneInput,
   formatPatientZipInput,
   patientProfileFieldErrorMessages,
+  validatePatientProfileForSave,
   validatePatientProfileWizardStep1Fields,
   type PatientProfileFieldErrors,
 } from '../lib/patientProfileWizardValidation'
@@ -229,12 +230,14 @@ export default function Admissions() {
     if (Date.now() < submitUnlockAtRef.current) return
     if (submitInFlightRef.current) return
 
-    const step1Errors = validatePatientProfileWizardStep1Fields(formData as PatientProfileFormValues)
-    const step1Messages = patientProfileFieldErrorMessages(step1Errors)
-    if (step1Messages.length) {
-      setFieldErrors(step1Errors)
-      setError(step1Messages.join(' '))
-      if (step1Errors.homePhone || step1Errors.email) setStep(1)
+    const saveErrors = validatePatientProfileForSave(formData as PatientProfileFormValues)
+    const saveMessages = patientProfileFieldErrorMessages(saveErrors)
+    if (saveMessages.length) {
+      setFieldErrors(saveErrors)
+      setError(saveMessages.join(' '))
+      if (Object.keys(validatePatientProfileWizardStep1Fields(formData as PatientProfileFormValues)).length > 0) {
+        setStep(1)
+      }
       return
     }
 

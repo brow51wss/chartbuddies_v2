@@ -55,8 +55,8 @@ export function formatPatientZipInput(value: string): string {
   return `${digits.slice(0, 5)}-${digits.slice(5)}`
 }
 
-/** Contact fields that must be valid before a patient can be added or edited. */
-export function validatePatientContactFields(v: PatientProfileFormValues): PatientProfileFieldErrors {
+/** Step-1 contact fields (home phone, email, optional ZIP). */
+export function validatePatientStep1ContactFields(v: PatientProfileFormValues): PatientProfileFieldErrors {
   const errors: PatientProfileFieldErrors = {}
 
   if (!v.homePhone.trim()) {
@@ -71,10 +71,6 @@ export function validatePatientContactFields(v: PatientProfileFormValues): Patie
     errors.email = 'Enter a valid email address.'
   }
 
-  if (v.physicianPhone.trim() && digitCount(v.physicianPhone) !== 10) {
-    errors.physicianPhone = 'Physician phone must contain 10 digits, or leave it blank.'
-  }
-
   if (v.zipCode.trim()) {
     const zipDigits = digitCount(v.zipCode)
     if (zipDigits !== 5 && zipDigits !== 9) {
@@ -83,6 +79,20 @@ export function validatePatientContactFields(v: PatientProfileFormValues): Patie
   }
 
   return errors
+}
+
+/** Optional physician phone on step 2 (validated on save, not for step-1 gating). */
+export function validatePhysicianPhoneField(v: PatientProfileFormValues): PatientProfileFieldErrors {
+  const errors: PatientProfileFieldErrors = {}
+  if (v.physicianPhone.trim() && digitCount(v.physicianPhone) !== 10) {
+    errors.physicianPhone = 'Physician phone must contain 10 digits, or leave it blank.'
+  }
+  return errors
+}
+
+/** Contact fields that must be valid before a patient can be added or edited. */
+export function validatePatientContactFields(v: PatientProfileFormValues): PatientProfileFieldErrors {
+  return { ...validatePatientStep1ContactFields(v), ...validatePhysicianPhoneField(v) }
 }
 
 /** Required + contact-format errors for Step 1 of the patient add/edit wizard. */
@@ -101,7 +111,12 @@ export function validatePatientProfileWizardStep1Fields(v: PatientProfileFormVal
     errors.state = 'State must be a valid 2-letter US state code.'
   }
 
-  return { ...errors, ...validatePatientContactFields(v) }
+  return { ...errors, ...validatePatientStep1ContactFields(v) }
+}
+
+/** Step 1 + optional physician phone — use when submitting the full patient form. */
+export function validatePatientProfileForSave(v: PatientProfileFormValues): PatientProfileFieldErrors {
+  return { ...validatePatientProfileWizardStep1Fields(v), ...validatePhysicianPhoneField(v) }
 }
 
 export function patientProfileFieldErrorMessages(errors: PatientProfileFieldErrors): string[] {

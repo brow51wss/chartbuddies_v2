@@ -16,6 +16,7 @@ import {
   formatPatientZipInput,
   patientProfileFieldErrorMessages,
   patientToProfileFormValues,
+  validatePatientProfileForSave,
   validatePatientProfileWizardStep1Fields,
   type PatientProfileFieldErrors,
 } from '../lib/patientProfileWizardValidation'
@@ -307,12 +308,14 @@ export default function EditPatientInfoModal({
       return
     }
 
-    const step1Errors = validatePatientProfileWizardStep1Fields(form)
-    const messages = patientProfileFieldErrorMessages(step1Errors)
-    setFieldErrors(step1Errors)
+    const saveErrors = validatePatientProfileForSave(form)
+    const messages = patientProfileFieldErrorMessages(saveErrors)
+    setFieldErrors(saveErrors)
     if (messages.length) {
       setModalError(messages.join(' '))
-      setStep(step1Errors.physicianPhone && !step1Errors.homePhone && !step1Errors.email ? 2 : 1)
+      if (Object.keys(validatePatientProfileWizardStep1Fields(form)).length > 0) {
+        setStep(1)
+      }
       return
     }
 
