@@ -4,9 +4,11 @@ import Head from 'next/head'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
 import AppHeader from '../../../../components/AppHeader'
 import PatientStickyBar from '../../../../components/PatientStickyBar'
+import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../../components/EditPatientInfoModal'
 import TimeInput from '../../../../components/TimeInput'
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../../lib/auth'
+import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import { ensureProgressNoteSummaryForMonth } from '../../../../lib/progress-notes'
 import type { Patient } from '../../../../types/auth'
 import type { MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns } from '../../../../types/mar'
@@ -21,6 +23,8 @@ export default function NewMARForm() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [showEditModal, setShowEditModal] = useState(false)
+  const { isReadOnly } = useReadOnly()
 
   // Form state
   const [patientInfo, setPatientInfo] = useState({
@@ -338,6 +342,27 @@ export default function NewMARForm() {
           sex={patient.sex}
           allergies={patient.allergies}
           recordNumber={patient.record_number}
+          onEditPatient={isReadOnly ? undefined : () => setShowEditModal(true)}
+          editPatientLabel="Edit Patient Details"
+        />
+        <EditPatientInfoModal
+          isOpen={showEditModal}
+          patientId={patient.id}
+          title="Edit Patient Details"
+          recordNumber={patient.record_number}
+          readOnly={isReadOnly}
+          onClose={() => setShowEditModal(false)}
+          onSave={async ({ patientId: pid, payload }: EditPatientInfoSaveArgs) => {
+            const { data, error: saveError } = await supabase
+              .from('patients')
+              .update({ ...payload, updated_at: new Date().toISOString() })
+              .eq('id', pid!)
+              .select('*')
+              .single()
+            if (saveError) throw saveError
+            return data as Patient
+          }}
+          onSaved={(updatedPatient) => setPatient(updatedPatient)}
         />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header */}

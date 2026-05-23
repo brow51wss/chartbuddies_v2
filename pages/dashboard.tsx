@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { usePatientListView } from '../hooks/usePatientListView'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -14,9 +15,6 @@ import { formatCalendarDate } from '../lib/calendarDate'
 
 type SortColumn = 'date_of_birth' | 'created_at' | 'first_name' | 'last_name' | null
 type SortDirection = 'asc' | 'desc'
-type PatientsViewMode = 'list' | 'cards'
-
-const PATIENTS_VIEW_STORAGE_KEY = 'lasso-dashboard-patients-view'
 
 // Helper to parse first/last name from full name
 const parsePatientName = (fullName: string) => {
@@ -36,11 +34,11 @@ export default function Dashboard() {
   const [message, setMessage] = useState('')
   const [sortColumn, setSortColumn] = useState<SortColumn>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
-  const [patientsView, setPatientsView] = useState<PatientsViewMode>('cards')
-  const patientsViewPersistReadyRef = useRef(false)
+  const { view: patientsView, setView: setPatientsView } = usePatientListView()
   const [showNameSortMenu, setShowNameSortMenu] = useState(false)
   const [showAddPatientModal, setShowAddPatientModal] = useState(false)
   const [editingPatientId, setEditingPatientId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
   const nameSortRef = useRef<HTMLTableCellElement>(null)
   const { isReadOnly } = useReadOnly()
 
@@ -51,29 +49,13 @@ export default function Dashboard() {
         setShowNameSortMenu(false)
       }
     }
-
     if (showNameSortMenu) {
       document.addEventListener('mousedown', handleClickOutside)
     }
-
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showNameSortMenu])
-
-  useEffect(() => {
-    const stored = window.localStorage.getItem(PATIENTS_VIEW_STORAGE_KEY)
-    if (stored === 'list') setPatientsView('list')
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (!patientsViewPersistReadyRef.current) {
-      patientsViewPersistReadyRef.current = true
-      return
-    }
-    window.localStorage.setItem(PATIENTS_VIEW_STORAGE_KEY, patientsView)
-  }, [patientsView])
 
   // Sort patients based on current sort settings
   const sortedPatients = [...patients].sort((a, b) => {
@@ -102,6 +84,19 @@ export default function Dashboard() {
       return sortDirection === 'asc' ? result : -result
     }
   })
+
+  const q = searchQuery.trim().toLowerCase()
+  const filteredSortedPatients = q
+    ? sortedPatients.filter((p) => {
+        const dob = formatCalendarDate(p.date_of_birth).toLowerCase()
+        return (
+          p.patient_name.toLowerCase().includes(q) ||
+          (p.diagnosis || '').toLowerCase().includes(q) ||
+          (p.record_number || '').toLowerCase().includes(q) ||
+          dob.includes(q)
+        )
+      })
+    : sortedPatients
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -280,7 +275,7 @@ export default function Dashboard() {
 
     // Confirm deletion
     const confirmed = window.confirm(
-      `Are you sure you want to delete patient "${patientName}"?\n\nThe patient will be moved to the deleted list. You can restore them (with all MAR and progress note data) from the "Deleted patients" page.`
+      `Are you sure you want to archive patient "${patientName}"?\n\nThe patient will be moved to the archive. You can restore them (with all MAR and progress note data) from the "Archives" page.`
     )
 
     if (!confirmed) return
@@ -326,7 +321,7 @@ export default function Dashboard() {
       if (userProfile) await loadPatients(userProfile)
       setMessage(
         softDeleteWorked
-          ? `Patient "${patientName}" has been deleted. You can restore them from Deleted patients.`
+          ? `Patient "${patientName}" has been archived. You can restore them from Archives.`
           : `Patient "${patientName}" has been deleted.`
       )
       setTimeout(() => setMessage(''), 3000)
@@ -442,11 +437,9 @@ export default function Dashboard() {
           type="button"
           onClick={() => handleDeletePatient(patient.id, patient.patient_name)}
           className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-          title="Delete patient"
+          title="Archive patient"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
+          Archive
         </button>
       )}
     </div>
@@ -567,11 +560,40 @@ export default function Dashboard() {
                     href="/deleted-patients"
                     className="text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-lasso-teal dark:hover:text-lasso-teal"
                   >
-                    View deleted patients
+                    Archives
                   </Link>
                 )}
               </div>
             </div>
+
+            {patients.length > 0 && (
+              <div className="mb-4 relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by name, diagnosis, record #, or date of birth…"
+                  className="block w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm text-gray-900 shadow-sm placeholder-gray-400 focus:border-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal/30 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:focus:border-lasso-teal"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    aria-label="Clear search"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            )}
 
             {patients.length === 0 ? (
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-12 text-center border border-gray-200 dark:border-gray-700">
@@ -592,6 +614,21 @@ export default function Dashboard() {
                       Add Patient
                     </button>
                   )}
+                </div>
+              ) : filteredSortedPatients.length === 0 ? (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-12 text-center border border-gray-200 dark:border-gray-700">
+                  <div className="text-5xl mb-4">🔍</div>
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No patients found</h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    No patients match &ldquo;{searchQuery}&rdquo;. Try a different name, diagnosis, or record number.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="text-sm font-medium text-lasso-teal hover:text-lasso-blue dark:text-lasso-teal"
+                  >
+                    Clear search
+                  </button>
                 </div>
               ) : (
                 <div className="max-w-7xl mx-auto">
@@ -625,27 +662,35 @@ export default function Dashboard() {
                             </button>
                           ))}
                         </div>
-                        {sortColumn && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSortColumn(null)
-                              setSortDirection('asc')
-                            }}
-                            className="text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-                          >
-                            Clear sort
-                          </button>
-                        )}
+                        <div className="flex items-center gap-3 ml-auto">
+                          {searchQuery && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {filteredSortedPatients.length} of {patients.length}
+                            </span>
+                          )}
+                          {sortColumn && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSortColumn(null)
+                                setSortDirection('asc')
+                              }}
+                              className="text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                              Clear sort
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
                     {patientsView === 'list' ? (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                         <colgroup>
-                          <col className="w-48" /> {/* Patient Name - ~192px */}
-                          <col className="w-36" /> {/* Date of Birth - ~144px */}
-                          <col className="w-36" /> {/* Date Added - ~144px */}
+                          <col className="w-48" /> {/* Patient Name */}
+                          <col className="w-36" /> {/* Date of Birth */}
+                          <col className="w-24" /> {/* Sex */}
+                          <col className="w-36" /> {/* Phone */}
                         </colgroup>
                         <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
                           <tr>
@@ -706,7 +751,7 @@ export default function Dashboard() {
                               )}
                             </th>
                             <th 
-                              className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-[192px] z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors select-none"
+                              className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors select-none"
                               onClick={() => handleSort('date_of_birth')}
                             >
                               <div className="flex items-center">
@@ -714,17 +759,11 @@ export default function Dashboard() {
                                 <SortIcon column="date_of_birth" />
                               </div>
                             </th>
-                            <th 
-                              className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors select-none"
-                              onClick={() => handleSort('created_at')}
-                            >
-                              <div className="flex items-center">
-                                Date Added
-                                <SortIcon column="created_at" />
-                              </div>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                              Sex
                             </th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                              Diagnosis
+                              Phone
                             </th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                               Actions
@@ -732,7 +771,7 @@ export default function Dashboard() {
                           </tr>
                         </thead>
                         <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                          {sortedPatients.map((patient) => (
+                          {filteredSortedPatients.map((patient) => (
                             <tr
                               key={patient.id}
                               className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-150"
@@ -742,21 +781,19 @@ export default function Dashboard() {
                                   {patient.patient_name}
                                 </div>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap sticky left-[192px] z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
+                              <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm text-gray-600 dark:text-gray-400">
                                   {formatCalendarDate(patient.date_of_birth)}
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm text-gray-600 dark:text-gray-400">
-                                  {new Date(patient.created_at).toLocaleDateString()}
+                                  {patient.sex || <span className="italic text-gray-400 dark:text-gray-500">N/A</span>}
                                 </div>
                               </td>
-                              <td className="px-6 py-4">
+                              <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm text-gray-600 dark:text-gray-400">
-                                  {patient.diagnosis || (
-                                    <span className="text-gray-400 dark:text-gray-500 italic">N/A</span>
-                                  )}
+                                  {patient.home_phone || <span className="italic text-gray-400 dark:text-gray-500">N/A</span>}
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
@@ -770,11 +807,15 @@ export default function Dashboard() {
                     ) : (
                     <div className="p-4 sm:p-6">
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {sortedPatients.map((patient) => (
+                        {filteredSortedPatients.map((patient) => (
                           <PatientSummaryCard
                             key={patient.id}
                             patient={patient}
                             nameHeading="h3"
+                            showDateAdded={false}
+                            showDiagnosis={false}
+                            showSex
+                            showPhone
                             className="transition-shadow hover:shadow-md"
                             footer={renderPatientActions(patient)}
                           />

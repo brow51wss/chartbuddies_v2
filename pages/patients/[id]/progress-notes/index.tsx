@@ -5,6 +5,7 @@ import Link from 'next/link'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
 import AppHeader from '../../../../components/AppHeader'
 import PatientStickyBar from '../../../../components/PatientStickyBar'
+import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../../components/EditPatientInfoModal'
 import { supabase } from '../../../../lib/supabase'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import type { Patient } from '../../../../types/auth'
@@ -17,6 +18,7 @@ export default function ProgressNotesIndex() {
   const [monthYears, setMonthYears] = useState<{ month_year: string; id: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showEditModal, setShowEditModal] = useState(false)
   const { isReadOnly } = useReadOnly()
 
   useEffect(() => {
@@ -117,6 +119,27 @@ export default function ProgressNotesIndex() {
           sex={patient.sex}
           allergies={patient.allergies}
           recordNumber={patient.record_number}
+          onEditPatient={isReadOnly ? undefined : () => setShowEditModal(true)}
+          editPatientLabel="Edit Patient Details"
+        />
+        <EditPatientInfoModal
+          isOpen={showEditModal}
+          patientId={typeof patientId === 'string' ? patientId : Array.isArray(patientId) ? patientId[0] : null}
+          title="Edit Patient Details"
+          recordNumber={patient.record_number}
+          readOnly={isReadOnly}
+          onClose={() => setShowEditModal(false)}
+          onSave={async ({ patientId: pid, payload }: EditPatientInfoSaveArgs) => {
+            const { data, error: saveError } = await supabase
+              .from('patients')
+              .update({ ...payload, updated_at: new Date().toISOString() })
+              .eq('id', pid!)
+              .select('*')
+              .single()
+            if (saveError) throw saveError
+            return data as Patient
+          }}
+          onSaved={(updatedPatient) => setPatient(updatedPatient)}
         />
 
         <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

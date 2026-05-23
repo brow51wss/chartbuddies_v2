@@ -5,6 +5,7 @@ import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
 import AppHeader from '../../../components/AppHeader'
 import PatientStickyBar from '../../../components/PatientStickyBar'
+import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../components/EditPatientInfoModal'
 import TimeInput from '../../../components/TimeInput'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../lib/auth'
@@ -73,6 +74,7 @@ export default function PatientForms() {
   const [saving, setSaving] = useState(false)
   const [deleteConfirmForm, setDeleteConfirmForm] = useState<{ id: string; month_year: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [showEditPatientModal, setShowEditPatientModal] = useState(false)
   const { isReadOnly } = useReadOnly()
 
   useEffect(() => {
@@ -514,7 +516,30 @@ export default function PatientForms() {
           sex={patient?.sex}
           allergies={patient?.allergies}
           recordNumber={patient?.record_number}
+          onEditPatient={isReadOnly || !patient ? undefined : () => setShowEditPatientModal(true)}
+          editPatientLabel="Edit Patient Details"
         />
+        {patient && (
+          <EditPatientInfoModal
+            isOpen={showEditPatientModal}
+            patientId={patient.id}
+            title="Edit Patient Details"
+            recordNumber={patient.record_number}
+            readOnly={isReadOnly}
+            onClose={() => setShowEditPatientModal(false)}
+            onSave={async ({ patientId: pid, payload }: EditPatientInfoSaveArgs) => {
+              const { data, error: saveError } = await supabase
+                .from('patients')
+                .update({ ...payload, updated_at: new Date().toISOString() })
+                .eq('id', pid!)
+                .select('*')
+                .single()
+              if (saveError) throw saveError
+              return data as Patient
+            }}
+            onSaved={(updatedPatient) => setPatient(updatedPatient)}
+          />
+        )}
 
         <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Link href={typeof id === 'string' ? `/patients/${id}` : Array.isArray(id) && id[0] ? `/patients/${id[0]}` : '/dashboard'} className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm font-medium inline-block mb-2">

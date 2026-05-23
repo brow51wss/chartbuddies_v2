@@ -5,9 +5,11 @@ import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
 import AppHeader from '../../../components/AppHeader'
 import PatientStickyBar from '../../../components/PatientStickyBar'
+import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../components/EditPatientInfoModal'
 import { supabase } from '../../../lib/supabase'
-import { getCurrentUserProfile } from '../../../lib/auth'
-import type { Patient } from '../../../types/auth'
+import { getCurrentUserProfile, signOut } from '../../../lib/auth'
+import { useReadOnly } from '../../../contexts/ReadOnlyContext'
+import type { Patient, UserProfile } from '../../../types/auth'
 import { PatientSummaryCard } from '../../../components/PatientSummaryCard'
 
 interface EHRModule {
@@ -93,10 +95,14 @@ export default function PatientHub() {
         ? rawPatientId[0]
         : undefined
   const [patient, setPatient] = useState<Patient | null>(null)
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [facilityName, setFacilityName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [activityRows, setActivityRows] = useState<BinderActivityRow[]>([])
   const [showActivityStatus, setShowActivityStatus] = useState(true)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const { isReadOnly } = useReadOnly()
 
   const formatDateTimeLabel = (value?: string | null) => {
     if (!value) return '—'
@@ -135,6 +141,16 @@ export default function PatientHub() {
       if (!profile) {
         router.push('/auth/login')
         return
+      }
+      setUserProfile(profile)
+
+      if (profile.hospital_id) {
+        const { data: hospitalData } = await supabase
+          .from('hospitals')
+          .select('name')
+          .eq('id', profile.hospital_id)
+          .single()
+        if (!cancelled) setFacilityName(hospitalData?.name ?? null)
       }
 
       const { data, error: fetchError } = await supabase
@@ -308,7 +324,12 @@ export default function PatientHub() {
         <title>{patient.patient_name} - Lasso</title>
       </Head>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <AppHeader patientId={patient.id} patientName={patient.patient_name} />
+        <AppHeader
+          userProfile={userProfile}
+          patientId={patient.id}
+          patientName={patient.patient_name}
+          onLogout={async () => { await signOut(); router.push('/auth/login') }}
+        />
         <PatientStickyBar
           patientId={patient.id}
           patientName={patient.patient_name}
@@ -316,6 +337,30 @@ export default function PatientHub() {
           sex={patient.sex}
           allergies={patient.allergies}
           recordNumber={patient.record_number}
+          onEditPatient={isReadOnly ? undefined : () => setShowEditModal(true)}
+          editPatientLabel="Edit Patient Details"
+        />
+        <EditPatientInfoModal
+          isOpen={showEditModal}
+          patientId={patient.id}
+          title="Edit Patient Details"
+          facilityDisplayName={facilityName}
+          recordNumber={patient.record_number}
+          readOnly={isReadOnly}
+          onClose={() => setShowEditModal(false)}
+          onSave={async ({ patientId: pid, payload }: EditPatientInfoSaveArgs) => {
+            const { data, error: saveError } = await supabase
+              .from('patients')
+              .update({ ...payload, updated_at: new Date().toISOString() })
+              .eq('id', pid!)
+              .select('*')
+              .single()
+            if (saveError) throw saveError
+            return data as Patient
+          }}
+          onSaved={(updatedPatient) => {
+            setPatient(updatedPatient)
+          }}
         />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

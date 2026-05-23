@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { usePatientListView } from '../hooks/usePatientListView'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -9,6 +10,8 @@ import { getCurrentUserProfile, signOut } from '../lib/auth'
 import { useReadOnly } from '../contexts/ReadOnlyContext'
 import type { UserProfile } from '../types/auth'
 import { formatCalendarDate } from '../lib/calendarDate'
+import { PatientSummaryCard } from '../components/PatientSummaryCard'
+
 
 type SortColumn = 'date_of_birth' | 'created_at' | 'first_name' | 'last_name' | null
 type SortDirection = 'asc' | 'desc'
@@ -26,9 +29,12 @@ interface DeletedPatient {
   patient_name: string
   record_number: string
   date_of_birth: string
+  sex?: 'Male' | 'Female' | 'Other' | null
   diagnosis: string | null
   created_at: string
   deleted_at: string
+  patient_photo?: string | null
+  home_phone?: string | null
 }
 
 export default function DeletedPatientsPage() {
@@ -41,6 +47,8 @@ export default function DeletedPatientsPage() {
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const [sortColumn, setSortColumn] = useState<SortColumn>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [searchQuery, setSearchQuery] = useState('')
+  const { view: patientsView, setView: setPatientsView } = usePatientListView()
   const { isReadOnly } = useReadOnly()
 
   const sortedPatients = [...patients].sort((a, b) => {
@@ -76,6 +84,19 @@ export default function DeletedPatientsPage() {
       setSortDirection('asc')
     }
   }
+
+  const q = searchQuery.trim().toLowerCase()
+  const filteredSortedPatients = q
+    ? sortedPatients.filter((p) => {
+        const dob = formatCalendarDate(p.date_of_birth).toLowerCase()
+        return (
+          p.patient_name.toLowerCase().includes(q) ||
+          (p.diagnosis || '').toLowerCase().includes(q) ||
+          (p.record_number || '').toLowerCase().includes(q) ||
+          dob.includes(q)
+        )
+      })
+    : sortedPatients
 
   const SortIcon = ({ column }: { column: SortColumn }) => {
     if (sortColumn !== column) {
@@ -119,7 +140,7 @@ export default function DeletedPatientsPage() {
       try {
         let query = supabase
           .from('patients')
-          .select('id, hospital_id, patient_name, record_number, date_of_birth, diagnosis, created_at, deleted_at')
+          .select('id, hospital_id, patient_name, record_number, date_of_birth, sex, diagnosis, created_at, deleted_at, patient_photo, home_phone')
           .not('deleted_at', 'is', null)
           .order('deleted_at', { ascending: false })
 
@@ -161,7 +182,7 @@ export default function DeletedPatientsPage() {
         .eq('id', patientId)
       if (updateError) throw updateError
       setPatients((prev) => prev.filter((p) => p.id !== patientId))
-      setMessage(`"${patientName}" has been restored.`)
+      setMessage(`"${patientName}" has been unarchived.`)
       setTimeout(() => setMessage(''), 3000)
     } catch (err: any) {
       setError(err.message || 'Failed to restore patient')
@@ -173,7 +194,7 @@ export default function DeletedPatientsPage() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <Head><title>Deleted patients - Lasso</title></Head>
+        <Head><title>Archived patients - Lasso</title></Head>
         <div className="min-h-screen">
           <AppHeader userProfile={userProfile} onLogout={async () => { await signOut(); router.push('/auth/login') }} />
           <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
@@ -190,7 +211,7 @@ export default function DeletedPatientsPage() {
   return (
     <ProtectedRoute>
       <Head>
-        <title>Deleted patients - Lasso</title>
+        <title>Archived patients - Lasso</title>
       </Head>
       <div className="min-h-screen">
         <AppHeader userProfile={userProfile} onLogout={async () => { await signOut(); router.push('/auth/login') }} />
@@ -207,135 +228,247 @@ export default function DeletedPatientsPage() {
             </div>
           )}
 
-          <Link
-            href="/dashboard"
-            className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue mb-2 inline-flex items-center gap-2 text-sm font-medium transition-colors"
-          >
-            <span>←</span>
-            <span>Back to Patients</span>
-          </Link>
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Deleted patients
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Restore a patient to bring them back to the main list with all MAR and progress note data.
-            </p>
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <Link
+                href="/dashboard"
+                className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue mb-2 inline-flex items-center gap-2 text-sm font-medium transition-colors"
+              >
+                <span>←</span>
+                <span>Back to Patients</span>
+              </Link>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Archived patients
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Restore a patient to bring them back to the main list with all MAR and progress note data.
+              </p>
+            </div>
+            {patients.length > 0 && (
+              <div
+                className="inline-flex rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50/80 dark:bg-gray-900/40 p-0.5 shadow-sm"
+                role="group"
+                aria-label="Display format"
+              >
+                <button
+                  type="button"
+                  onClick={() => setPatientsView('cards')}
+                  className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-md p-2 transition-colors ${
+                    patientsView === 'cards'
+                      ? 'bg-white text-lasso-navy shadow-sm dark:bg-gray-800 dark:text-white'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                  }`}
+                  aria-pressed={patientsView === 'cards'}
+                  aria-label="Card view"
+                  title="Card view"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPatientsView('list')}
+                  className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-md p-2 transition-colors ${
+                    patientsView === 'list'
+                      ? 'bg-white text-lasso-navy shadow-sm dark:bg-gray-800 dark:text-white'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                  }`}
+                  aria-pressed={patientsView === 'list'}
+                  aria-label="List view"
+                  title="List view"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 6h13M8 12h13M8 18h13" />
+                    <circle cx="5" cy="6" r="1.25" fill="currentColor" stroke="none" />
+                    <circle cx="5" cy="12" r="1.25" fill="currentColor" stroke="none" />
+                    <circle cx="5" cy="18" r="1.25" fill="currentColor" stroke="none" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
 
           {patients.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-12 text-center border border-gray-200 dark:border-gray-700">
               <div className="text-6xl mb-4">📋</div>
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                No deleted patients
-              </h3>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No archived patients</h3>
               <p className="text-gray-600 dark:text-gray-400">
-                Deleted patients will appear here. You can restore them at any time.
+                Archived patients will appear here. You can restore them at any time.
               </p>
             </div>
           ) : (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
-              <div className="flex flex-wrap items-center gap-2 justify-between border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 px-4 py-3 sm:px-6">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
-                    Sort
-                  </span>
-                  {(
-                    [
-                      ['first_name', 'First name'],
-                      ['last_name', 'Last name'],
-                      ['date_of_birth', 'Date of birth'],
-                      ['created_at', 'Date added'],
-                    ] as const
-                  ).map(([col, label]) => (
-                    <button
-                      key={col}
-                      type="button"
-                      onClick={() => handleSort(col)}
-                      className={`inline-flex items-center rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                        sortColumn === col
-                          ? 'border-lasso-teal bg-lasso-teal text-white dark:border-lasso-teal dark:bg-lasso-teal [&_svg]:text-white'
-                          : 'border-gray-200 bg-white text-gray-700 hover:border-lasso-blue/40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-lasso-teal/40'
-                      }`}
-                    >
-                      {label}
-                      <SortIcon column={col} />
-                    </button>
-                  ))}
+            <>
+              {/* Search bar */}
+              <div className="mb-4 relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
                 </div>
-                {sortColumn && (
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by name, diagnosis, record #, or date of birth…"
+                  className="block w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm text-gray-900 shadow-sm placeholder-gray-400 focus:border-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal/30 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:focus:border-lasso-teal"
+                />
+                {searchQuery && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setSortColumn(null)
-                      setSortDirection('asc')
-                    }}
-                    className="text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    aria-label="Clear search"
                   >
-                    Clear sort
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                   </button>
                 )}
               </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                        Patient Name
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                        Date of Birth
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                        Date Added
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                        Deleted at
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                        Diagnosis
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {sortedPatients.map((patient) => (
-                      <tr key={patient.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
-                          {patient.patient_name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                          {formatCalendarDate(patient.date_of_birth)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                          {new Date(patient.created_at).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                          {new Date(patient.deleted_at).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                          {patient.diagnosis || (
-                            <span className="text-gray-400 dark:text-gray-500 italic">N/A</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => handleUndelete(patient.id, patient.patient_name)}
-                            disabled={restoringId === patient.id}
-                            className="inline-flex items-center gap-1 text-sm font-medium text-lasso-teal hover:text-lasso-blue dark:text-lasso-teal dark:hover:text-lasso-blue/80 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {restoringId === patient.id ? 'Restoring...' : 'Undelete'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-200 dark:border-gray-700">
+                {/* Sort toolbar — always visible */}
+                {patientsView === 'cards' && (
+                  <div className="flex flex-wrap items-center gap-2 justify-between border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 px-4 py-3 sm:px-6">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Sort</span>
+                      {(
+                        [
+                          ['first_name', 'First name'],
+                          ['last_name', 'Last name'],
+                          ['date_of_birth', 'Date of birth'],
+                          ['created_at', 'Date added'],
+                        ] as const
+                      ).map(([col, label]) => (
+                        <button
+                          key={col}
+                          type="button"
+                          onClick={() => handleSort(col)}
+                          className={`inline-flex items-center rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                            sortColumn === col
+                              ? 'border-lasso-teal bg-lasso-teal text-white [&_svg]:text-white'
+                              : 'border-gray-200 bg-white text-gray-700 hover:border-lasso-blue/40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-lasso-teal/40'
+                          }`}
+                        >
+                          {label}
+                          <SortIcon column={col} />
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {searchQuery && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {filteredSortedPatients.length} of {patients.length}
+                        </span>
+                      )}
+                      {sortColumn && (
+                        <button
+                          type="button"
+                          onClick={() => { setSortColumn(null); setSortDirection('asc') }}
+                          className="text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                        >
+                          Clear sort
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {filteredSortedPatients.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <div className="text-5xl mb-4">🔍</div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No patients found</h3>
+                    <p className="text-gray-600 dark:text-gray-400 mb-4">No archived patients match &ldquo;{searchQuery}&rdquo;.</p>
+                    <button type="button" onClick={() => setSearchQuery('')} className="text-sm font-medium text-lasso-teal hover:text-lasso-blue">Clear search</button>
+                  </div>
+                ) : patientsView === 'cards' ? (
+                  <div className="p-4 sm:p-6">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {filteredSortedPatients.map((patient) => (
+                        <PatientSummaryCard
+                          key={patient.id}
+                          patient={patient}
+                          nameHeading="h3"
+                          showDateAdded={false}
+                          showDiagnosis={false}
+                          showSex
+                          showPhone
+                          className="transition-shadow hover:shadow-md"
+                          footer={
+                            <button
+                              type="button"
+                              onClick={() => handleUndelete(patient.id, patient.patient_name)}
+                              disabled={restoringId === patient.id}
+                              className="text-sm font-medium text-lasso-teal hover:text-lasso-blue dark:text-lasso-teal disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {restoringId === patient.id ? 'Restoring...' : 'Unarchive'}
+                            </button>
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <colgroup>
+                        <col className="w-48" />
+                        <col className="w-36" />
+                        <col className="w-24" />
+                        <col className="w-36" />
+                        <col className="w-40" />
+                      </colgroup>
+                      <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider sticky left-0 z-20 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 border-r border-gray-200 dark:border-gray-600 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => handleSort('first_name')}>
+                            <div className="flex items-center">Patient Name <SortIcon column="first_name" /></div>
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" onClick={() => handleSort('date_of_birth')}>
+                            <div className="flex items-center">DOB <SortIcon column="date_of_birth" /></div>
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Sex</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Phone</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Deleted At</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        {filteredSortedPatients.map((patient) => (
+                          <tr key={patient.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-150">
+                            <td className="px-6 py-4 whitespace-nowrap sticky left-0 z-10 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600">
+                              <div className="text-sm font-semibold text-gray-900 dark:text-white">{patient.patient_name}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                              {formatCalendarDate(patient.date_of_birth)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                              {patient.sex || <span className="italic text-gray-400 dark:text-gray-500">N/A</span>}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                              {patient.home_phone || <span className="italic text-gray-400 dark:text-gray-500">N/A</span>}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                              {new Date(patient.deleted_at).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => handleUndelete(patient.id, patient.patient_name)}
+                                disabled={restoringId === patient.id}
+                                className="text-sm font-medium text-lasso-teal hover:text-lasso-blue dark:text-lasso-teal disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {restoringId === patient.id ? 'Restoring...' : 'Unarchive'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            </div>
+            </>
           )}
         </main>
       </div>

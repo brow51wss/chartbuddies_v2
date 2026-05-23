@@ -58,6 +58,8 @@ export default function PatientStickyBar({
   recordNumber,
   allergies,
   className = '',
+  onEditPatient,
+  editPatientLabel = 'Edit Patient Details',
 }: PatientStickyBarProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [patientDetails, setPatientDetails] = useState<Patient | null>(null)
@@ -127,7 +129,7 @@ export default function PatientStickyBar({
         aria-hidden={!isVisible}
       >
         <div className="flex h-full flex-col">
-          <div className="flex items-center border-b border-gray-700 px-4 py-4 sm:px-5">
+          <div className="flex items-center justify-between gap-3 border-b border-gray-700 px-4 py-4 sm:px-5">
             <button
               type="button"
               onClick={closePanel}
@@ -138,6 +140,21 @@ export default function PatientStickyBar({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+            {onEditPatient && (
+              <button
+                type="button"
+                onClick={() => {
+                  closePanel()
+                  onEditPatient()
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-lasso-teal/60 bg-lasso-teal/10 px-3 py-1.5 text-sm font-medium text-lasso-teal transition-colors hover:bg-lasso-teal hover:text-white"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                {editPatientLabel}
+              </button>
+            )}
           </div>
 
           <div className="patient-info-drawer-scroll min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">

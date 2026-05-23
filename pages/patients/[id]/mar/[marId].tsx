@@ -5921,6 +5921,8 @@ export default function ViewMARForm() {
               })()}
               editData={editingEntry}
               isEditMode={!!editingEntry}
+              dateMin={getMarMonthDateRangeISO(marForm?.month_year || '')?.min}
+              dateMax={getMarMonthDateRangeISO(marForm?.month_year || '')?.max}
             />
           </div>
         </div>
@@ -5991,6 +5993,8 @@ export default function ViewMARForm() {
                 return ''
               })()}
               defaultType="vitals"
+              dateMin={getMarMonthDateRangeISO(marForm?.month_year || '')?.min}
+              dateMax={getMarMonthDateRangeISO(marForm?.month_year || '')?.max}
             />
           </div>
         </div>
@@ -6031,6 +6035,8 @@ export default function ViewMARForm() {
                 setShowManagePRNListModal(true)
               }}
               defaultDate={localTodayYMD()}
+              dateMin={getMarMonthDateRangeISO(marForm?.month_year || '')?.min}
+              dateMax={getMarMonthDateRangeISO(marForm?.month_year || '')?.max}
             />
           </div>
         </div>
@@ -6244,6 +6250,8 @@ export default function ViewMARForm() {
                 })
               }}
               onCancel={() => setPrnListEditTarget(null)}
+              dateMin={getMarMonthDateRangeISO(marForm?.month_year || '')?.min}
+              dateMax={getMarMonthDateRangeISO(marForm?.month_year || '')?.max}
             />
           </div>
         </div>
@@ -6775,7 +6783,9 @@ function AddMedicationOrVitalsForm({
   defaultInitials,
   defaultType = 'medication',
   editData,
-  isEditMode = false
+  isEditMode = false,
+  dateMin,
+  dateMax,
 }: { 
   onSubmit: (data: {
     type: 'medication' | 'vitals'
@@ -6824,6 +6834,8 @@ function AddMedicationOrVitalsForm({
     times?: string[]
   } | null
   isEditMode?: boolean
+  dateMin?: string
+  dateMax?: string
 }) {
   const [entryType, setEntryType] = useState<'medication' | 'vitals'>(
     isEditMode && editData ? (editData.isVitals ? 'vitals' : 'medication') : defaultType
@@ -7073,6 +7085,8 @@ function AddMedicationOrVitalsForm({
                 value={medicationData.startDate}
                 onChange={(e) => setMedicationData({ ...medicationData, startDate: e.target.value })}
                 required
+                min={dateMin}
+                max={dateMax}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
@@ -7085,6 +7099,8 @@ function AddMedicationOrVitalsForm({
                 type="date"
                 value={medicationData.stopDate}
                 onChange={(e) => setMedicationData({ ...medicationData, stopDate: e.target.value })}
+                min={dateMin}
+                max={dateMax}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
@@ -7221,6 +7237,8 @@ function AddMedicationOrVitalsForm({
                 value={vitalsData.startDate}
                 onChange={(e) => setVitalsData({ ...vitalsData, startDate: e.target.value })}
                 required
+                min={dateMin}
+                max={dateMax}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
@@ -7233,6 +7251,8 @@ function AddMedicationOrVitalsForm({
                 type="date"
                 value={vitalsData.stopDate}
                 onChange={(e) => setVitalsData({ ...vitalsData, stopDate: e.target.value })}
+                min={dateMin}
+                max={dateMax}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
@@ -7404,11 +7424,15 @@ function EditPRNMedicationForm({
   saving,
   onSubmit,
   onCancel,
+  dateMin,
+  dateMax,
 }: {
   item: MARPRNMedication
   saving: boolean
   onSubmit: (data: { date: string; medication: string; dosage: string | null; reason: string }) => Promise<void>
   onCancel: () => void
+  dateMin?: string
+  dateMax?: string
 }) {
   const [formData, setFormData] = useState({
     date: item.start_date?.slice(0, 10) || '',
@@ -7449,6 +7473,8 @@ function EditPRNMedicationForm({
           value={formData.date}
           onChange={(e) => setFormData({ ...formData, date: e.target.value })}
           required
+          min={dateMin}
+          max={dateMax}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
       </div>
@@ -7509,7 +7535,9 @@ function EditPRNMedicationForm({
 function AddPRNMedicationForm({ 
   onSubmit, 
   onCancel,
-  defaultDate
+  defaultDate,
+  dateMin,
+  dateMax,
 }: { 
   onSubmit: (data: {
     date: string
@@ -7519,6 +7547,8 @@ function AddPRNMedicationForm({
   }) => Promise<void>
   onCancel: () => void
   defaultDate: string
+  dateMin?: string
+  dateMax?: string
 }) {
   const [formData, setFormData] = useState({
     date: defaultDate,
@@ -7568,6 +7598,8 @@ function AddPRNMedicationForm({
             value={formData.date}
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             required
+            min={dateMin}
+            max={dateMax}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
         />
       </div>
