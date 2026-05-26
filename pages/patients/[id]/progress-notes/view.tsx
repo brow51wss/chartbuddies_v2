@@ -753,6 +753,10 @@ export default function ProgressNotesPage() {
     <ProtectedRoute>
       <Head>
         <title>Progress Notes - {patient.patient_name}</title>
+        {/* dangerouslySetInnerHTML is safe here: the CSS string is a hardcoded
+            literal with no user-supplied input, so there is no XSS vector.
+            It is used only to inject print-media styles into <head> because
+            Next.js does not support <style> children inside <Head>. */}
         <style dangerouslySetInnerHTML={{
           __html: '.progress-notes-print-view,.progress-notes-page2-print-view{display:none}@media print{.no-print{display:none!important}body *{visibility:hidden}body.print-view-notes .progress-notes-print-view,body.print-view-notes .progress-notes-print-view *{visibility:visible}body.print-view-notes .progress-notes-print-view{position:absolute;left:0;top:0;width:100%;display:block!important}body.print-view-page2 .progress-notes-page2-print-view,body.print-view-page2 .progress-notes-page2-print-view *{visibility:visible}body.print-view-page2 .progress-notes-page2-print-view{position:absolute;left:0;top:0;width:100%;display:block!important}'
         }} />

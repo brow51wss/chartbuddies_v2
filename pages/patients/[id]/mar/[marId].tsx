@@ -3476,6 +3476,10 @@ export default function ViewMARForm() {
     <ProtectedRoute>
       <Head>
         <title>MAR Form - {marForm.month_year} - Lasso</title>
+        {/* dangerouslySetInnerHTML is safe here: the CSS string is a hardcoded
+            template literal with no user-supplied input, so there is no XSS
+            vector. It is used only to inject print-media styles into <head>
+            because Next.js does not support <style> children inside <Head>. */}
         <style dangerouslySetInnerHTML={{ __html: `
           .mar-print-view { display: none; }
           @media print {

@@ -124,7 +124,7 @@ export default function Signup() {
         p_email: formData.email.trim()
       })
       if (rpcError) {
-        console.error('Email check error:', rpcError)
+        console.error('Email check error:', rpcError.code, rpcError.message)
         setError('Could not verify email. Please try again.')
         setCheckingEmail(false)
         step1InFlightRef.current = false

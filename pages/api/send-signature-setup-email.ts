@@ -1,9 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import { Resend } from 'resend'
+import { sendEmail } from '../../lib/ses'
 import crypto from 'crypto'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
@@ -52,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
 
     if (insertError) {
-      console.error('[send-signature-setup-email] insert token:', insertError)
+      console.error('[send-signature-setup-email] insert token:', insertError.code, insertError.message)
       return res.status(500).json({ error: 'Failed to create setup link' })
     }
 
@@ -62,19 +61,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')
       : isLocal
         ? `http://${req.headers.host || 'localhost:3000'}`
-        : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') || (req.headers.host ? `https://${req.headers.host}` : '')
+        : (req.headers.host ? `https://${req.headers.host}` : '')
     const setupUrl = `${baseUrl}/auth/signature-setup?token=${encodeURIComponent(setupToken)}`
 
-    if (!process.env.RESEND_API_KEY) {
-      return res.status(503).json({
-        error: 'Email sending is not configured. Set RESEND_API_KEY in your environment.',
-        code: 'RESEND_NOT_CONFIGURED'
-      })
-    }
-
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
+    const fromEmail = process.env.SES_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || 'noreply@example.com'
     const subject = 'Set your signature and initials (use a mobile device or tablet)'
-    const { error: sendError } = await resend.emails.send({
+
+    await sendEmail({
       from: fromEmail,
       to: user.email,
       subject,
@@ -89,15 +82,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `
     })
 
-    if (sendError) {
-      console.error('[send-signature-setup-email] Resend error:', sendError)
-      return res.status(500).json({ error: sendError.message || 'Failed to send email' })
-    }
-
     return res.status(200).json({ success: true, message: 'Email sent. Use the link on your phone or tablet to draw your signature and initials.' })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to send email'
-    console.error('[send-signature-setup-email]', err)
+    console.error('[send-signature-setup-email]', message)
     return res.status(500).json({ error: message })
   }
 }
