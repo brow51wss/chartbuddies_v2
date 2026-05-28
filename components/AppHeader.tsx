@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
 import { useReadOnly } from '../contexts/ReadOnlyContext'
 import { togglePatientStickyBar } from './PatientStickyBar'
 import type { UserProfile } from '../types/auth'
+
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000  // 15 minutes
+const WARN_BEFORE_MS  =  1 * 60 * 1000  // warn 1 minute before logout
 
 interface AppHeaderProps {
   userProfile?: UserProfile | null
@@ -36,6 +39,11 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
   const [exitPassword, setExitPassword] = useState('')
   const [exitError, setExitError] = useState('')
   const [exiting, setExiting] = useState(false)
+  const [showIdleWarning, setShowIdleWarning] = useState(false)
+  const [idleSecondsLeft, setIdleSecondsLeft] = useState(60)
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const warnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const userProfile = userProfileProp ?? fetchedProfile
@@ -89,6 +97,43 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
     await signOut()
     router.push('/auth/login')
   })
+
+  const clearIdleTimers = useCallback(() => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+    if (warnTimerRef.current) clearTimeout(warnTimerRef.current)
+    if (countdownRef.current) clearInterval(countdownRef.current)
+  }, [])
+
+  const startIdleTimers = useCallback(() => {
+    clearIdleTimers()
+    setShowIdleWarning(false)
+
+    warnTimerRef.current = setTimeout(() => {
+      setIdleSecondsLeft(60)
+      setShowIdleWarning(true)
+      countdownRef.current = setInterval(() => {
+        setIdleSecondsLeft((s) => s - 1)
+      }, 1000)
+    }, IDLE_TIMEOUT_MS - WARN_BEFORE_MS)
+
+    idleTimerRef.current = setTimeout(async () => {
+      clearIdleTimers()
+      setShowIdleWarning(false)
+      await signOut()
+      router.push('/auth/login?reason=idle')
+    }, IDLE_TIMEOUT_MS)
+  }, [clearIdleTimers, router])
+
+  useEffect(() => {
+    const events = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll']
+    const reset = () => startIdleTimers()
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }))
+    startIdleTimers()
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, reset))
+      clearIdleTimers()
+    }
+  }, [startIdleTimers, clearIdleTimers])
 
   return (
     <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-app-header">
@@ -254,6 +299,25 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
           </div>
         </div>
       </div>
+
+      {/* Idle timeout warning */}
+      {showIdleWarning && (
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="idle-warning-title">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <h2 id="idle-warning-title" className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Session Expiring</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              You will be logged out due to inactivity in <span className="font-bold text-red-600">{idleSecondsLeft}s</span>.
+            </p>
+            <button
+              type="button"
+              onClick={() => { startIdleTimers() }}
+              className="w-full px-4 py-2 bg-lasso-teal text-white rounded-lg hover:bg-lasso-blue font-medium"
+            >
+              Stay logged in
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Exit Read-Only Modal */}
       {showExitReadOnlyModal && (
