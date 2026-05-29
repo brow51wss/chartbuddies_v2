@@ -4,6 +4,10 @@ import Link from 'next/link'
 import Head from 'next/head'
 import { getCurrentUserProfile } from '../lib/auth'
 
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '')
+const loginUrl = APP_URL ? `${APP_URL}/auth/login` : '/auth/login'
+const signupUrl = APP_URL ? `${APP_URL}/auth/signup` : '/auth/signup'
+
 export default function Home() {
   const router = useRouter()
   const [checking, setChecking] = useState(true)
@@ -13,6 +17,11 @@ export default function Home() {
       const profile = await getCurrentUserProfile()
       if (profile) {
         router.push('/dashboard')
+        return
+      }
+      // On the app subdomain (app.lasso-app.com / Amplify), skip the marketing page
+      if (typeof window !== 'undefined' && window.location.hostname === 'app.lasso-app.com') {
+        router.replace('/auth/login')
         return
       }
       setChecking(false)
@@ -48,14 +57,14 @@ export default function Home() {
               <a href="#features" className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-lasso-teal dark:hover:text-lasso-blue">Features</a>
               <a href="#workflow" className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-lasso-teal dark:hover:text-lasso-blue">Workflow</a>
               <a href="#security" className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-lasso-teal dark:hover:text-lasso-blue">Security</a>
-              <Link
-                href="/auth/login"
+              <a
+                href={loginUrl}
                 className="px-4 py-2 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue text-sm font-medium shadow-md transition-all duration-200"
               >
                 Log in
-              </Link>
-              <Link
-                href="/auth/signup"
+              </a>
+              <a
+                href={signupUrl}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
               >
                 Get Started
@@ -76,12 +85,12 @@ export default function Home() {
                   Progress notes, vital signs, and medication documentation in one place—so your team stays compliant and your record stays complete.
                 </p>
                 <div className="mt-10 flex flex-wrap justify-center lg:justify-start gap-4">
-                  <Link
-                    href="/auth/signup"
+                  <a
+                    href={signupUrl}
                     className="px-6 py-3 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue font-medium shadow-lg transition-all duration-200"
                   >
                     Get Started
-                  </Link>
+                  </a>
                   <a
                     href="#workflow"
                     className="px-6 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 font-medium transition-colors"
@@ -313,18 +322,18 @@ export default function Home() {
               One record for progress notes, vitals, and medication documentation—for your whole care team.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-4">
-              <Link
-                href="/auth/signup"
+              <a
+                href={signupUrl}
                 className="px-6 py-3 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue font-medium shadow-lg transition-all duration-200"
               >
                 Get Started
-              </Link>
-              <Link
-                href="/auth/login"
+              </a>
+              <a
+                href={loginUrl}
                 className="px-6 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium transition-colors"
               >
                 Log in
-              </Link>
+              </a>
             </div>
           </div>
         </section>
@@ -342,7 +351,7 @@ export default function Home() {
               <a href="#features" className="text-gray-600 dark:text-gray-400 hover:text-lasso-teal dark:hover:text-lasso-blue">Features</a>
               <a href="#workflow" className="text-gray-600 dark:text-gray-400 hover:text-lasso-teal dark:hover:text-lasso-blue">Workflow</a>
               <a href="#security" className="text-gray-600 dark:text-gray-400 hover:text-lasso-teal dark:hover:text-lasso-blue">Security</a>
-              <Link href="/auth/login" className="text-gray-600 dark:text-gray-400 hover:text-lasso-teal dark:hover:text-lasso-blue">Log in</Link>
+              <a href={loginUrl} className="text-gray-600 dark:text-gray-400 hover:text-lasso-teal dark:hover:text-lasso-blue">Log in</a>
             </nav>
           </div>
           <p className="mt-6 text-center text-xs text-gray-500 dark:text-gray-500">
