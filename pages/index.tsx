@@ -68,7 +68,7 @@ export default function Home() {
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
               >
                 Get Started
-              </Link>
+              </a>
             </nav>
           </div>
         </header>
