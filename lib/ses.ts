@@ -1,12 +1,5 @@
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
 
-// On AWS Amplify the IAM role provides credentials automatically.
-// For local development, set AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY in .env.local
-// or configure the AWS CLI profile.
-const sesClient = new SESClient({
-  region: process.env.AWS_SES_REGION || process.env.AWS_REGION || 'us-east-1',
-})
-
 export interface SendEmailParams {
   to: string
   from: string
@@ -14,7 +7,25 @@ export interface SendEmailParams {
   html: string
 }
 
-export async function sendEmail({ to, from, subject, html }: SendEmailParams): Promise<void> {
+async function sendViaResend({ to, from, subject, html }: SendEmailParams): Promise<void> {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from, to, subject, html }),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Resend error ${res.status}: ${body}`)
+  }
+}
+
+async function sendViaSES({ to, from, subject, html }: SendEmailParams): Promise<void> {
+  const sesClient = new SESClient({
+    region: process.env.AWS_SES_REGION || process.env.AWS_REGION || 'us-east-1',
+  })
   const command = new SendEmailCommand({
     Destination: { ToAddresses: [to] },
     Message: {
@@ -23,6 +34,12 @@ export async function sendEmail({ to, from, subject, html }: SendEmailParams): P
     },
     Source: from,
   })
-
   await sesClient.send(command)
+}
+
+export async function sendEmail(params: SendEmailParams): Promise<void> {
+  if (process.env.RESEND_API_KEY) {
+    return sendViaResend(params)
+  }
+  return sendViaSES(params)
 }
