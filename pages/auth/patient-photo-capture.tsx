@@ -5,6 +5,15 @@ import { useRouter } from 'next/router'
 const API = '/api/patient-photo-capture'
 const MAX_EDGE = 1024
 
+function isIOSNonSafari(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  const isIOS = /iPhone|iPad|iPod/.test(ua)
+  // CriOS = Chrome on iOS, FxiOS = Firefox on iOS, OPiOS = Opera on iOS
+  const isNonSafariBrowser = /CriOS|FxiOS|OPiOS|mercury/.test(ua)
+  return isIOS && isNonSafariBrowser
+}
+
 function compressImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -188,10 +197,11 @@ export default function PatientPhotoCapturePage() {
   }
 
   // ── Ready — tap to open camera ───────────────────────────────────────────
+  const iosNonSafari = isIOSNonSafari()
+
   return (
     <>
       <Head><title>Take patient photo - Lasso</title></Head>
-      {/* Hidden file input — capture="environment" opens back camera directly */}
       <input
         ref={inputRef}
         type="file"
@@ -208,14 +218,28 @@ export default function PatientPhotoCapturePage() {
           <h1 className="text-2xl font-bold">Patient photo</h1>
           {patientName && <p className="text-gray-400">{patientName}</p>}
         </div>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="w-full max-w-xs rounded-2xl bg-teal-600 py-4 text-lg font-semibold text-white shadow-lg active:scale-95 transition-transform"
-        >
-          Open camera
-        </button>
-        <p className="text-xs text-gray-500">Your camera will open. Take the photo, then confirm.</p>
+        {iosNonSafari ? (
+          <div className="w-full max-w-xs rounded-2xl bg-yellow-900/70 px-5 py-5 text-center ring-1 ring-yellow-500/40">
+            <p className="text-base font-semibold text-yellow-200">Use Safari on iPhone</p>
+            <p className="mt-2 text-sm text-yellow-300">
+              Camera upload works best in Safari on iPhone and iPad.
+            </p>
+            <p className="mt-3 text-sm text-yellow-300">
+              Tap the <strong>share icon</strong> at the bottom of your screen, then choose <strong>"Open in Safari"</strong>.
+            </p>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="w-full max-w-xs rounded-2xl bg-teal-600 py-4 text-lg font-semibold text-white shadow-lg active:scale-95 transition-transform"
+          >
+            Open camera
+          </button>
+        )}
+        {!iosNonSafari && (
+          <p className="text-xs text-gray-500">Your camera will open. Take the photo, then confirm.</p>
+        )}
       </div>
     </>
   )
