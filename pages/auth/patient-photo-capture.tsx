@@ -100,19 +100,19 @@ export default function PatientPhotoCapturePage() {
     if (status !== 'camera') return
     setCameraError('')
 
-    // In-app browsers (Gmail, Facebook, Instagram, etc.) on iOS block camera access.
-    // Detect and prompt the user to open in Safari instead.
+    // In-app browsers (Gmail, Facebook, Instagram, etc.) block camera access on both
+    // iOS and Android. Detect and prompt the user to open in their real browser.
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
     const isInAppBrowser =
-      /GSA\//.test(ua) ||           // Gmail / Google Search App
+      /GSA\//.test(ua) ||           // Gmail / Google Search App (iOS & Android)
       /FBAN|FBAV/.test(ua) ||       // Facebook
       /Instagram/.test(ua) ||       // Instagram
       /LinkedInApp/.test(ua) ||     // LinkedIn
       /Twitter/.test(ua) ||         // X / Twitter
-      (!navigator.mediaDevices)     // any WebView that strips mediaDevices
+      (!navigator.mediaDevices)     // any WebView that strips mediaDevices entirely
 
     if (isInAppBrowser) {
-      setCameraError('open-in-safari')
+      setCameraError('open-in-browser')
       return
     }
 
@@ -306,11 +306,17 @@ export default function PatientPhotoCapturePage() {
           </p>
         </div>
 
-        {cameraError === 'open-in-safari' && (
+        {cameraError === 'open-in-browser' && (
           <div className="mt-2 shrink-0 rounded-xl bg-yellow-900/60 px-4 py-3 text-center text-sm text-yellow-200 ring-1 ring-yellow-500/40">
-            <p className="font-semibold">Open this page in Safari</p>
+            <p className="font-semibold">Open this page in your browser</p>
             <p className="mt-1 text-xs text-yellow-300">
-              Your email app's built-in browser blocks camera access. Tap the <strong>share icon</strong> (or the three-dot menu) and choose <strong>"Open in Safari"</strong>.
+              Your email app's built-in browser blocks camera access.
+            </p>
+            <p className="mt-1 text-xs text-yellow-300">
+              <strong>iPhone/iPad:</strong> tap the share icon and choose <strong>"Open in Safari"</strong>.
+            </p>
+            <p className="mt-1 text-xs text-yellow-300">
+              <strong>Android:</strong> tap the three-dot menu and choose <strong>"Open in Chrome"</strong> (or your default browser).
             </p>
           </div>
         )}
