@@ -285,10 +285,12 @@ export default function PatientPhotoCapturePage() {
           <div className="mt-3 shrink-0 rounded-xl bg-red-900/60 px-4 py-4 text-center ring-1 ring-red-500/40">
             <p className="text-base font-semibold text-red-200">Camera access was blocked</p>
             <p className="mt-2 text-sm text-red-300">Your browser needs permission to use the camera.</p>
-            <p className="mt-3 text-sm text-red-300"><strong>iPhone / iPad (Safari)</strong></p>
-            <p className="text-xs text-red-400">Go to <strong>Settings → Safari → Camera</strong> → set to <strong>Allow</strong>, then come back and reload.</p>
-            <p className="mt-3 text-sm text-red-300"><strong>Android (Chrome)</strong></p>
-            <p className="text-xs text-red-400">Tap the lock icon in the address bar → <strong>Camera</strong> → set to <strong>Allow</strong>, then reload.</p>
+            <p className="mt-3 text-sm text-red-300"><strong>iPhone / iPad — Safari</strong></p>
+            <p className="text-xs text-red-400">Go to <strong>Settings → Safari → Camera</strong> → set to <strong>Allow</strong>, then come back and tap Try again.</p>
+            <p className="mt-3 text-sm text-red-300"><strong>iPhone / iPad — Chrome</strong></p>
+            <p className="text-xs text-red-400">Tap the <strong>lock icon</strong> in the address bar → <strong>Site settings</strong> → <strong>Camera</strong> → set to <strong>Allow</strong>, then tap Try again.</p>
+            <p className="mt-3 text-sm text-red-300"><strong>Android — Chrome</strong></p>
+            <p className="text-xs text-red-400">Tap the <strong>lock icon</strong> in the address bar → <strong>Camera</strong> → set to <strong>Allow</strong>, then tap Try again.</p>
             <button type="button" onClick={handleStartCamera}
               className="mt-4 rounded-lg bg-red-700 px-5 py-2 text-sm font-medium text-white hover:bg-red-600">
               Try again
