@@ -65,10 +65,13 @@ function InitialsOrSignatureDisplay({
       </span>
     )
   }
-  if (value.startsWith('data:image')) {
+  const imgSrc = value.startsWith('s3:')
+    ? `/api/signature-image?key=${encodeURIComponent(value.slice(3))}`
+    : value.startsWith('data:image') ? value : null
+  if (imgSrc) {
     return (
       <img
-        src={value}
+        src={imgSrc}
         alt={variant === 'initials' ? 'Initials' : 'Signature'}
         className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
         style={{ maxHeight: variant === 'initials' ? '1.25em' : '2.5em', maxWidth: variant === 'initials' ? '3em' : '12em', verticalAlign: 'middle', display: 'inline-block' }}

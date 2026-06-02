@@ -145,11 +145,11 @@ export default function NewMARForm() {
     setPrnRecords([...prnRecords, {
       date: '',
       hour: '',
-      initials: userProfile?.staff_initials || '',
+      initials: (userProfile?.staff_initials && !userProfile.staff_initials.startsWith('data:image') && !userProfile.staff_initials.startsWith('s3:')) ? userProfile.staff_initials : '',
       medication: '',
       reason: '',
       result: '',
-      staffSignature: userProfile?.staff_signature || userProfile?.full_name || ''
+      staffSignature: (userProfile?.staff_signature && !userProfile.staff_signature.startsWith('data:image') && !userProfile.staff_signature.startsWith('s3:')) ? userProfile.staff_signature : (userProfile?.full_name || '')
     }])
   }
 
