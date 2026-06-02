@@ -153,7 +153,7 @@ export default function SignaturePad({
     }
     if (canvas) {
       try {
-        const dataUrl = canvas.toDataURL('image/png')
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
         onChange(dataUrl)
       } catch {
         // ignore
@@ -210,7 +210,7 @@ export default function SignaturePad({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+    const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1
     canvas.width = width * dpr
     canvas.height = height * dpr
     canvas.style.width = `${width}px`
@@ -237,7 +237,7 @@ export default function SignaturePad({
     if (!ctx) return
     const img = new Image()
     img.onload = () => {
-      const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+      const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.scale(dpr, dpr)
