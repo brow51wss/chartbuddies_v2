@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import { sendEmail } from '../../lib/ses'
+import { sendEmail, getFromEmail } from '../../lib/ses'
 import crypto from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -89,7 +89,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const setupUrl = `${baseUrl}/auth/patient-photo-capture?token=${encodeURIComponent(setupToken)}`
 
-    const fromEmail = process.env.SES_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || 'noreply@example.com'
+    const fromEmail = getFromEmail()
     const safeName = String(patientNameForEmail || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')

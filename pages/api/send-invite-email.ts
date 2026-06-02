@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import { sendEmail } from '../../lib/ses'
+import { sendEmail, getFromEmail } from '../../lib/ses'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -70,7 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const signupUrl = `${baseUrl}/auth/signup?code=${encodeURIComponent(code)}&email=${encodeURIComponent(email.trim())}`
 
-    const fromEmail = process.env.SES_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || 'noreply@example.com'
+    const fromEmail = getFromEmail()
 
     await sendEmail({
       from: fromEmail,
