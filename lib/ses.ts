@@ -62,7 +62,6 @@ async function sendViaSES({ to, from, subject, html }: SendEmailParams): Promise
 
 export async function sendEmail(params: SendEmailParams): Promise<void> {
   const { resendApiKey } = getRuntimeConfig()
-  console.log('[ses.ts] resendApiKey present:', !!resendApiKey)
   if (resendApiKey) {
     return sendViaResend(resendApiKey, params)
   }

@@ -29,19 +29,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { token, signatureDataUrl, initialsDataUrl } = req.body as {
+    const { token, signatureKey, initialsKey } = req.body as {
       token?: string
-      signatureDataUrl?: string
-      initialsDataUrl?: string
+      signatureKey?: string
+      initialsKey?: string
     }
     const t = typeof token === 'string' ? token.trim() : ''
-    const sig = typeof signatureDataUrl === 'string' ? signatureDataUrl.trim() : ''
-    const ini = typeof initialsDataUrl === 'string' ? initialsDataUrl.trim() : ''
+    const sig = typeof signatureKey === 'string' ? signatureKey.trim() : ''
+    const ini = typeof initialsKey === 'string' ? initialsKey.trim() : ''
     if (!t || !sig || !ini) {
       return res.status(400).json({ success: false, error: 'Missing token, signature, or initials' })
     }
-    if (!sig.startsWith('data:image') || !ini.startsWith('data:image')) {
-      return res.status(400).json({ success: false, error: 'Signature and initials must be drawn (image data)' })
+    if (!sig.startsWith('s3:') || !ini.startsWith('s3:')) {
+      return res.status(400).json({ success: false, error: 'Invalid signature format' })
     }
     const { data: ok, error } = await supabase.rpc('complete_signature_setup', {
       p_token: t,
@@ -50,7 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
     if (error) {
       console.error('[signature-setup] complete_signature_setup:', error)
-      return res.status(500).json({ success: false, error: `DB error: ${error.message} (code: ${error.code})` })
+      return res.status(500).json({ success: false, error: 'Failed to save' })
     }
     if (!ok) {
       return res.status(400).json({ success: false, error: 'Link expired or invalid' })

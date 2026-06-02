@@ -35,20 +35,20 @@ function profileDrawnInitialsSrcForPlainTextValue(
   userProfile: UserProfile | null,
 ): string | null {
   const raw = (value || '').trim()
-  if (!raw || raw.startsWith('data:image') || !userProfile?.staff_initials?.startsWith('data:image')) return null
+  const initialsIsImage = userProfile?.staff_initials?.startsWith('data:image') || userProfile?.staff_initials?.startsWith('s3:')
+  if (!raw || raw.startsWith('data:image') || raw.startsWith('s3:') || !initialsIsImage) return null
+  const imgSrc = userProfile!.staff_initials!.startsWith('s3:')
+    ? `/api/signature-image?key=${encodeURIComponent(userProfile!.staff_initials!.slice(3))}`
+    : userProfile!.staff_initials!
   const v = raw.toUpperCase()
-  const text = userProfile.staff_initials_text?.trim().toUpperCase()
-  if (text && v === text) return userProfile.staff_initials
+  const text = userProfile!.staff_initials_text?.trim().toUpperCase()
+  if (text && v === text) return imgSrc
   const first = (userProfile as { first_name?: string }).first_name?.trim()?.[0] || ''
   const last = (userProfile as { last_name?: string }).last_name?.trim()?.[0] || ''
-  if (first && last && v === `${first}${last}`.toUpperCase()) return userProfile.staff_initials
-  const full = userProfile.full_name?.trim().split(/\s+/) || []
-  if (full.length >= 2 && v === (full[0][0] + full[full.length - 1][0]).toUpperCase()) {
-    return userProfile.staff_initials
-  }
-  if (full.length === 1 && full[0].length >= 2 && v === full[0].slice(0, 2).toUpperCase()) {
-    return userProfile.staff_initials
-  }
+  if (first && last && v === `${first}${last}`.toUpperCase()) return imgSrc
+  const full = userProfile!.full_name?.trim().split(/\s+/) || []
+  if (full.length >= 2 && v === (full[0][0] + full[full.length - 1][0]).toUpperCase()) return imgSrc
+  if (full.length === 1 && full[0].length >= 2 && v === full[0].slice(0, 2).toUpperCase()) return imgSrc
   return null
 }
 
@@ -108,13 +108,16 @@ function InitialsOrSignatureDisplay({
       )
     }
   }
-  if (value.startsWith('data:image')) {
+  const imgSrc = value.startsWith('s3:')
+    ? `/api/signature-image?key=${encodeURIComponent(value.slice(3))}`
+    : value.startsWith('data:image') ? value : null
+  if (imgSrc) {
     return (
       <img
-        src={value}
+        src={imgSrc}
         alt={variant === 'initials' ? 'Initials' : 'Signature'}
         className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
-        style={{ maxHeight: variant === 'initials' ? '3em' : '3em', maxWidth: variant === 'initials' ? '7em' : '7em', verticalAlign: 'middle', display: 'inline-block' }}
+        style={{ maxHeight: '3em', maxWidth: '7em', verticalAlign: 'middle', display: 'inline-block' }}
       />
     )
   }
@@ -124,7 +127,7 @@ function InitialsOrSignatureDisplay({
 /** Current user's initials for matching PRN rows (when signed_by is null). Prefer profile text, else derive from name. */
 function currentUserInitialsForMatch(userProfile: UserProfile | null): string {
   if (!userProfile) return ''
-  if (userProfile.staff_initials && !userProfile.staff_initials.startsWith('data:image')) return userProfile.staff_initials.trim().toUpperCase()
+  if (userProfile.staff_initials && !userProfile.staff_initials.startsWith('data:image') && !userProfile.staff_initials.startsWith('s3:')) return userProfile.staff_initials.trim().toUpperCase()
   const first = (userProfile as any).first_name?.trim()?.[0] || ''
   const last = (userProfile as any).last_name?.trim()?.[0] || ''
   if (first && last) return `${first}${last}`.toUpperCase()

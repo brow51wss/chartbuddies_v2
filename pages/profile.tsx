@@ -258,28 +258,42 @@ export default function Profile() {
                 </p>
                 {(userProfile?.staff_signature || userProfile?.staff_initials) && (
                   <div className="flex flex-wrap gap-4 mb-3">
-                    {userProfile.staff_signature && (userProfile.staff_signature.startsWith('data:image') ? (
-                      <div>
-                        <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current signature</span>
-                        <img src={userProfile.staff_signature} alt="Your signature" className="max-h-14 rounded bg-white dark:bg-gray-700" />
-                      </div>
-                    ) : (
-                      <div>
-                        <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current signature</span>
-                        <span className="text-sm text-gray-700 dark:text-gray-300">{userProfile.staff_signature}</span>
-                      </div>
-                    ))}
-                    {userProfile.staff_initials && (userProfile.staff_initials.startsWith('data:image') ? (
-                      <div>
-                        <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current initials</span>
-                        <img src={userProfile.staff_initials} alt="Your initials" className="max-h-10 rounded bg-white dark:bg-gray-700" />
-                      </div>
-                    ) : (
-                      <div>
-                        <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current initials</span>
-                        <span className="text-sm text-gray-700 dark:text-gray-300">{userProfile.staff_initials}</span>
-                      </div>
-                    ))}
+                    {userProfile.staff_signature && (() => {
+                      const imgSrc = userProfile.staff_signature.startsWith('s3:')
+                        ? `/api/signature-image?key=${encodeURIComponent(userProfile.staff_signature.slice(3))}`
+                        : userProfile.staff_signature.startsWith('data:image')
+                          ? userProfile.staff_signature
+                          : null
+                      return imgSrc ? (
+                        <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current signature</span>
+                          <img src={imgSrc} alt="Your signature" className="max-h-14 rounded bg-white dark:bg-gray-700" />
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current signature</span>
+                          <span className="text-sm text-gray-700 dark:text-gray-300">{userProfile.staff_signature}</span>
+                        </div>
+                      )
+                    })()}
+                    {userProfile.staff_initials && (() => {
+                      const imgSrc = userProfile.staff_initials.startsWith('s3:')
+                        ? `/api/signature-image?key=${encodeURIComponent(userProfile.staff_initials.slice(3))}`
+                        : userProfile.staff_initials.startsWith('data:image')
+                          ? userProfile.staff_initials
+                          : null
+                      return imgSrc ? (
+                        <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current initials</span>
+                          <img src={imgSrc} alt="Your initials" className="max-h-10 rounded bg-white dark:bg-gray-700" />
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current initials</span>
+                          <span className="text-sm text-gray-700 dark:text-gray-300">{userProfile.staff_initials}</span>
+                        </div>
+                      )
+                    })()}
                   </div>
                 )}
                 <button

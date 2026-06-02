@@ -11,6 +11,8 @@ const nextConfig = {
     RESEND_API_KEY: process.env.RESEND_API_KEY || '',
     RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL || '',
     SES_FROM_EMAIL: process.env.SES_FROM_EMAIL || '',
+    S3_BUCKET_NAME: process.env.S3_BUCKET_NAME || 'chartbuddies-signatures-prod',
+    AWS_S3_REGION: process.env.AWS_S3_REGION || 'us-east-2',
   },
 }
 

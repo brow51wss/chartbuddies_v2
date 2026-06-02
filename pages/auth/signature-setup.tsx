@@ -63,31 +63,55 @@ export default function SignatureSetupPage() {
     setStep('initials')
   }
 
+  const uploadToS3 = async (dataUrl: string, type: 'signature' | 'initials'): Promise<string> => {
+    // Get presigned upload URL from our API
+    const urlRes = await fetch('/api/signature-upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type }),
+    })
+    if (!urlRes.ok) throw new Error('Failed to get upload URL')
+    const { uploadUrl, key } = await urlRes.json()
+
+    // Convert data URL to blob and upload directly to S3 (bypasses WAF)
+    const base64 = dataUrl.split(',')[1]
+    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+    const blob = new Blob([bytes], { type: 'image/jpeg' })
+
+    const s3Res = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/jpeg' },
+      body: blob,
+    })
+    if (!s3Res.ok) throw new Error('Failed to upload image')
+
+    return `s3:${key}`
+  }
+
   const handleSubmit = async () => {
     if (typeof token !== 'string' || !token || !signatureDataUrl || !initialsDataUrl) return
     setError('')
     setStatus('submitting')
     try {
+      const [signatureKey, initialsKey] = await Promise.all([
+        uploadToS3(signatureDataUrl, 'signature'),
+        uploadToS3(initialsDataUrl, 'initials'),
+      ])
+
       const res = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          signatureDataUrl,
-          initialsDataUrl
-        })
+        body: JSON.stringify({ token, signatureKey, initialsKey }),
       })
-      const text = await res.text()
-      let data: Record<string, string> = {}
-      try { data = JSON.parse(text) } catch { /* not json */ }
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(data.error || `HTTP ${res.status}: ${text.slice(0, 200)}`)
+        setError(data.error || 'Failed to save')
         setStatus('ready')
         return
       }
       setStatus('done')
-    } catch {
-      setError('Network error')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload')
       setStatus('ready')
     }
   }
