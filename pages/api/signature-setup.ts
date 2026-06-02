@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
     if (error) {
       console.error('[signature-setup] complete_signature_setup:', error)
-      return res.status(500).json({ success: false, error: 'Failed to save' })
+      return res.status(500).json({ success: false, error: `DB error: ${error.message} (code: ${error.code})` })
     }
     if (!ok) {
       return res.status(400).json({ success: false, error: 'Link expired or invalid' })
