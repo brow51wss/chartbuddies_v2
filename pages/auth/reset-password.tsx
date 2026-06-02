@@ -44,6 +44,10 @@ export default function ResetPassword() {
     setLoading(true)
     setError('')
     try {
+      // Capture token before updateUser — the recovery session is consumed by the update
+      const { data: { session: sessionBefore } } = await supabase.auth.getSession()
+      const accessToken = sessionBefore?.access_token ?? null
+
       const { error: updateError } = await supabase.auth.updateUser({ password })
       if (updateError) {
         setError(updateError.message)
@@ -53,11 +57,10 @@ export default function ResetPassword() {
       }
 
       // Fire security notification email (best-effort — don't block the success flow)
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.access_token) {
+      if (accessToken) {
         fetch('/api/send-password-changed-email', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${session.access_token}` },
+          headers: { Authorization: `Bearer ${accessToken}` },
         }).catch(() => {/* non-critical */})
       }
 
