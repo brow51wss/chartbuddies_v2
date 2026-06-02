@@ -7,6 +7,13 @@ import SignaturePad from '../../components/SignaturePad'
 
 type Step = 'signature' | 'initials'
 
+interface SetupUrls {
+  signatureUploadUrl: string
+  initialsUploadUrl: string
+  signatureKey: string
+  initialsKey: string
+}
+
 const API = '/api/signature-setup'
 
 function usePadSize90vw() {
@@ -39,6 +46,7 @@ export default function SignatureSetupPage() {
   const [signatureDataUrl, setSignatureDataUrl] = useState('')
   const [initialsDataUrl, setInitialsDataUrl] = useState('')
   const [error, setError] = useState('')
+  const [setupUrls, setSetupUrls] = useState<SetupUrls | null>(null)
 
   useEffect(() => {
     if (typeof token !== 'string') return
@@ -47,7 +55,17 @@ export default function SignatureSetupPage() {
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return
-        setStatus(data.valid ? 'ready' : 'invalid')
+        if (data.valid) {
+          setSetupUrls({
+            signatureUploadUrl: data.signatureUploadUrl,
+            initialsUploadUrl: data.initialsUploadUrl,
+            signatureKey: data.signatureKey,
+            initialsKey: data.initialsKey,
+          })
+          setStatus('ready')
+        } else {
+          setStatus('invalid')
+        }
       })
       .catch(() => {
         if (!cancelled) setStatus('invalid')
@@ -63,45 +81,36 @@ export default function SignatureSetupPage() {
     setStep('initials')
   }
 
-  const uploadToS3 = async (dataUrl: string, type: 'signature' | 'initials'): Promise<string> => {
-    // Get presigned upload URL from our API
-    const urlRes = await fetch('/api/signature-upload-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type }),
-    })
-    if (!urlRes.ok) throw new Error('Failed to get upload URL')
-    const { uploadUrl, key } = await urlRes.json()
-
-    // Convert data URL to blob and upload directly to S3 (bypasses WAF)
+  const uploadToS3 = async (dataUrl: string, uploadUrl: string): Promise<void> => {
     const base64 = dataUrl.split(',')[1]
     const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
     const blob = new Blob([bytes], { type: 'image/jpeg' })
-
     const s3Res = await fetch(uploadUrl, {
       method: 'PUT',
       headers: { 'Content-Type': 'image/jpeg' },
       body: blob,
     })
     if (!s3Res.ok) throw new Error('Failed to upload image')
-
-    return `s3:${key}`
   }
 
   const handleSubmit = async () => {
-    if (typeof token !== 'string' || !token || !signatureDataUrl || !initialsDataUrl) return
+    if (typeof token !== 'string' || !token || !signatureDataUrl || !initialsDataUrl || !setupUrls) return
     setError('')
     setStatus('submitting')
     try {
-      const [signatureKey, initialsKey] = await Promise.all([
-        uploadToS3(signatureDataUrl, 'signature'),
-        uploadToS3(initialsDataUrl, 'initials'),
+      await Promise.all([
+        uploadToS3(signatureDataUrl, setupUrls.signatureUploadUrl),
+        uploadToS3(initialsDataUrl, setupUrls.initialsUploadUrl),
       ])
 
       const res = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, signatureKey, initialsKey }),
+        body: JSON.stringify({
+          token,
+          signatureKey: setupUrls.signatureKey,
+          initialsKey: setupUrls.initialsKey,
+        }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {

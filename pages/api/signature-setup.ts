@@ -1,8 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+const S3_BUCKET = process.env.S3_BUCKET_NAME || 'chartbuddies-signatures-prod'
+const S3_REGION = process.env.AWS_REGION || process.env.AWS_S3_REGION || 'us-east-2'
 
 export const config = {
   api: {
@@ -10,6 +15,16 @@ export const config = {
       sizeLimit: '10mb',
     },
   },
+}
+
+async function makeUploadUrl(key: string): Promise<string> {
+  const s3 = new S3Client({ region: S3_REGION })
+  const command = new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: key,
+    ContentType: 'image/jpeg',
+  })
+  return getSignedUrl(s3, command, { expiresIn: 600 })
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -25,7 +40,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.error('[signature-setup] get_signature_setup_user_id:', error)
       return res.status(500).json({ valid: false })
     }
-    return res.status(200).json({ valid: !!userId })
+    if (!userId) return res.status(200).json({ valid: false })
+
+    const ts = Date.now()
+    const sigKey = `signatures/${userId}/${ts}-signature.jpg`
+    const iniKey = `signatures/${userId}/${ts}-initials.jpg`
+
+    const [signatureUploadUrl, initialsUploadUrl] = await Promise.all([
+      makeUploadUrl(sigKey),
+      makeUploadUrl(iniKey),
+    ])
+
+    return res.status(200).json({
+      valid: true,
+      signatureUploadUrl,
+      initialsUploadUrl,
+      signatureKey: `s3:${sigKey}`,
+      initialsKey: `s3:${iniKey}`,
+    })
   }
 
   if (req.method === 'POST') {
