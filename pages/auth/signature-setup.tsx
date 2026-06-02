@@ -77,9 +77,11 @@ export default function SignatureSetupPage() {
           initialsDataUrl
         })
       })
-      const data = await res.json().catch(() => ({}))
+      const text = await res.text()
+      let data: Record<string, string> = {}
+      try { data = JSON.parse(text) } catch { /* not json */ }
       if (!res.ok) {
-        setError(data.error || 'Failed to save')
+        setError(data.error || `HTTP ${res.status}: ${text.slice(0, 200)}`)
         setStatus('ready')
         return
       }
