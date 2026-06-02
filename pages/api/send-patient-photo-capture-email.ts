@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, getFromEmail } from '../../lib/ses'
+import { buildEmailHtml } from '../../lib/emailTemplate'
 import crypto from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -102,16 +103,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       from: fromEmail,
       to: user.email,
       subject,
-      html: `
-        <p>You requested to take or update a <strong>patient photo</strong> for Lasso.</p>
-        <p><strong>Open this link on your phone</strong> to use the camera. The page will ask for camera permission, show a framing guide, then let you confirm or retake.</p>
-        <p>Patient: <strong>${safeName}</strong></p>
-        <p>This link is valid for ${TOKEN_EXPIRY_HOURS} hours and can only be used once.</p>
-        <p><a href="${setupUrl}" style="display:inline-block; padding:12px 24px; background:#0d9488; color:#fff; text-decoration:none; border-radius:6px;">Open on phone</a></p>
-        <p>Or copy:</p>
-        <p style="word-break:break-all;">${setupUrl}</p>
-        <p>If you didn't request this, you can ignore this email.</p>
-      `,
+      html: buildEmailHtml({
+        preheader: `Open on your phone to take a patient photo for ${safeName}`,
+        heading: patientIdStr ? `Patient photo — ${safeName}` : 'Take a patient photo',
+        paragraphs: [
+          `You requested to take or update a patient photo${patientIdStr ? ` for <strong>${safeName}</strong>` : ''}.`,
+          '<strong>Open this link on your phone</strong> and tap "Open camera." The photo will be saved automatically once you confirm.',
+          `This link is valid for ${TOKEN_EXPIRY_HOURS} hours and can only be used once.`,
+        ],
+        buttonText: 'Open on phone',
+        buttonUrl: setupUrl,
+        footerNote: "If you didn't request this, you can safely ignore this email.",
+      }),
     })
 
     return res.status(200).json({

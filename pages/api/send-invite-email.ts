@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, getFromEmail } from '../../lib/ses'
+import { buildEmailHtml } from '../../lib/emailTemplate'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -75,15 +76,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await sendEmail({
       from: fromEmail,
       to: email.trim(),
-      subject: `Join ${facilityName} as ${designationLabel}`,
-      html: `
-        <p>You've been invited to join <strong>${facilityName}</strong> as <strong>${designationLabel}</strong>.</p>
-        <p>Use the link below to complete your signup. Your email and invite code will be pre-filled.</p>
-        <p><a href="${signupUrl}" style="display:inline-block; padding:10px 20px; background:#0d9488; color:#fff; text-decoration:none; border-radius:6px;">Complete signup</a></p>
-        <p>Or copy this link: ${signupUrl}</p>
-        <p>Invite code: <strong>${code}</strong></p>
-        <p>If you didn't expect this invite, you can ignore this email.</p>
-      `
+      subject: `You've been invited to join ${facilityName}`,
+      html: buildEmailHtml({
+        preheader: `Join ${facilityName} as ${designationLabel} on Lasso`,
+        heading: `You're invited to join ${facilityName}`,
+        paragraphs: [
+          `You've been invited to join <strong>${facilityName}</strong> as a <strong>${designationLabel}</strong>.`,
+          `Click the button below to complete your sign-up. Your email address and invite code will be pre-filled.`,
+          `Your invite code is: <strong>${code}</strong>`,
+        ],
+        buttonText: 'Complete sign-up',
+        buttonUrl: signupUrl,
+        footerNote: "If you weren't expecting this invitation, you can safely ignore this email.",
+      }),
     })
 
     return res.status(200).json({ success: true, message: 'Invite sent.' })

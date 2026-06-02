@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, getFromEmail } from '../../lib/ses'
+import { buildEmailHtml } from '../../lib/emailTemplate'
 import crypto from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -71,15 +72,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       from: fromEmail,
       to: user.email,
       subject,
-      html: `
-        <p>You requested to create or update your signature and initials for ChartBuddies.</p>
-        <p><strong>You must use a mobile device or tablet to complete this.</strong> Do not use a desktop computer. Open the link below on your phone or tablet to draw your signature and initials.</p>
-        <p>This link is valid for ${TOKEN_EXPIRY_HOURS} hours and can only be used once.</p>
-        <p><a href="${setupUrl}" style="display:inline-block; padding:12px 24px; background:#0d9488; color:#fff; text-decoration:none; border-radius:6px;">Open on your phone or tablet</a></p>
-        <p>Or copy this link and open it on your mobile device or tablet:</p>
-        <p style="word-break:break-all;">${setupUrl}</p>
-        <p>If you didn't request this, you can ignore this email.</p>
-      `
+      html: buildEmailHtml({
+        preheader: 'Set up your signature and initials for Lasso — open on your phone or tablet',
+        heading: 'Set up your signature & initials',
+        paragraphs: [
+          'You requested to create or update your signature and initials for Lasso.',
+          '<strong>Open this link on your phone or tablet</strong> — do not use a desktop computer. You will draw your signature and initials directly on the screen.',
+          `This link is valid for ${TOKEN_EXPIRY_HOURS} hours and can only be used once.`,
+        ],
+        buttonText: 'Open on phone or tablet',
+        buttonUrl: setupUrl,
+        footerNote: "If you didn't request this, you can safely ignore this email.",
+      }),
     })
 
     return res.status(200).json({ success: true, message: 'Email sent. Use the link on your phone or tablet to draw your signature and initials.' })
