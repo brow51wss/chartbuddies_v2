@@ -2,7 +2,7 @@ import { Html, Head, Main, NextScript } from 'next/document'
 
 export default function Document() {
   return (
-    <Html lang="en">
+    <Html lang="en" style={{ colorScheme: 'light' }}>
       <Head>
         <link rel="icon" type="image/webp" href="/images/icon.webp" />
         <link rel="shortcut icon" type="image/webp" href="/images/icon.webp" />
