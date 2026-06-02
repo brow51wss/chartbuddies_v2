@@ -99,6 +99,23 @@ export default function PatientPhotoCapturePage() {
   useEffect(() => {
     if (status !== 'camera') return
     setCameraError('')
+
+    // In-app browsers (Gmail, Facebook, Instagram, etc.) on iOS block camera access.
+    // Detect and prompt the user to open in Safari instead.
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+    const isInAppBrowser =
+      /GSA\//.test(ua) ||           // Gmail / Google Search App
+      /FBAN|FBAV/.test(ua) ||       // Facebook
+      /Instagram/.test(ua) ||       // Instagram
+      /LinkedInApp/.test(ua) ||     // LinkedIn
+      /Twitter/.test(ua) ||         // X / Twitter
+      (!navigator.mediaDevices)     // any WebView that strips mediaDevices
+
+    if (isInAppBrowser) {
+      setCameraError('open-in-safari')
+      return
+    }
+
     let cancelled = false
     const start = async () => {
       try {
@@ -116,8 +133,14 @@ export default function PatientPhotoCapturePage() {
           v.srcObject = stream
           await v.play().catch(() => {})
         }
-      } catch {
-        if (!cancelled) setCameraError('Could not access the camera. Check permissions and use HTTPS.')
+      } catch (err) {
+        if (cancelled) return
+        const name = err instanceof Error ? err.name : ''
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          setCameraError('permission-denied')
+        } else {
+          setCameraError('generic')
+        }
       }
     }
     void start()
@@ -283,8 +306,26 @@ export default function PatientPhotoCapturePage() {
           </p>
         </div>
 
-        {cameraError && (
-          <p className="mt-1 shrink-0 px-1 text-center text-xs text-red-300">{cameraError}</p>
+        {cameraError === 'open-in-safari' && (
+          <div className="mt-2 shrink-0 rounded-xl bg-yellow-900/60 px-4 py-3 text-center text-sm text-yellow-200 ring-1 ring-yellow-500/40">
+            <p className="font-semibold">Open this page in Safari</p>
+            <p className="mt-1 text-xs text-yellow-300">
+              Your email app's built-in browser blocks camera access. Tap the <strong>share icon</strong> (or the three-dot menu) and choose <strong>"Open in Safari"</strong>.
+            </p>
+          </div>
+        )}
+        {cameraError === 'permission-denied' && (
+          <div className="mt-2 shrink-0 rounded-xl bg-red-900/60 px-4 py-3 text-center text-sm text-red-200 ring-1 ring-red-500/40">
+            <p className="font-semibold">Camera permission denied</p>
+            <p className="mt-1 text-xs text-red-300">
+              Go to <strong>Settings → Safari → Camera</strong> and allow access, then reload this page.
+            </p>
+          </div>
+        )}
+        {cameraError === 'generic' && (
+          <p className="mt-1 shrink-0 px-1 text-center text-xs text-red-300">
+            Could not access the camera. Make sure you are on HTTPS and have granted camera permission.
+          </p>
         )}
 
         <div className="flex min-h-0 flex-1 items-center justify-center px-1 py-1">
