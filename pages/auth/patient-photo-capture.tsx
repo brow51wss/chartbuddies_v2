@@ -46,6 +46,8 @@ export default function PatientPhotoCapturePage() {
   const [photoSavedToPatient, setPhotoSavedToPatient] = useState(true)
   const [previewDataUrl, setPreviewDataUrl] = useState('')
   const [submitError, setSubmitError] = useState('')
+  const [photoUploadUrl, setPhotoUploadUrl] = useState('')
+  const [photoKey, setPhotoKey] = useState('')
 
   useEffect(() => {
     if (typeof token !== 'string') return
@@ -57,6 +59,8 @@ export default function PatientPhotoCapturePage() {
         if (!data.valid) { setStatus('invalid'); return }
         setPatientName(typeof data.patientName === 'string' ? data.patientName : '')
         setPhotoSavedToPatient(data.patientId != null && String(data.patientId).length > 0)
+        setPhotoUploadUrl(typeof data.photoUploadUrl === 'string' ? data.photoUploadUrl : '')
+        setPhotoKey(typeof data.photoKey === 'string' ? data.photoKey : '')
         setStatus('ready')
       })
       .catch(() => { if (!cancelled) setStatus('invalid') })
@@ -87,14 +91,26 @@ export default function PatientPhotoCapturePage() {
   }
 
   const handleConfirm = async () => {
-    if (typeof token !== 'string' || !previewDataUrl) return
+    if (typeof token !== 'string' || !previewDataUrl || !photoUploadUrl || !photoKey) return
     setSubmitError('')
     setStatus('submitting')
     try {
+      // Upload directly to S3 to bypass WAF and Lambda payload limits.
+      const base64 = previewDataUrl.split(',')[1]
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+      const blob = new Blob([bytes], { type: 'image/jpeg' })
+      const s3Res = await fetch(photoUploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/jpeg' },
+        body: blob,
+      })
+      if (!s3Res.ok) throw new Error('Upload failed')
+
+      // Send only the S3 key — no image data in this request.
       const res = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, photoDataUrl: previewDataUrl }),
+        body: JSON.stringify({ token, photoKey }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
