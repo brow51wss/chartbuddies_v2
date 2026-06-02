@@ -51,6 +51,16 @@ export default function ResetPassword() {
         inFlightRef.current = false
         return
       }
+
+      // Fire security notification email (best-effort — don't block the success flow)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        fetch('/api/send-password-changed-email', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        }).catch(() => {/* non-critical */})
+      }
+
       setSuccess(true)
       setTimeout(() => router.push('/auth/login'), 2000)
     } catch (err: any) {

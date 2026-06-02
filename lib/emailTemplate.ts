@@ -9,10 +9,10 @@ export interface EmailTemplateOptions {
   heading: string
   /** Array of paragraph strings (plain text or simple HTML) */
   paragraphs: string[]
-  /** Primary CTA button label */
-  buttonText: string
-  /** Primary CTA button URL */
-  buttonUrl: string
+  /** Primary CTA button label (omit for notification-only emails with no action) */
+  buttonText?: string
+  /** Primary CTA button URL (omit for notification-only emails with no action) */
+  buttonUrl?: string
   /** Small note below the button, e.g. "If you didn't request this, ignore this email." */
   footerNote?: string
 }
@@ -23,6 +23,7 @@ export interface EmailTemplateOptions {
  */
 export function buildEmailHtml(opts: EmailTemplateOptions): string {
   const { preheader = '', heading, paragraphs, buttonText, buttonUrl, footerNote } = opts
+
 
   const paragraphHtml = paragraphs
     .map(
@@ -86,7 +87,8 @@ export function buildEmailHtml(opts: EmailTemplateOptions): string {
               <!-- Paragraphs -->
               ${paragraphHtml}
 
-              <!-- CTA Button -->
+              <!-- CTA Button (only rendered when buttonText + buttonUrl are provided) -->
+              ${buttonText && buttonUrl ? `
               <table cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 0;">
                 <tr>
                   <td style="border-radius:8px;background-color:${TEAL};">
@@ -99,7 +101,7 @@ export function buildEmailHtml(opts: EmailTemplateOptions): string {
                     </a>
                   </td>
                 </tr>
-              </table>
+              </table>` : ''}
 
               <!-- Footer note -->
               ${footerNoteHtml}
