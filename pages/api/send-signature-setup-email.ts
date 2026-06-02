@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import { sendEmail } from '../../lib/ses'
+import { sendEmail, getFromEmail } from '../../lib/ses'
 import crypto from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -64,12 +64,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         : (req.headers.host ? `https://${req.headers.host}` : '')
     const setupUrl = `${baseUrl}/auth/signature-setup?token=${encodeURIComponent(setupToken)}`
 
-    console.log('[send-signature-setup-email] env check:', {
-      hasResendKey: !!process.env.RESEND_API_KEY,
-      resendFromEmail: process.env.RESEND_FROM_EMAIL,
-      sesFromEmail: process.env.SES_FROM_EMAIL,
-    })
-    const fromEmail = process.env.RESEND_FROM_EMAIL || process.env.SES_FROM_EMAIL || 'noreply@example.com'
+    const fromEmail = getFromEmail()
     const subject = 'Set your signature and initials (use a mobile device or tablet)'
 
     await sendEmail({
