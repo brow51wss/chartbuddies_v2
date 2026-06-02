@@ -1596,7 +1596,7 @@ export default function ViewMARForm() {
       
       // DB column is VARCHAR(10); never send data URL or >10 chars
       if (field === 'initials' && typeof value === 'string') {
-        updateData.initials = value.startsWith('data:image') ? '' : value.slice(0, 10)
+        updateData.initials = (value.startsWith('data:image') || value.startsWith('s3:')) ? '' : value.slice(0, 10)
       }
 
       const { error } = await supabase
@@ -1938,8 +1938,8 @@ export default function ViewMARForm() {
     const admin = medAdmin[day]
     const status = admin?.status || 'Not Given'
     const rawInitials = admin?.initials ?? ''
-    const initialsForLogic = rawInitials.startsWith('data:image') ? '' : rawInitials.trim().toUpperCase()
-    const initials = rawInitials.startsWith('data:image') ? '' : rawInitials
+    const initialsForLogic = (rawInitials.startsWith('data:image') || rawInitials.startsWith('s3:')) ? '' : rawInitials.trim().toUpperCase()
+    const initials = (rawInitials.startsWith('data:image') || rawInitials.startsWith('s3:')) ? '' : rawInitials
     const isNotGiven = status === 'Not Given'
     const isGiven = status === 'Given'
     const isPRN = status === 'PRN'
@@ -1951,7 +1951,7 @@ export default function ViewMARForm() {
       for (let checkDay = 1; checkDay < day; checkDay++) {
         const checkAdmin = medAdmin[checkDay]
         const checkRaw = checkAdmin?.initials ?? ''
-        if (!checkRaw.startsWith('data:image') && checkRaw.trim().toUpperCase() === 'DC') {
+        if (!checkRaw.startsWith('data:image') && !checkRaw.startsWith('s3:') && checkRaw.trim().toUpperCase() === 'DC') {
           isDiscontinued = true
           break
         }
@@ -1968,7 +1968,7 @@ export default function ViewMARForm() {
   }
 
   const getMARLegendProgressNoteLabel = (rawInitials: string | null | undefined): string | null => {
-    if (!rawInitials || rawInitials.startsWith('data:image')) return null
+    if (!rawInitials || rawInitials.startsWith('data:image') || rawInitials.startsWith('s3:')) return null
     const code = rawInitials.trim().toUpperCase()
     if (!code) return null
 
@@ -2128,13 +2128,13 @@ export default function ViewMARForm() {
     }
     // Auto-populate initials from user profile if editing initials field
     if (field === 'initials') {
-      const isDrawn = currentValue?.startsWith('data:image')
+      const isDrawn = currentValue?.startsWith('data:image') || currentValue?.startsWith('s3:')
       if (isDrawn) {
-        setEditingPRNValue('') // Don't put data URL in text input; show placeholder
+        setEditingPRNValue('') // Don't put image value in text input; show placeholder
         return
       }
       let userInitials = ''
-      if (userProfile?.staff_initials && !userProfile.staff_initials.startsWith('data:image')) {
+      if (userProfile?.staff_initials && !userProfile.staff_initials.startsWith('data:image') && !userProfile.staff_initials.startsWith('s3:')) {
         userInitials = userProfile.staff_initials.toUpperCase()
       } else if (userProfile?.full_name) {
         const names = userProfile.full_name.trim().split(/\s+/)
@@ -2154,8 +2154,8 @@ export default function ViewMARForm() {
           m.reason === (record?.reason || '')
       )
       setEditingPRNValue(matched?.id || '')
-    } else if (field === 'staff_signature' && currentValue?.startsWith('data:image')) {
-      setEditingPRNValue('') // Don't put data URL in text input
+    } else if (field === 'staff_signature' && (currentValue?.startsWith('data:image') || currentValue?.startsWith('s3:'))) {
+      setEditingPRNValue('') // Don't put image value in text input
     } else {
       setEditingPRNValue(currentValue || '')
     }
@@ -2182,7 +2182,7 @@ export default function ViewMARForm() {
     if (field === 'medication' && !valueToSave && record) valueToSave = record.medication || null
     if ((field === 'initials' || field === 'staff_signature') && !valueToSave && record) {
       const existing = field === 'initials' ? record.initials : record.staff_signature
-      if (existing?.startsWith('data:image')) valueToSave = existing
+      if (existing?.startsWith('data:image') || existing?.startsWith('s3:')) valueToSave = existing
     }
     if (dbField === 'date' && valueToSave && marForm?.month_year && !isPrnDateInMarMonth(valueToSave, marForm.month_year)) {
       setError('PRN date must fall within this MAR month.')
@@ -3336,7 +3336,7 @@ export default function ViewMARForm() {
           {daySubset.map((day) => {
             const admin = medAdmin[day]
             const note = admin?.notes?.trim() || null
-            const initialsDataUrl = admin?.initials?.startsWith('data:image') ? admin.initials : null
+            const initialsDataUrl = (admin?.initials?.startsWith('data:image') || admin?.initials?.startsWith('s3:')) ? admin.initials : null
             const status = admin?.status || 'Not Given'
             const isGiven = status === 'Given'
             const isNotGiven = status === 'Not Given'
@@ -4260,7 +4260,7 @@ export default function ViewMARForm() {
                                                       if (
                                                         si &&
                                                         typeof si === 'string' &&
-                                                        !si.startsWith('data:image') &&
+                                                        !si.startsWith('data:image') && !si.startsWith('s3:') &&
                                                         si.trim().length > 0
                                                       ) {
                                                         userInitials = si.trim().toUpperCase()
@@ -4333,7 +4333,7 @@ export default function ViewMARForm() {
                                                   if (
                                                     si &&
                                                     typeof si === 'string' &&
-                                                    !si.startsWith('data:image') &&
+                                                    !si.startsWith('data:image') && !si.startsWith('s3:') &&
                                                     si.trim().length > 0
                                                   ) {
                                                     userInitials = si.trim().toUpperCase()
@@ -4714,7 +4714,7 @@ export default function ViewMARForm() {
                               const admin = medAdmin[day]
                               const status = admin?.status || 'Not Given'
                               const rawInitials = admin?.initials ?? ''
-                              const initialsForLogic = rawInitials.startsWith('data:image') ? '' : rawInitials.trim().toUpperCase()
+                              const initialsForLogic = (rawInitials.startsWith('data:image') || rawInitials.startsWith('s3:')) ? '' : rawInitials.trim().toUpperCase()
                               const initials = rawInitials
                               const notes = admin?.notes || null
                               const isNotGiven = status === 'Not Given'
@@ -4824,7 +4824,7 @@ export default function ViewMARForm() {
                                           (() => {
                                             const getUserInitials = (): { value: string; label: string } | null => {
                                               if (userProfile?.staff_initials) {
-                                                if (userProfile.staff_initials.startsWith('data:image')) {
+                                                if (userProfile.staff_initials.startsWith('data:image') || userProfile.staff_initials.startsWith('s3:')) {
                                                   return { value: userProfile.staff_initials, label: 'Your Initials' }
                                                 }
                                                 return { value: userProfile.staff_initials.toUpperCase(), label: `${userProfile.staff_initials.toUpperCase()} (${userProfile?.full_name || 'Your Initials'})` }
@@ -5519,7 +5519,7 @@ export default function ViewMARForm() {
                                 if (!prn.initials) {
                                   let userInitials: string | null = null
                                   const si = userProfile?.staff_initials
-                                  if (si && typeof si === 'string' && !si.startsWith('data:image') && si.trim().length > 0) {
+                                  if (si && typeof si === 'string' && !si.startsWith('data:image') && !si.startsWith('s3:') && si.trim().length > 0) {
                                     userInitials = si.trim().toUpperCase()
                                   }
                                   if (!userInitials && userProfile?.full_name) {
@@ -5562,7 +5562,7 @@ export default function ViewMARForm() {
                                     }
                                   }}
                                   autoFocus
-                                  placeholder={prn.initials?.startsWith('data:image') ? 'Drawn initials (type to replace)' : 'e.g., JD'}
+                                  placeholder={(prn.initials?.startsWith('data:image') || prn.initials?.startsWith('s3:')) ? 'Drawn initials (type to replace)' : 'e.g., JD'}
                                   maxLength={4}
                                   className="w-full px-2 py-1 border border-lasso-teal rounded focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
                                   onClick={(e) => e.stopPropagation()}
@@ -5577,7 +5577,7 @@ export default function ViewMARForm() {
                                   e.stopPropagation()
                                   let userInitials: string | null = null
                                   const si = userProfile?.staff_initials
-                                  if (si && typeof si === 'string' && !si.startsWith('data:image') && si.trim().length > 0) {
+                                  if (si && typeof si === 'string' && !si.startsWith('data:image') && !si.startsWith('s3:') && si.trim().length > 0) {
                                     userInitials = si.trim().toUpperCase()
                                   }
                                   if (!userInitials && userProfile?.full_name) {
