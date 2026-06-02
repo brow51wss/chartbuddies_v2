@@ -25,8 +25,8 @@ All templates use the same branded wrapper. The only things that change are the 
     <tr><td align="center" valign="top">
       <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;">
         <tr>
-          <td align="center" valign="middle" style="background-color:#142F61;padding:24px 32px;border-radius:12px 12px 0 0;">
-            <img src="https://app.lasso-app.com/images/full-wordmark.webp" alt="Lasso" width="150" height="auto" style="display:block;border:0;" />
+          <td align="center" valign="middle" style="background-color:#FFFFFF;padding:24px 32px 0;border-radius:12px 12px 0 0;border-bottom:3px solid #142F61;">
+            <img src="https://app.lasso-app.com/images/full-logo-set.webp" alt="Lasso" width="180" height="auto" style="display:block;border:0;" />
           </td>
         </tr>
         <tr>
@@ -79,8 +79,8 @@ All templates use the same branded wrapper. The only things that change are the 
     <tr><td align="center" valign="top">
       <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;">
         <tr>
-          <td align="center" valign="middle" style="background-color:#142F61;padding:24px 32px;border-radius:12px 12px 0 0;">
-            <img src="https://app.lasso-app.com/images/full-wordmark.webp" alt="Lasso" width="150" height="auto" style="display:block;border:0;" />
+          <td align="center" valign="middle" style="background-color:#FFFFFF;padding:24px 32px 0;border-radius:12px 12px 0 0;border-bottom:3px solid #142F61;">
+            <img src="https://app.lasso-app.com/images/full-logo-set.webp" alt="Lasso" width="180" height="auto" style="display:block;border:0;" />
           </td>
         </tr>
         <tr>
@@ -133,8 +133,8 @@ All templates use the same branded wrapper. The only things that change are the 
     <tr><td align="center" valign="top">
       <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;">
         <tr>
-          <td align="center" valign="middle" style="background-color:#142F61;padding:24px 32px;border-radius:12px 12px 0 0;">
-            <img src="https://app.lasso-app.com/images/full-wordmark.webp" alt="Lasso" width="150" height="auto" style="display:block;border:0;" />
+          <td align="center" valign="middle" style="background-color:#FFFFFF;padding:24px 32px 0;border-radius:12px 12px 0 0;border-bottom:3px solid #142F61;">
+            <img src="https://app.lasso-app.com/images/full-logo-set.webp" alt="Lasso" width="180" height="auto" style="display:block;border:0;" />
           </td>
         </tr>
         <tr>

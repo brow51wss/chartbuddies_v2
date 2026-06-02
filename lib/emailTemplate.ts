@@ -1,4 +1,4 @@
-const LOGO_URL = 'https://app.lasso-app.com/images/full-wordmark.webp'
+const LOGO_URL = 'https://app.lasso-app.com/images/full-logo-set.webp'
 const NAVY = '#142F61'
 const TEAL = '#00799E'
 
@@ -65,16 +65,16 @@ export function buildEmailHtml(opts: EmailTemplateOptions): string {
           <!-- ── Header ── -->
           <tr>
             <td align="center" valign="middle"
-                style="background-color:${NAVY};padding:24px 32px;
-                       border-radius:12px 12px 0 0;">
-              <img src="${LOGO_URL}" alt="Lasso" width="150" height="auto"
+                style="background-color:#FFFFFF;padding:24px 32px 0;
+                       border-radius:12px 12px 0 0;border-bottom:3px solid ${NAVY};">
+              <img src="${LOGO_URL}" alt="Lasso" width="180" height="auto"
                    style="display:block;border:0;outline:none;text-decoration:none;" />
             </td>
           </tr>
 
           <!-- ── Body ── -->
           <tr>
-            <td style="background-color:#FFFFFF;padding:40px 36px 36px;
+            <td style="background-color:#FFFFFF;padding:32px 36px 36px;
                        border-radius:0 0 12px 12px;">
 
               <!-- Heading -->
