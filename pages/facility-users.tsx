@@ -13,7 +13,7 @@ interface FacilityUserRow {
   first_name: string | null
   middle_name: string | null
   last_name: string | null
-  full_name: string | null
+  full_name?: string | null
   email: string
   role: string
   designation: string | null
