@@ -27,87 +27,54 @@ function ensureSignatureFontsLoaded(font: string) {
 }
 
 /**
- * When MAR/PRN stores plain-text initials but the viewer profile uses drawn initials (data URL), return that image src
- * so grid cells match medication rows that store the image in the cell value.
+ * Given a plain-text initials/signature value, find which facility profile it belongs to.
+ * Checks staff_initials_text / staff_signature_text, then the stored field itself (when plain text),
+ * then common derived patterns (first+last initial, full_name splits).
  */
-function profileDrawnInitialsSrcForPlainTextValue(
+function resolveAuthorProfile(
   value: string,
-  userProfile: UserProfile | null,
-): string | null {
-  const raw = (value || '').trim()
-  const initialsIsImage = userProfile?.staff_initials?.startsWith('data:image') || userProfile?.staff_initials?.startsWith('s3:')
-  if (!raw || raw.startsWith('data:image') || raw.startsWith('s3:') || !initialsIsImage) return null
-  const imgSrc = userProfile!.staff_initials!.startsWith('s3:')
-    ? `/api/signature-image?key=${encodeURIComponent(userProfile!.staff_initials!.slice(3))}`
-    : userProfile!.staff_initials!
-  const v = raw.toUpperCase()
-  const text = userProfile!.staff_initials_text?.trim().toUpperCase()
-  if (text && v === text) return imgSrc
-  const first = (userProfile as { first_name?: string }).first_name?.trim()?.[0] || ''
-  const last = (userProfile as { last_name?: string }).last_name?.trim()?.[0] || ''
-  if (first && last && v === `${first}${last}`.toUpperCase()) return imgSrc
-  const full = userProfile!.full_name?.trim().split(/\s+/) || []
-  if (full.length >= 2 && v === (full[0][0] + full[full.length - 1][0]).toUpperCase()) return imgSrc
-  if (full.length === 1 && full[0].length >= 2 && v === full[0].slice(0, 2).toUpperCase()) return imgSrc
+  variant: 'initials' | 'signature',
+  viewerProfile: UserProfile | null,
+  facilityProfiles: UserProfile[],
+): UserProfile | null {
+  const v = value.trim().toUpperCase()
+  const matches = (p: UserProfile): boolean => {
+    const text = (variant === 'initials' ? p.staff_initials_text : p.staff_signature_text)?.trim().toUpperCase()
+    if (text && v === text) return true
+    const stored = variant === 'initials' ? p.staff_initials : p.staff_signature
+    if (stored && !stored.startsWith('s3:') && !stored.startsWith('data:') && v === stored.trim().toUpperCase()) return true
+    // Derived: first initial + last initial
+    const first = (p as { first_name?: string | null }).first_name?.trim()?.[0] || ''
+    const last = (p as { last_name?: string | null }).last_name?.trim()?.[0] || ''
+    if (first && last && v === `${first}${last}`.toUpperCase()) return true
+    const full = p.full_name?.trim().split(/\s+/) || []
+    if (full.length >= 2 && v === (full[0][0] + full[full.length - 1][0]).toUpperCase()) return true
+    if (full.length === 1 && full[0].length >= 2 && v === full[0].slice(0, 2).toUpperCase()) return true
+    return false
+  }
+  // Prefer an exact text-field match over derived patterns; check viewer first for speed
+  if (viewerProfile && matches(viewerProfile)) return viewerProfile
+  for (const p of facilityProfiles) {
+    if (p.id !== viewerProfile?.id && matches(p)) return p
+  }
   return null
 }
 
-/** Renders initials or signature: text with chosen font when available, else image or plain text. Used on MAR. */
+/** Renders initials or signature using the author's font/image, visible correctly to all facility users. */
 function InitialsOrSignatureDisplay({
   value,
   variant = 'initials',
-  userProfile = null
+  userProfile = null,
+  facilityProfiles = [],
 }: {
   value: string | null
   variant?: 'initials' | 'signature'
   userProfile?: UserProfile | null
+  facilityProfiles?: UserProfile[]
 }) {
   if (!value) return <span>—</span>
-  const font = userProfile?.staff_signature_font || 'Dancing Script'
-  const initialsMatchProfile =
-    !!userProfile?.staff_initials_text &&
-    (value === userProfile?.staff_initials ||
-      value?.trim().toUpperCase() === userProfile?.staff_initials_text?.trim().toUpperCase())
-  const signatureMatchProfile =
-    !!userProfile?.staff_signature_text &&
-    (value === userProfile?.staff_signature ||
-      value?.trim().toUpperCase() === userProfile?.staff_signature_text?.trim().toUpperCase())
-  const showAsTextWithFont =
-    variant === 'initials' ? initialsMatchProfile : signatureMatchProfile
-  const displayText = variant === 'initials' ? userProfile?.staff_initials_text : userProfile?.staff_signature_text
-  if (showAsTextWithFont && displayText) {
-    ensureSignatureFontsLoaded(font)
-    return (
-      <span
-        className={`lasso-signature-mark lasso-signature-mark--text lasso-signature-mark--${variant}`}
-        style={{
-          fontFamily: `"${font}", cursive`,
-          fontSize: variant === 'initials' ? '1.35em' : '1.4em',
-          verticalAlign: 'middle'
-        }}
-      >
-        {displayText}
-      </span>
-    )
-  }
-  if (variant === 'initials' && userProfile) {
-    const drawnSrc = profileDrawnInitialsSrcForPlainTextValue(value, userProfile)
-    if (drawnSrc) {
-      return (
-        <img
-          src={drawnSrc}
-          alt="Initials"
-          className="lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--initials"
-          style={{
-            maxHeight: '3em',
-            maxWidth: '7em',
-            verticalAlign: 'middle',
-            display: 'inline-block',
-          }}
-        />
-      )
-    }
-  }
+
+  // S3 key or data URL — render as image for every viewer without needing profile lookup
   const imgSrc = value.startsWith('s3:')
     ? `/api/signature-image?key=${encodeURIComponent(value.slice(3))}`
     : value.startsWith('data:image') ? value : null
@@ -121,6 +88,57 @@ function InitialsOrSignatureDisplay({
       />
     )
   }
+
+  // Plain text — find the author's profile to render with their font or drawn image
+  const authorProfile = resolveAuthorProfile(value, variant, userProfile, facilityProfiles)
+
+  if (authorProfile) {
+    const font = authorProfile.staff_signature_font || 'Dancing Script'
+    const drawnField = variant === 'initials' ? authorProfile.staff_initials : authorProfile.staff_signature
+    const displayText = variant === 'initials' ? authorProfile.staff_initials_text : authorProfile.staff_signature_text
+
+    // Author has a drawn image stored — show it
+    if (drawnField?.startsWith('s3:')) {
+      const drawnSrc = `/api/signature-image?key=${encodeURIComponent(drawnField.slice(3))}`
+      return (
+        <img
+          src={drawnSrc}
+          alt={variant === 'initials' ? 'Initials' : 'Signature'}
+          className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
+          style={{ maxHeight: '3em', maxWidth: '7em', verticalAlign: 'middle', display: 'inline-block' }}
+        />
+      )
+    }
+    if (drawnField?.startsWith('data:image')) {
+      return (
+        <img
+          src={drawnField}
+          alt={variant === 'initials' ? 'Initials' : 'Signature'}
+          className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
+          style={{ maxHeight: '3em', maxWidth: '7em', verticalAlign: 'middle', display: 'inline-block' }}
+        />
+      )
+    }
+
+    // Author uses text+font — render with their chosen font
+    if (displayText) {
+      ensureSignatureFontsLoaded(font)
+      return (
+        <span
+          className={`lasso-signature-mark lasso-signature-mark--text lasso-signature-mark--${variant}`}
+          style={{
+            fontFamily: `"${font}", cursive`,
+            fontSize: variant === 'initials' ? '1.35em' : '1.4em',
+            verticalAlign: 'middle',
+          }}
+        >
+          {displayText}
+        </span>
+      )
+    }
+  }
+
+  // Fallback: plain text (no matching profile found or no display text)
   return <span className={`lasso-signature-mark lasso-signature-mark--plain lasso-signature-mark--${variant}`}>{value}</span>
 }
 
@@ -710,6 +728,7 @@ export default function ViewMARForm() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [userProfile, setUserProfile] = useState<any>(null)
+  const [facilityProfiles, setFacilityProfiles] = useState<UserProfile[]>([])
   const [facilityNameFromProfile, setFacilityNameFromProfile] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   // Removed page navigation - everything shows in one table
@@ -1048,6 +1067,15 @@ export default function ViewMARForm() {
         .eq('id', profile.hospital_id)
         .single()
       setFacilityNameFromProfile(hospital?.name ?? null)
+
+      // Fetch all staff profiles in this facility so we can render any user's
+      // initials/signature with the correct font or drawn image, not just the
+      // currently logged-in user's.
+      const { data: staffData } = await supabase
+        .from('user_profiles')
+        .select('id, full_name, first_name, last_name, staff_initials, staff_initials_text, staff_signature, staff_signature_text, staff_signature_font, role, email, hospital_id, designation, is_active, created_at, updated_at')
+        .eq('hospital_id', profile.hospital_id)
+      setFacilityProfiles((staffData || []) as UserProfile[])
     } else {
       setFacilityNameFromProfile(null)
     }
@@ -4322,6 +4350,7 @@ export default function ViewMARForm() {
                                                 value={prn.initials}
                                                 variant="initials"
                                                 userProfile={userProfile}
+                                                facilityProfiles={facilityProfiles}
                                               />
                                             ) : !readOnly && prnHasTime && prnHasResult && (userProfile?.staff_initials || userProfile?.full_name) ? (
                                               <button
@@ -4969,7 +4998,7 @@ export default function ViewMARForm() {
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
-                                                      <InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} />
+                                                      <InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
                                                     </div>
                                                     <button
                                                       onClick={(e) => {
@@ -4986,7 +5015,7 @@ export default function ViewMARForm() {
                                                 </div>
                                               ) : (
                                                 <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
-                                                  <InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} />
+                                                  <InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
                                                 </div>
                                               )
                                           )}
@@ -4995,7 +5024,7 @@ export default function ViewMARForm() {
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <div className="text-red-600 dark:text-red-400 font-bold">
-                                                      ○<InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} />
+                                                      ○<InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
                                                     </div>
                                                     <button
                                                       onClick={(e) => {
@@ -5012,7 +5041,7 @@ export default function ViewMARForm() {
                                                 </div>
                                               ) : (
                                                 <div className="text-red-600 dark:text-red-400 font-bold">
-                                                  ○<InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} />
+                                                  ○<InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
                                                 </div>
                                               )
                                           )}
@@ -5035,12 +5064,12 @@ export default function ViewMARForm() {
                                                       {notes ? '📝' : '+'} note
                                                     </button>
                                                   </div>
-                                                  {initials && <div className="text-xs text-lasso-blue"><InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} /></div>}
+                                                  {initials && <div className="text-xs text-lasso-blue"><InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} /></div>}
                                                 </div>
                                               ) : (
                                                 <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
                                                   PRN
-                                                  {initials && <div className="text-xs"><InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} /></div>}
+                                                  {initials && <div className="text-xs"><InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} /></div>}
                                                 </div>
                                               )
                                           )}
@@ -5129,7 +5158,7 @@ export default function ViewMARForm() {
                       <>
                         {hasUserInitials && (
                           <div className="font-semibold flex items-center gap-1">
-                            <InitialsOrSignatureDisplay value={userProfile?.staff_initials ?? null} variant="initials" userProfile={userProfile} />
+                            <InitialsOrSignatureDisplay value={userProfile?.staff_initials ?? null} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
                             <span>= {userProfile?.full_name || 'Your Initials'}</span>
                           </div>
                         )}
@@ -5569,7 +5598,7 @@ export default function ViewMARForm() {
                                 />
                               </div>
                             ) : prn.initials ? (
-                              <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} />
+                              <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
                             ) : !readOnly && hasTime && hasResult && (userProfile?.staff_initials || userProfile?.full_name) ? (
                               <button
                                 type="button"
@@ -5785,7 +5814,7 @@ export default function ViewMARForm() {
                           <td className="border border-gray-400 px-2 py-1.5">{prn.hour ? formatTimeDisplay(prn.hour) : '—'}</td>
                           <td className="border border-gray-400 px-2 py-1.5">{prn.result || '—'}</td>
                           <td className="border border-gray-400 px-2 py-1.5 align-middle">
-                            <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} />
+                            <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
                           </td>
                           <td className="border border-gray-400 px-2 py-1.5">{prn.note || '—'}</td>
                         </tr>
