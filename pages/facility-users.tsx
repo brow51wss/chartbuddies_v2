@@ -48,7 +48,7 @@ export default function FacilityUsersPage() {
         // Load users in this facility
         const { data: users, error: usersError } = await supabase
           .from('user_profiles')
-          .select('id, email, first_name, middle_name, last_name, role, designation')
+          .select('id, email, first_name, middle_name, last_name, full_name, role, designation')
           .eq('hospital_id', profile.hospital_id)
           .order('first_name', { ascending: true })
 
@@ -200,7 +200,7 @@ export default function FacilityUsersPage() {
                   </tr>
                 ) : (
                   rows.map((row) => {
-                    const fullName = [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(' ') || '—'
+                    const fullName = [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(' ') || (row as any).full_name || '—'
                     const dateInvited = row.invited_at ? new Date(row.invited_at).toLocaleString() : '—'
                     const dateVerified = row.verified_at ? new Date(row.verified_at).toLocaleString() : '—'
                     const status =
