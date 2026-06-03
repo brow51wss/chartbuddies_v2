@@ -87,6 +87,9 @@ export default function Signup() {
   }, [router.isReady, router.query.code, router.query.email])
 
   const inviteMode = !!inviteLookup
+
+  const formatDesignation = (d: string) =>
+    d === 'PCG' ? 'Primary Care Giver' : d === 'SCG' ? 'Secondary Care Giver' : d
   const inviteEmailMismatch =
     inviteMode &&
     inviteLookup.invitedEmailFromInvite != null &&
@@ -516,10 +519,10 @@ export default function Signup() {
           {/* Brand Section */}
           <div className="text-center mb-8">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Create Account
+              {step === 2 && inviteMode ? 'Almost done' : 'Create Account'}
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Get started with your EHR system
+              {step === 2 && inviteMode ? 'Review your details and confirm below' : 'Get started with your EHR system'}
             </p>
           </div>
 
@@ -634,7 +637,7 @@ export default function Signup() {
                     </div>
                     <div>
                       <span className="text-gray-500 dark:text-gray-400">Designation</span>
-                      <p className="font-medium text-gray-900 dark:text-white">{inviteLookup.designation}</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{formatDesignation(inviteLookup.designation)}</p>
                     </div>
                   </div>
                   {inviteEmailMismatch && (
@@ -756,7 +759,7 @@ export default function Signup() {
               {inviteMode && inviteLookup ? (
                 <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg">
                   <p className="text-sm text-gray-700 dark:text-gray-300">
-                    You're joining <strong>{inviteLookup.facilityName}</strong> as <strong>{inviteLookup.designation}</strong>.
+                    You're joining <strong>{inviteLookup.facilityName}</strong> as <strong>{formatDesignation(inviteLookup.designation)}</strong>.
                   </p>
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     Click Sign Up below to create your account.
