@@ -470,16 +470,6 @@ export default function Signup() {
         }
       }
 
-      // Store individual name fields — RPCs only receive full_name so we patch separately
-      await supabase
-        .from('user_profiles')
-        .update({
-          first_name: formData.firstName.trim() || null,
-          middle_name: formData.middleName.trim() || null,
-          last_name: formData.lastName.trim() || null,
-        })
-        .eq('id', authData.user.id)
-
       // Check if we have a session (email confirmation might be disabled)
       if (currentSession) {
         // User is logged in, redirect to dashboard
