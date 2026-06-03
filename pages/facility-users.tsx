@@ -13,6 +13,7 @@ interface FacilityUserRow {
   first_name: string | null
   middle_name: string | null
   last_name: string | null
+  full_name: string | null
   email: string
   role: string
   designation: string | null
@@ -94,6 +95,7 @@ export default function FacilityUsersPage() {
             first_name: (u as any).first_name ?? null,
             middle_name: (u as any).middle_name ?? null,
             last_name: (u as any).last_name ?? null,
+            full_name: (u as any).full_name ?? null,
             email: u.email,
             role: u.role,
             designation: u.designation,
@@ -200,7 +202,7 @@ export default function FacilityUsersPage() {
                   </tr>
                 ) : (
                   rows.map((row) => {
-                    const fullName = [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(' ') || (row as any).full_name || '—'
+                    const fullName = [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(' ') || row.full_name || '—'
                     const dateInvited = row.invited_at ? new Date(row.invited_at).toLocaleString() : '—'
                     const dateVerified = row.verified_at ? new Date(row.verified_at).toLocaleString() : '—'
                     const status =
