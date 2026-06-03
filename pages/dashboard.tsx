@@ -185,24 +185,8 @@ export default function Dashboard() {
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (profile.role === 'nurse') {
-        // Nurses only see assigned patients
-        const { data: assignments, error: assignError } = await supabase
-          .from('nurse_patient_assignments')
-          .select('patient_id')
-          .eq('nurse_id', profile.id)
-          .eq('is_active', true)
-
-        if (assignError) throw assignError
-
-        const patientIds = assignments?.map(a => a.patient_id) || []
-        if (patientIds.length > 0) {
-          query = query.in('id', patientIds)
-        } else {
-          query = query.eq('id', '00000000-0000-0000-0000-000000000000') // Empty result
-        }
-      } else if (profile.role === 'head_nurse') {
-        // Head nurses see all hospital patients
+      if (profile.role === 'nurse' || profile.role === 'head_nurse') {
+        // SCGs (nurse) and head nurses see all patients in their facility
         query = query.eq('hospital_id', profile.hospital_id!)
       }
       // Superadmins see all patients (no filter)

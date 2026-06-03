@@ -37,8 +37,8 @@ export default function FacilityUsersPage() {
         return
       }
 
-      // Only facility superadmins/PCG (superadmin with hospital_id) can view this page
-      if (profile.role !== 'superadmin' || !profile.hospital_id) {
+      // Only facility members with a hospital (superadmin/PCG and nurse/SCG) can view this page
+      if (!profile.hospital_id || (profile.role !== 'superadmin' && profile.role !== 'nurse')) {
         router.push('/dashboard')
         return
       }

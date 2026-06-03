@@ -240,7 +240,7 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
                       Send Invite
                     </Link>
                   )}
-                  {!isReadOnly && userProfile?.role === 'superadmin' && userProfile?.hospital_id && (
+                  {!isReadOnly && (userProfile?.role === 'superadmin' || userProfile?.role === 'nurse') && userProfile?.hospital_id && (
                     <Link
                       href="/facility-users"
                       onClick={() => setUserMenuOpen(false)}
