@@ -13,6 +13,8 @@ const nextConfig = {
     SES_FROM_EMAIL: process.env.SES_FROM_EMAIL || '',
     S3_BUCKET_NAME: process.env.S3_BUCKET_NAME || 'chartbuddies-signatures-prod',
     AWS_S3_REGION: process.env.AWS_S3_REGION || 'us-east-2',
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    RDS_CONNECTION_STRING: process.env.RDS_CONNECTION_STRING || '',
   },
 }
 

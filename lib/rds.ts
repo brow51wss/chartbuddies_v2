@@ -12,6 +12,7 @@
 
 import { Pool, PoolClient, QueryResult } from 'pg'
 import { createClient } from '@supabase/supabase-js'
+import getConfig from 'next/config'
 
 // ---------------------------------------------------------------------------
 // Connection pool (singleton, reused across Lambda warm invocations)
@@ -19,9 +20,19 @@ import { createClient } from '@supabase/supabase-js'
 
 let pool: Pool | null = null
 
+function getRdsConnectionString(): string {
+  const { serverRuntimeConfig } = getConfig() || {}
+  return serverRuntimeConfig?.RDS_CONNECTION_STRING || process.env.RDS_CONNECTION_STRING || ''
+}
+
+function getServiceRoleKey(): string {
+  const { serverRuntimeConfig } = getConfig() || {}
+  return serverRuntimeConfig?.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+}
+
 function getPool(): Pool {
   if (!pool) {
-    const connectionString = process.env.RDS_CONNECTION_STRING
+    const connectionString = getRdsConnectionString()
     if (!connectionString) {
       throw new Error('RDS_CONNECTION_STRING environment variable is not set')
     }
@@ -96,7 +107,7 @@ export async function resolveCallerFromToken(
   const token = authHeader.slice(7)
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const serviceRoleKey = getServiceRoleKey()
 
   if (!supabaseUrl) throw new Error('NEXT_PUBLIC_SUPABASE_URL env var is not set')
   if (!serviceRoleKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY env var is not set')
