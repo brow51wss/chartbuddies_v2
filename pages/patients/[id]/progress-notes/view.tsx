@@ -7,6 +7,17 @@ import AppHeader from '../../../../components/AppHeader'
 import PatientStickyBar from '../../../../components/PatientStickyBar'
 import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../../components/EditPatientInfoModal'
 import { supabase } from '../../../../lib/supabase'
+import {
+  rdsGetPatient,
+  rdsListPatients,
+  rdsPatchPatient,
+  rdsListMarForms,
+  rdsGetMarForm,
+  rdsListProgressNotes,
+  rdsCreateProgressNote,
+  rdsPatchProgressNote,
+  rdsUpsertAdministration,
+} from '../../../../lib/rdsApi'
 import { formatCalendarDate, localTodayYMD } from '../../../../lib/calendarDate'
 import { getCurrentUserProfile } from '../../../../lib/auth'
 import {
@@ -319,12 +330,8 @@ export default function ProgressNotesPage() {
       }
       setUserProfile(profile)
 
-      const { data: patientData, error: patientError } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('id', patientId)
-        .single()
-      if (patientError || !patientData) {
+      const patientData = await rdsGetPatient(patientId)
+      if (!patientData) {
         setError('Patient not found')
         setLoading(false)
         return
@@ -340,28 +347,19 @@ export default function ProgressNotesPage() {
         setFacilityName(hospital?.name ?? '')
       }
 
-      const { data: physData } = await supabase
-        .from('patients')
-        .select('physician_name')
-        .eq('hospital_id', patientData.hospital_id)
-        .not('physician_name', 'is', null)
+      const allPatients = await rdsListPatients().catch(() => [])
       const distinct = Array.from(
-        new Set((physData || []).map((p: any) => p.physician_name?.trim()).filter(Boolean))
+        new Set(allPatients.map((p: any) => p.physician_name?.trim()).filter(Boolean))
       )
-        .filter((p) => !isTbdOrEmptyPhysician(p))
+        .filter((p) => !isTbdOrEmptyPhysician(p as string))
         .sort() as string[]
       setPhysicians(distinct)
       if (patientData.physician_name && distinct.includes(patientData.physician_name)) {
         setSelectedPhysician(patientData.physician_name)
       }
 
-      const { data: entriesData, error: entriesError } = await supabase
-        .from('progress_note_entries')
-        .select('*')
-        .eq('patient_id', patientId)
-        .order('note_date', { ascending: false })
-        .order('created_at', { ascending: false })
-      const entriesList = entriesError ? [] : ((entriesData || []) as ProgressNoteEntry[]).map(e => ({ ...e, is_addendum: e.is_addendum ?? false }))
+      const entriesRaw = await rdsListProgressNotes(patientId, true).catch(() => [])
+      const entriesList = (entriesRaw as ProgressNoteEntry[]).map(e => ({ ...e, is_addendum: e.is_addendum ?? false }))
       setEntries(entriesList)
 
       const profileStep1Complete = isPatientRecordStep1Complete(patientData as Patient)
@@ -414,16 +412,8 @@ export default function ProgressNotesPage() {
         if (physician) localStorage.setItem(storageKey, physician)
         else localStorage.removeItem(storageKey)
       }
-      const { error: updateErr } = await supabase
-        .from('patients')
-        .update({
-          physician_name: physician || '',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', patientId)
-      if (!updateErr) {
-        setPatient((prev) => (prev ? { ...prev, physician_name: physician || '' } : null))
-      }
+      await rdsPatchPatient(patientId, { physician_name: physician || '' }).catch(console.error)
+      setPatient((prev) => (prev ? { ...prev, physician_name: physician || '' } : null))
       setMessage('Saved')
       setTimeout(() => setMessage(''), 2000)
     }, 600)
@@ -440,13 +430,8 @@ export default function ProgressNotesPage() {
 
   const refetchEntries = async () => {
     if (!patientId || typeof patientId !== 'string') return
-    const { data: entriesData, error: entriesError } = await supabase
-      .from('progress_note_entries')
-      .select('*')
-      .eq('patient_id', patientId)
-      .order('note_date', { ascending: false })
-      .order('created_at', { ascending: false })
-    if (!entriesError) setEntries((entriesData || []).map((e: ProgressNoteEntry) => ({ ...e, is_addendum: e.is_addendum ?? false })))
+    const entriesRaw = await rdsListProgressNotes(patientId, true).catch(() => null)
+    if (entriesRaw) setEntries((entriesRaw as ProgressNoteEntry[]).map((e) => ({ ...e, is_addendum: e.is_addendum ?? false })))
   }
 
   const closeEditPatientInfoModal = () => {
@@ -458,21 +443,8 @@ export default function ProgressNotesPage() {
     setShowEditPatientInfoModal(true)
   }
 
-  const handleSavePatientEdits = async ({ patientId, payload }: EditPatientInfoSaveArgs): Promise<Patient> => {
-    const { data: updatedPatient, error: patientError } = await supabase
-      .from('patients')
-      .update({
-        ...payload,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', patientId)
-      .select('*')
-      .single()
-
-    if (patientError) throw patientError
-    if (!updatedPatient) throw new Error('No updated patient returned from server.')
-
-    return updatedPatient as Patient
+  const handleSavePatientEdits = async ({ patientId: pid, payload }: EditPatientInfoSaveArgs): Promise<Patient> => {
+    return rdsPatchPatient(pid!, { ...payload, sync_mar_forms: true }) as Promise<Patient>
   }
 
   const handleAddEntry = async () => {
@@ -488,19 +460,18 @@ export default function ProgressNotesPage() {
     setError('')
     const physicianRaw = effectivePhysicianName(selectedPhysician, customPhysician)
     const physician = physicianRaw || null
-    const { error: insertError } = await supabase
-      .from('progress_note_entries')
-      .insert({
+    try {
+      await rdsCreateProgressNote({
         patient_id: patientId,
         note_date: newDate,
         notes: newNotes.trim(),
         signature: userProfile.staff_signature || null,
         physician_name: physician,
         is_addendum: false,
-        created_by: userProfile.id
+        created_by: userProfile.id,
       })
-    if (insertError) {
-      setError(insertError.message)
+    } catch (e: any) {
+      setError(e.message || 'Failed to add note')
       setSaving(false)
       return
     }
@@ -515,32 +486,39 @@ export default function ProgressNotesPage() {
       })()
     )
     setNewNoteSigned(false)
-    const { data: entriesData } = await supabase
-      .from('progress_note_entries')
-      .select('*')
-      .eq('patient_id', patientId)
-      .order('note_date', { ascending: false })
-      .order('created_at', { ascending: false })
-    setEntries(entriesData || [])
+    await refetchEntries()
     setSaving(false)
   }
 
   /** Sync Progress Note Page 1 → MAR: set all MAR administration notes for this patient+date to the given notes. */
-  const syncProgressNoteToMAR = async (patientId: string, noteDate: string, notes: string) => {
-    const dateStr = noteDate.includes('T') ? noteDate.slice(0, 10) : noteDate
-    const monthYear = dateStr.slice(0, 7)
-    const day = parseInt(dateStr.slice(8, 10), 10)
-    if (!monthYear || Number.isNaN(day)) return
-    const { data: forms } = await supabase.from('mar_forms').select('id').eq('patient_id', patientId).eq('month_year', monthYear)
-    if (!forms?.length) return
-    const formIds = forms.map((f: { id: string }) => f.id)
-    const { data: meds } = await supabase.from('mar_medications').select('id').in('mar_form_id', formIds)
-    if (!meds?.length) return
-    const medIds = meds.map((m: { id: string }) => m.id)
-    const { data: admins } = await supabase.from('mar_administrations').select('id').in('mar_medication_id', medIds).eq('day_number', day)
-    if (!admins?.length) return
-    const adminIds = admins.map((a: { id: string }) => a.id)
-    await supabase.from('mar_administrations').update({ notes: notes || null, updated_at: new Date().toISOString() }).in('id', adminIds)
+  const syncProgressNoteToMAR = async (pid: string, noteDate: string, notes: string) => {
+    try {
+      const dateStr = noteDate.includes('T') ? noteDate.slice(0, 10) : noteDate
+      const monthYear = dateStr.slice(0, 7)
+      const day = parseInt(dateStr.slice(8, 10), 10)
+      if (!monthYear || Number.isNaN(day)) return
+      const forms = await rdsListMarForms(pid).catch(() => [])
+      const matchingForms = forms.filter((f: any) => f.month_year === monthYear)
+      if (!matchingForms.length) return
+      await Promise.all(
+        matchingForms.map(async (form: any) => {
+          const full = await rdsGetMarForm(form.id).catch(() => null)
+          if (!full) return
+          const { medications = [], administrations = [] } = full
+          const dayAdmins = administrations.filter((a: any) => {
+            const dn = typeof a.day_number === 'number' ? a.day_number : Number(a.day_number)
+            return dn === day
+          })
+          await Promise.all(
+            dayAdmins.map((a: any) =>
+              rdsUpsertAdministration({ ...a, notes: notes || null }).catch(console.error)
+            )
+          )
+        })
+      )
+    } catch (e) {
+      console.warn('[syncProgressNoteToMAR]', e)
+    }
   }
 
   const PAGE1_ENTRY_DEBOUNCE_MS = 600
@@ -551,15 +529,10 @@ export default function ProgressNotesPage() {
   const handleUpdateEntry = async (entryId: string, notes: string, noteDate: string) => {
     if (page1SaveMessageTimeoutRef.current) clearTimeout(page1SaveMessageTimeoutRef.current)
     setMessage('Saving...')
-    const { error: updateError } = await supabase
-      .from('progress_note_entries')
-      .update({ notes, updated_at: new Date().toISOString() })
-      .eq('id', entryId)
-    if (!updateError) {
-      setEntries(prev => prev.map(e => e.id === entryId ? { ...e, notes } : e))
-      if (patientId && typeof patientId === 'string' && noteDate) {
-        await syncProgressNoteToMAR(patientId, noteDate, notes)
-      }
+    await rdsPatchProgressNote(entryId, { notes }).catch(console.error)
+    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, notes } : e))
+    if (patientId && typeof patientId === 'string' && noteDate) {
+      await syncProgressNoteToMAR(patientId, noteDate, notes)
     }
     setMessage('Saved')
     page1SaveMessageTimeoutRef.current = setTimeout(() => { setMessage(''); page1SaveMessageTimeoutRef.current = null }, 3000)
@@ -578,13 +551,8 @@ export default function ProgressNotesPage() {
     if (!userProfile?.staff_signature) return
     if (page1SaveMessageTimeoutRef.current) clearTimeout(page1SaveMessageTimeoutRef.current)
     setMessage('Saving...')
-    const { error } = await supabase
-      .from('progress_note_entries')
-      .update({ signature: userProfile.staff_signature, updated_at: new Date().toISOString() })
-      .eq('id', entryId)
-    if (!error) {
-      setEntries(prev => prev.map(e => e.id === entryId ? { ...e, signature: userProfile!.staff_signature } : e))
-    }
+    await rdsPatchProgressNote(entryId, { signature: userProfile.staff_signature }).catch(console.error)
+    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, signature: userProfile!.staff_signature } : e))
     setMessage('Saved')
     page1SaveMessageTimeoutRef.current = setTimeout(() => { setMessage(''); page1SaveMessageTimeoutRef.current = null }, 3000)
   }

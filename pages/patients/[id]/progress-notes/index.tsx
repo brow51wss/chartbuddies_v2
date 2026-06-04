@@ -6,7 +6,7 @@ import ProtectedRoute from '../../../../components/ProtectedRoute'
 import AppHeader from '../../../../components/AppHeader'
 import PatientStickyBar from '../../../../components/PatientStickyBar'
 import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../../components/EditPatientInfoModal'
-import { supabase } from '../../../../lib/supabase'
+import { rdsGetPatient, rdsListMarForms, rdsPatchPatient } from '../../../../lib/rdsApi'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import type { Patient } from '../../../../types/auth'
 
@@ -25,23 +25,16 @@ export default function ProgressNotesIndex() {
     if (!patientId || typeof patientId !== 'string') return
     const load = async () => {
       try {
-        const { data: patientData, error: patientError } = await supabase
-          .from('patients')
-          .select('*')
-          .eq('id', patientId)
-          .single()
-        if (patientError || !patientData) {
+        const patientData = await rdsGetPatient(patientId)
+        if (!patientData) {
           setError('Patient not found')
           setLoading(false)
           return
         }
         setPatient(patientData)
 
-        const { data: forms, error: formsError } = await supabase
-          .from('mar_forms')
-          .select('id, month_year')
-          .eq('patient_id', patientId)
-          .order('month_year', { ascending: false })
+        const forms = await rdsListMarForms(patientId).catch(() => null)
+        const formsError = null
 
         if (formsError) {
           setMonthYears([])
@@ -130,14 +123,7 @@ export default function ProgressNotesIndex() {
           readOnly={isReadOnly}
           onClose={() => setShowEditModal(false)}
           onSave={async ({ patientId: pid, payload }: EditPatientInfoSaveArgs) => {
-            const { data, error: saveError } = await supabase
-              .from('patients')
-              .update({ ...payload, updated_at: new Date().toISOString() })
-              .eq('id', pid!)
-              .select('*')
-              .single()
-            if (saveError) throw saveError
-            return data as Patient
+            return rdsPatchPatient(pid!, { ...payload, sync_mar_forms: true }) as Promise<Patient>
           }}
           onSaved={(updatedPatient) => setPatient(updatedPatient)}
         />

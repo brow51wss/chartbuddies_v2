@@ -5,8 +5,9 @@ import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../components/ProtectedRoute'
 import AppHeader from '../components/AppHeader'
-import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
+import { rdsPatchPatient } from '../lib/rdsApi'
+import { supabase } from '../lib/supabase'
 import { useReadOnly } from '../contexts/ReadOnlyContext'
 import type { UserProfile } from '../types/auth'
 import { formatCalendarDate } from '../lib/calendarDate'
@@ -138,26 +139,18 @@ export default function DeletedPatientsPage() {
       }
       setUserProfile(profile)
       try {
-        let query = supabase
-          .from('patients')
-          .select('id, hospital_id, patient_name, record_number, date_of_birth, sex, diagnosis, created_at, deleted_at, patient_photo, home_phone')
-          .not('deleted_at', 'is', null)
-          .order('deleted_at', { ascending: false })
-
-        if (profile.role === 'head_nurse') {
-          query = query.eq('hospital_id', profile.hospital_id!)
-        }
-
-        const { data, error: queryError } = await query
-        if (queryError) {
-          if (queryError.message?.includes('deleted_at')) {
-            setError('Deleted patients list is not available yet. Run database migration 051_add_patients_deleted_at.sql to enable it.')
-          } else {
-            throw queryError
-          }
-        } else {
-          setPatients((data as DeletedPatient[]) || [])
-        }
+        // Fetch all patients (including deleted) then filter client-side for archived ones
+        const { data: session } = await supabase.auth.getSession()
+        const token = session?.session?.access_token
+        if (!token) throw new Error('Not authenticated')
+        const res = await fetch('/api/rds/patients?includeDeleted=true', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed to load patients')
+        const all: DeletedPatient[] = await res.json()
+        setPatients(all.filter((p) => p.deleted_at != null).sort(
+          (a, b) => new Date(b.deleted_at).getTime() - new Date(a.deleted_at).getTime()
+        ))
       } catch (err: any) {
         setError(err.message)
       } finally {
@@ -176,11 +169,7 @@ export default function DeletedPatientsPage() {
     setRestoringId(patientId)
     setError('')
     try {
-      const { error: updateError } = await supabase
-        .from('patients')
-        .update({ deleted_at: null })
-        .eq('id', patientId)
-      if (updateError) throw updateError
+      await rdsPatchPatient(patientId, { deleted_at: null })
       setPatients((prev) => prev.filter((p) => p.id !== patientId))
       setMessage(`"${patientName}" has been unarchived.`)
       setTimeout(() => setMessage(''), 3000)

@@ -7,6 +7,7 @@ import ProtectedRoute from '../components/ProtectedRoute'
 import AppHeader from '../components/AppHeader'
 import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
+import { rdsListPatients, rdsCreatePatient, rdsPatchPatient } from '../lib/rdsApi'
 import { useReadOnly } from '../contexts/ReadOnlyContext'
 import type { UserProfile, Patient } from '../types/auth'
 import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../components/EditPatientInfoModal'
@@ -178,65 +179,11 @@ export default function Dashboard() {
     loadData()
   }, [router])
 
-  const loadPatients = async (profile: UserProfile) => {
+  const loadPatients = async (_profile: UserProfile) => {
     try {
-      let query = supabase
-        .from('patients')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (profile.role === 'nurse' || profile.role === 'head_nurse') {
-        // SCGs (nurse) and head nurses see all patients in their facility
-        query = query.eq('hospital_id', profile.hospital_id!)
-      }
-      // Superadmins see all patients (no filter)
-
-      // Exclude soft-deleted patients (requires migration 051)
-      let build = query.is('deleted_at', null)
-      let { data, error: queryError } = await build
-      if (queryError?.message?.includes('deleted_at')) {
-        // Column not added yet; load all (no soft-delete filter)
-        const fallback = query
-        const res = await fallback
-        data = res.data
-        queryError = res.error
-      }
-      if (queryError) throw queryError
-
-      // Client-side filter if DB has no deleted_at (e.g. old data)
-      const activeData = Array.isArray(data)
-        ? data.filter((p: { deleted_at?: string | null }) => p.deleted_at == null)
-        : []
-
-      // Get the most recent MAR form diagnosis for each patient
-      if (activeData.length > 0) {
-        const patientIds = activeData.map((p: { id: string }) => p.id)
-
-        const { data: marForms, error: marError } = await supabase
-          .from('mar_forms')
-          .select('patient_id, diagnosis')
-          .in('patient_id', patientIds)
-          .order('created_at', { ascending: false })
-
-        if (!marError && marForms) {
-          const diagnosisMap = new Map<string, string | null>()
-          marForms.forEach((form: { patient_id: string; diagnosis: string | null }) => {
-            if (!diagnosisMap.has(form.patient_id) && form.diagnosis) {
-              diagnosisMap.set(form.patient_id, form.diagnosis)
-            }
-          })
-          setPatients(
-            activeData.map((patient: Patient) => ({
-              ...patient,
-              diagnosis: diagnosisMap.get(patient.id) || patient.diagnosis
-            }))
-          )
-        } else {
-          setPatients(activeData)
-        }
-      } else {
-        setPatients(activeData)
-      }
+      // RDS API enforces facility scoping server-side via JWT
+      const data = await rdsListPatients()
+      setPatients(Array.isArray(data) ? data : [])
     } catch (err: any) {
       setError(err.message)
     }
@@ -265,53 +212,13 @@ export default function Dashboard() {
     if (!confirmed) return
 
     try {
-      const { data: updatedRows, error: updateError } = await supabase
-        .from('patients')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', patientId)
-        .select('id')
-
-      const softDeleteWorked = !updateError && updatedRows != null && updatedRows.length > 0
-      let removed = softDeleteWorked
-
-      if (updateError) {
-        if (updateError.message?.includes('deleted_at')) {
-          const { data: deletedRows, error: deleteError } = await supabase
-            .from('patients')
-            .delete()
-            .eq('id', patientId)
-            .select('id')
-          if (deleteError) throw deleteError
-          removed = (deletedRows?.length ?? 0) > 0
-        } else {
-          throw updateError
-        }
-      } else if (!softDeleteWorked) {
-        const { data: deletedRows, error: deleteError } = await supabase
-          .from('patients')
-          .delete()
-          .eq('id', patientId)
-          .select('id')
-        if (deleteError) throw deleteError
-        removed = (deletedRows?.length ?? 0) > 0
-      }
-
-      if (!removed) {
-        setError('Could not delete patient. The patient may not exist or you may not have permission. If you added the deleted_at column, check that RLS allows UPDATE on patients.')
-        setTimeout(() => setError(''), 8000)
-        return
-      }
-
+      await rdsPatchPatient(patientId, { deleted_at: new Date().toISOString() })
       if (userProfile) await loadPatients(userProfile)
-      setMessage(
-        softDeleteWorked
-          ? `Patient "${patientName}" has been archived. You can restore them from Archives.`
-          : `Patient "${patientName}" has been deleted.`
-      )
+      setMessage(`Patient "${patientName}" has been archived. You can restore them from Archives.`)
       setTimeout(() => setMessage(''), 3000)
     } catch (err: any) {
-      console.error('Error deleting patient:', err)
-      setError(err.message || 'Failed to delete patient')
+      console.error('Error archiving patient:', err)
+      setError(err.message || 'Failed to archive patient')
       setTimeout(() => setError(''), 5000)
     }
   }
@@ -335,23 +242,8 @@ export default function Dashboard() {
       facility_name: userFacilityName || payload.facility_name,
     }
 
-    const { data, error: insertError } = await supabase
-      .from('patients')
-      .insert([row])
-      .select('*')
-      .single()
-
-    if (insertError) throw insertError
+    const data = await rdsCreatePatient(row)
     if (!data) throw new Error('No patient returned from server.')
-
-    if (userProfile.role === 'nurse') {
-      await supabase.from('nurse_patient_assignments').insert({
-        nurse_id: userProfile.id,
-        patient_id: data.id,
-        assigned_by: userProfile.id,
-      })
-    }
-
     return data as Patient
   }
 
@@ -362,37 +254,12 @@ export default function Dashboard() {
       throw new Error('You do not have permission to edit patient details.')
     }
 
-    const { data, error: updateError } = await supabase
-      .from('patients')
-      .update(payload)
-      .eq('id', patientId)
-      .select('*')
-      .single()
-
-    if (updateError) throw updateError
+    const data = await rdsPatchPatient(patientId, {
+      ...payload,
+      facility_name: userFacilityName || payload.facility_name,
+      sync_mar_forms: true,
+    })
     if (!data) throw new Error('No updated patient returned from server.')
-
-    // Keep existing MAR records aligned with patient demographic edits.
-    const marSyncPayload = {
-      patient_name: payload.patient_name,
-      date_of_birth: payload.date_of_birth,
-      sex: payload.sex,
-      diagnosis: payload.diagnosis,
-      diet: payload.diet,
-      allergies: payload.allergies,
-      physician_name: payload.physician_name,
-      physician_phone: payload.physician_phone,
-      facility_name: userFacilityName || payload.facility_name
-    }
-    const { error: marSyncError } = await supabase
-      .from('mar_forms')
-      .update(marSyncPayload)
-      .eq('patient_id', patientId)
-
-    if (marSyncError) {
-      throw new Error(`Patient saved, but failed to sync MAR forms: ${marSyncError.message}`)
-    }
-
     return data as Patient
   }
 

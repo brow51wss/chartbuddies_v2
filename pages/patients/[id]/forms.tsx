@@ -11,6 +11,11 @@ import { supabase } from '../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../lib/auth'
 import { useReadOnly } from '../../../contexts/ReadOnlyContext'
 import { ensureProgressNoteSummaryForMonth } from '../../../lib/progress-notes'
+import {
+  rdsGetPatient, rdsListMarForms, rdsCreateMarForm,
+  rdsDeleteMarForm, rdsListMarMedications, rdsCreateMarMedication,
+  rdsPatchPatient,
+} from '../../../lib/rdsApi'
 import type { Patient } from '../../../types/auth'
 import type { MARForm, MARMedication } from '../../../types/mar'
 
@@ -104,25 +109,13 @@ export default function PatientForms() {
 
   const loadPatientData = async (patientId: string) => {
     try {
-      // Load patient
-      const { data: patientData, error: patientError } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('id', patientId)
-        .single()
-
-      if (patientError) throw patientError
+      const [patientData, formsData] = await Promise.all([
+        rdsGetPatient(patientId),
+        rdsListMarForms(patientId),
+      ])
       setPatient(patientData)
 
-      // Load MAR forms for this patient (sort with most current on top: descending by month/year then created_at)
-      const { data: formsData, error: formsError } = await supabase
-        .from('mar_forms')
-        .select('*')
-        .eq('patient_id', patientId)
-        .order('created_at', { ascending: false })
-
-      if (formsError) throw formsError
-      const sorted = (formsData || []).slice().sort((a, b) => {
+      const sorted = (formsData || []).slice().sort((a: any, b: any) => {
         const key = (my: string) => {
           const raw = String(my || '').trim().replace(/\//g, '-')
           const parts = raw.split('-').map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n))
@@ -162,13 +155,7 @@ export default function PatientForms() {
 
   const loadMedicationsForDuplicate = async (formId: string) => {
     try {
-      const { data: medications, error } = await supabase
-        .from('mar_medications')
-        .select('*')
-        .eq('mar_form_id', formId)
-        .order('created_at', { ascending: true })
-
-      if (error) throw error
+      const medications = await rdsListMarMedications(formId)
 
       // Separate medications and vitals
       const filteredMeds = (medications || []).filter(med => {
@@ -278,12 +265,8 @@ export default function PatientForms() {
     setDeleting(true)
     setError('')
     try {
-      const { error: deleteError } = await supabase
-        .from('mar_forms')
-        .delete()
-        .eq('id', deleteConfirmForm.id)
-      if (deleteError) throw deleteError
-      setMarForms(prev => prev.filter(f => f.id !== deleteConfirmForm.id))
+      await rdsDeleteMarForm(deleteConfirmForm.id)
+      setMarForms(prev => prev.filter((f: any) => f.id !== deleteConfirmForm.id))
       setDeleteConfirmForm(null)
     } catch (err: any) {
       setError(err.message || 'Failed to delete MAR form')
@@ -311,99 +294,48 @@ export default function PatientForms() {
       const monthYear = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
       // Hard rule: never allow two MARs for the same patient and same month/year
-      const { data: existingForMonth } = await supabase
-        .from('mar_forms')
-        .select('id')
-        .eq('patient_id', patient.id)
-        .eq('month_year', monthYear)
-        .limit(1)
-      if (existingForMonth && existingForMonth.length > 0) {
+      const existingForms = await rdsListMarForms(patient.id)
+      if (existingForms.some((f: any) => f.month_year === monthYear)) {
         setError(`A MAR for ${monthYear} already exists. Only one MAR per month and year is allowed.`)
         setSaving(false)
         return
       }
 
-      // Get hospital name for facility name
-      let facilityName = 'N/A'
-      if (profile.hospital_id) {
-        const { data: hospital } = await supabase
-          .from('hospitals')
-          .select('name')
-          .eq('id', profile.hospital_id)
-          .single()
-        
-        if (hospital) {
-          facilityName = hospital.name
-        }
-      }
+      // Source form is already in marForms state
+      const sourceForm = marForms.find((f: any) => f.id === sourceFormId) as any
 
-      // Load source MAR form to get patient info
-      const { data: sourceForm, error: sourceError } = await supabase
-        .from('mar_forms')
-        .select('*')
-        .eq('id', sourceFormId)
-        .single()
-
-      if (sourceError) throw sourceError
-
-      // Create new MAR form
-      const { data: newForm, error: createError } = await supabase
-        .from('mar_forms')
-        .insert({
-          patient_id: patient.id,
-          hospital_id: patient.hospital_id || profile.hospital_id || '',
-          month_year: monthYear,
-          patient_name: patient.patient_name,
-          record_number: patient.record_number,
-          date_of_birth: patient.date_of_birth,
-          sex: patient.sex,
-          diagnosis: sourceForm.diagnosis || patient.diagnosis || null,
-          diet: sourceForm.diet || patient.diet || null,
-          allergies: sourceForm.allergies || patient.allergies || 'None',
-          physician_name: sourceForm.physician_name || patient.physician_name || 'TBD',
-          physician_phone: sourceForm.physician_phone || patient.physician_phone || null,
-          facility_name: facilityName,
-          status: 'active',
-          created_by: profile.id
-        })
-        .select()
-        .single()
-
-      if (createError) throw createError
+      const newForm = await rdsCreateMarForm({
+        patient_id: patient.id,
+        month_year: monthYear,
+        status: 'active',
+        diagnosis: sourceForm?.diagnosis || patient.diagnosis || null,
+        diet: sourceForm?.diet || patient.diet || null,
+        allergies: sourceForm?.allergies || patient.allergies || 'None',
+        physician_name: sourceForm?.physician_name || patient.physician_name || 'TBD',
+        physician_phone: sourceForm?.physician_phone || patient.physician_phone || null,
+      })
 
       await ensureProgressNoteSummaryForMonth(supabase, patient.id, monthYear, profile.id)
 
       // Create medications from the duplicate list
-      if (medicationsToDuplicate.length > 0) {
-        const medicationsToInsert: any[] = []
-        
-        medicationsToDuplicate.forEach(med => {
-          // Create one medication entry for each hour
-          med.hours.forEach(hour => {
-            medicationsToInsert.push({
-              mar_form_id: newForm.id,
-              medication_name: med.medication_name,
-              dosage: med.dosage,
-              start_date: med.start_date,
-              stop_date: med.stop_date,
-              hour: hour,
-              route: med.route,
-              notes: med.notes,
-              parameter: med.parameter,
-              frequency: med.frequency || med.hours.length,
-              frequency_display: med.frequency_display
-            })
+      for (const med of medicationsToDuplicate) {
+        for (const hour of med.hours) {
+          await rdsCreateMarMedication({
+            mar_form_id: newForm.id,
+            medication_name: med.medication_name,
+            dosage: med.dosage,
+            start_date: med.start_date,
+            stop_date: med.stop_date,
+            hour,
+            route: med.route,
+            notes: med.notes,
+            parameter: med.parameter,
+            frequency: med.frequency || med.hours.length,
+            frequency_display: med.frequency_display,
           })
-        })
-
-        const { error: medError } = await supabase
-          .from('mar_medications')
-          .insert(medicationsToInsert)
-
-        if (medError) throw medError
+        }
       }
 
-      // Close modal and redirect to new MAR form
       setShowDuplicateModal(false)
       setMedicationsToDuplicate([])
       setSourceFormId(null)
@@ -528,14 +460,7 @@ export default function PatientForms() {
             readOnly={isReadOnly}
             onClose={() => setShowEditPatientModal(false)}
             onSave={async ({ patientId: pid, payload }: EditPatientInfoSaveArgs) => {
-              const { data, error: saveError } = await supabase
-                .from('patients')
-                .update({ ...payload, updated_at: new Date().toISOString() })
-                .eq('id', pid!)
-                .select('*')
-                .single()
-              if (saveError) throw saveError
-              return data as Patient
+              return rdsPatchPatient(pid!, { ...payload, sync_mar_forms: true }) as Promise<Patient>
             }}
             onSaved={(updatedPatient) => setPatient(updatedPatient)}
           />

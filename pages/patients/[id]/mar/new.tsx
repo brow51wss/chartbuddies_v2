@@ -10,6 +10,10 @@ import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile } from '../../../../lib/auth'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import { ensureProgressNoteSummaryForMonth } from '../../../../lib/progress-notes'
+import {
+  rdsGetPatient, rdsCreateMarForm, rdsCreateMarMedication,
+  rdsUpsertAdministration, rdsCreatePrnRecord, rdsUpsertVitalSigns, rdsPatchPatient,
+} from '../../../../lib/rdsApi'
 import type { Patient } from '../../../../types/auth'
 import type { MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns } from '../../../../types/mar'
 import { formatCalendarDate } from '../../../../lib/calendarDate'
@@ -80,13 +84,8 @@ export default function NewMARForm() {
       }
       setUserProfile(profile)
 
-      const { data: patientData, error: patientError } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('id', patientId)
-        .single()
-
-      if (patientError) throw patientError
+      const patientData = await rdsGetPatient(patientId as string)
+      if (!patientData) throw new Error('Patient not found')
       setPatient(patientData)
 
       // Pre-fill patient info
@@ -181,110 +180,77 @@ export default function NewMARForm() {
     setMessage('')
 
     try {
-      // Create MAR form
-      const { data: marForm, error: formError } = await supabase
-        .from('mar_forms')
-        .insert({
-          patient_id: patient.id,
-          hospital_id: patient.hospital_id,
-          month_year: patientInfo.monthYear,
-          created_by: userProfile.id,
-          status: status,
-          patient_name: patient.patient_name,
-          record_number: patient.record_number,
-          date_of_birth: patient.date_of_birth,
-          sex: patient.sex,
-          diagnosis: patientInfo.diagnosis,
-          diet: patientInfo.diet,
-          allergies: patientInfo.allergies,
-          physician_name: patientInfo.physicianName,
-          physician_phone: patientInfo.physicianPhone,
-          facility_name: patientInfo.facilityName,
-          vital_signs_instructions: vitalSignsInstructions || null
-        })
-        .select()
-        .single()
-
-      if (formError) throw formError
+      const marForm = await rdsCreateMarForm({
+        patient_id: patient.id,
+        month_year: patientInfo.monthYear,
+        status,
+        diagnosis: patientInfo.diagnosis,
+        diet: patientInfo.diet,
+        allergies: patientInfo.allergies,
+        physician_name: patientInfo.physicianName,
+        physician_phone: patientInfo.physicianPhone,
+        facility_name: patientInfo.facilityName,
+        vital_signs_instructions: vitalSignsInstructions || null,
+      })
 
       await ensureProgressNoteSummaryForMonth(supabase, patient.id, patientInfo.monthYear, userProfile.id)
 
-      // Save medications and administrations
       for (const med of medications) {
         if (!med.medicationName || !med.dosage || !med.startDate || !med.hour) continue
-
-        const { data: medication, error: medError } = await supabase
-          .from('mar_medications')
-          .insert({
-            mar_form_id: marForm.id,
-            medication_name: med.medicationName,
-            dosage: med.dosage,
-            start_date: med.startDate,
-            stop_date: med.stopDate || null,
-            hour: med.hour,
-            notes: med.notes || null
-          })
-          .select()
-          .single()
-
-        if (medError) throw medError
-
-        // Save administrations for each day
+        const medication = await rdsCreateMarMedication({
+          mar_form_id: marForm.id,
+          medication_name: med.medicationName,
+          dosage: med.dosage,
+          start_date: med.startDate,
+          stop_date: med.stopDate || null,
+          hour: med.hour,
+          notes: med.notes || null,
+        })
         for (const day in med.administrations) {
           const admin = med.administrations[day]
           if (admin.status) {
-            await supabase
-              .from('mar_administrations')
-              .insert({
-                mar_medication_id: medication.id,
-                day_number: parseInt(day),
-                status: admin.status,
-                initials: admin.initials || null,
-                notes: admin.notes || null,
-                administered_at: admin.status === 'Given' ? new Date().toISOString() : null
-              })
+            await rdsUpsertAdministration({
+              mar_medication_id: medication.id,
+              day_number: parseInt(day),
+              status: admin.status,
+              initials: admin.initials || null,
+              notes: admin.notes || null,
+              administered_at: admin.status === 'Given' ? new Date().toISOString() : null,
+            })
           }
         }
       }
 
-      // Save PRN records
       for (let i = 0; i < prnRecords.length; i++) {
         const prn = prnRecords[i]
         if (!prn.date || !prn.medication || !prn.reason) continue
-
-        await supabase
-          .from('mar_prn_records')
-          .insert({
-            mar_form_id: marForm.id,
-            date: prn.date,
-            hour: prn.hour,
-            initials: prn.initials,
-            medication: prn.medication,
-            reason: prn.reason,
-            result: prn.result || null,
-            staff_signature: prn.staffSignature,
-            signed_by: prn.staffSignature ? userProfile.id : null,
-            entry_number: i + 1
-          })
+        await rdsCreatePrnRecord({
+          mar_form_id: marForm.id,
+          date: prn.date,
+          hour: prn.hour,
+          initials: prn.initials,
+          medication: prn.medication,
+          reason: prn.reason,
+          result: prn.result || null,
+          staff_signature: prn.staffSignature,
+          entry_number: i + 1,
+        })
       }
 
-      // Save vital signs
       for (const day in vitalSigns) {
         const vs = vitalSigns[day]
         if (vs.temperature || vs.pulse || vs.respiration || vs.weight || vs.systolic_bp || vs.diastolic_bp || vs.bowel_movement) {
-          await supabase
-            .from('mar_vital_signs')
-            .insert({
-              mar_form_id: marForm.id,
-              day_number: parseInt(day),
-              temperature: vs.temperature ? parseFloat(vs.temperature) : null,
-              pulse: vs.pulse ? parseInt(vs.pulse) : null,
-              respiration: vs.respiration ? parseInt(vs.respiration) : null,
-              weight: vs.weight ? parseFloat(vs.weight) : null,
-              systolic_bp: vs.systolic_bp ? parseInt(vs.systolic_bp) : null,
-              diastolic_bp: vs.diastolic_bp ? parseInt(vs.diastolic_bp) : null,
-              bowel_movement: vs.bowel_movement || null
-            })
+          await rdsUpsertVitalSigns({
+            mar_form_id: marForm.id,
+            day_number: parseInt(day),
+            temperature: vs.temperature ? parseFloat(vs.temperature) : null,
+            pulse: vs.pulse ? parseInt(vs.pulse) : null,
+            respiration: vs.respiration ? parseInt(vs.respiration) : null,
+            weight: vs.weight ? parseFloat(vs.weight) : null,
+            systolic_bp: vs.systolic_bp ? parseInt(vs.systolic_bp) : null,
+            diastolic_bp: vs.diastolic_bp ? parseInt(vs.diastolic_bp) : null,
+            bowel_movement: vs.bowel_movement || null,
+          })
         }
       }
 
@@ -353,14 +319,7 @@ export default function NewMARForm() {
           readOnly={isReadOnly}
           onClose={() => setShowEditModal(false)}
           onSave={async ({ patientId: pid, payload }: EditPatientInfoSaveArgs) => {
-            const { data, error: saveError } = await supabase
-              .from('patients')
-              .update({ ...payload, updated_at: new Date().toISOString() })
-              .eq('id', pid!)
-              .select('*')
-              .single()
-            if (saveError) throw saveError
-            return data as Patient
+            return rdsPatchPatient(pid!, { ...payload, sync_mar_forms: true }) as Promise<Patient>
           }}
           onSaved={(updatedPatient) => setPatient(updatedPatient)}
         />

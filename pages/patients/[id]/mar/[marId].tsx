@@ -7,11 +7,11 @@ import AppHeader from '../../../../components/AppHeader'
 import PatientStickyBar from '../../../../components/PatientStickyBar'
 import TimeInput, { formatTimeDisplay } from '../../../../components/TimeInput'
 import {
-  upsertProgressNoteFromPRNRecord,
-  upsertProgressNoteFromMarPrnRecordId,
+  upsertProgressNoteFromPRNRecordRds,
+  upsertProgressNoteFromMarPrnRecordIdRds,
   shouldSyncMarPrnRecordToProgressNotes,
-  deleteLinkedProgressNoteForMarPrnRecordId,
-} from '../../../../lib/prn-progress-notes'
+  deleteLinkedProgressNoteForMarPrnRecordIdRds,
+} from '../../../../lib/prn-progress-notes-rds'
 import { formatCalendarDate, localTodayYMD, ymdFromDateInput } from '../../../../lib/calendarDate'
 import type { UserProfile } from '../../../../types/auth'
 
@@ -157,6 +157,16 @@ function currentUserInitialsForMatch(userProfile: UserProfile | null): string {
 
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../../../../lib/auth'
+import {
+  rdsGetMarForm, rdsPatchMarForm,
+  rdsUpsertAdministration,
+  rdsCreatePrnRecord, rdsPatchPrnRecord, rdsDeletePrnRecord,
+  rdsCreatePrnMedication, rdsPatchPrnMedication, rdsDeletePrnMedication,
+  rdsUpsertVitalSigns,
+  rdsCreateMarMedication, rdsPatchMarMedication, rdsDeleteMarMedication,
+  rdsPatchPatient,
+  rdsListProgressNotes, rdsCreateProgressNote, rdsPatchProgressNote,
+} from '../../../../lib/rdsApi'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import type { Patient } from '../../../../types/auth'
 import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../../components/EditPatientInfoModal'
@@ -828,14 +838,7 @@ export default function ViewMARForm() {
       facility_name: facilityName,
     }
 
-    const { data: updatedPatient, error: patientError } = await supabase
-      .from('patients')
-      .update(payloadWithFacility)
-      .eq('id', patientId)
-      .select('*')
-      .single()
-
-    if (patientError) throw patientError
+    const updatedPatient = await rdsPatchPatient(patientId!, { ...payloadWithFacility, sync_mar_forms: true })
     if (!updatedPatient) throw new Error('No updated patient returned from server.')
 
     const marSyncPayload = {
@@ -849,24 +852,7 @@ export default function ViewMARForm() {
       physician_phone: payloadWithFacility.physician_phone,
       facility_name: facilityName,
     }
-    const { error: marSyncError } = await supabase
-      .from('mar_forms')
-      .update(marSyncPayload)
-      .eq('patient_id', patientId)
-
-    if (marSyncError) {
-      throw new Error(`Patient saved, but failed to sync MAR forms: ${marSyncError.message}`)
-    }
-
-    setMarForm((prev) =>
-      prev
-        ? {
-            ...prev,
-            ...marSyncPayload,
-          }
-        : null
-    )
-
+    setMarForm((prev) => prev ? { ...prev, ...marSyncPayload } : null)
     return updatedPatient as Patient
   }
 
@@ -1109,13 +1095,9 @@ export default function ViewMARForm() {
   useEffect(() => {
     if (!marFormId || !marForm || !facilityNameFromProfile) return
     if (marForm.facility_name?.trim()) return
-    supabase
-      .from('mar_forms')
-      .update({ facility_name: facilityNameFromProfile })
-      .eq('id', marFormId)
-      .then(({ error }) => {
-        if (!error && marForm) setMarForm({ ...marForm, facility_name: facilityNameFromProfile })
-      })
+    rdsPatchMarForm(marFormId, { facility_name: facilityNameFromProfile })
+      .then(() => { if (marForm) setMarForm({ ...marForm, facility_name: facilityNameFromProfile }) })
+      .catch(console.error)
   }, [marFormId, marForm?.id, facilityNameFromProfile, marForm?.facility_name])
 
   // Scroll MAR table so "today" (for current MAR month) is first visible day after Hour.
@@ -1248,54 +1230,20 @@ export default function ViewMARForm() {
       const initialsToSave = initials || userProfile.staff_initials || ''
       let savedAdmin: MARAdministration | null = null
 
-      if (existingAdmin) {
-        const { data: adminData, error } = await supabase
-          .from('mar_administrations')
-          .update({
-            status,
-            initials: initialsToSave,
-            administered_at: status === 'Given' ? new Date().toISOString() : null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingAdmin.id)
-          .select('*')
-          .single()
-
-        if (error) throw error
-        if (adminData) {
-          savedAdmin = adminData as MARAdministration
-          setAdministrations(prev => ({
-            ...prev,
-            [medId]: {
-              ...prev[medId],
-              [day]: adminData
-            }
-          }))
-        }
-      } else {
-        const { data: adminData, error } = await supabase
-          .from('mar_administrations')
-          .insert({
-            mar_medication_id: medId,
-            day_number: day,
-            status,
-            initials: initialsToSave,
-            administered_at: status === 'Given' ? new Date().toISOString() : null
-          })
-          .select('*')
-          .single()
-
-        if (error) throw error
-        if (adminData) {
-          savedAdmin = adminData as MARAdministration
-          setAdministrations(prev => ({
-            ...prev,
-            [medId]: {
-              ...prev[medId],
-              [day]: adminData
-            }
-          }))
-        }
+      const adminData = await rdsUpsertAdministration({
+        mar_medication_id: medId,
+        day_number: day,
+        status,
+        initials: initialsToSave,
+        administered_at: status === 'Given' ? new Date().toISOString() : null,
+        ...(existingAdmin ? { id: existingAdmin.id } : {}),
+      })
+      if (adminData) {
+        savedAdmin = adminData as MARAdministration
+        setAdministrations(prev => ({
+          ...prev,
+          [medId]: { ...prev[medId], [day]: adminData }
+        }))
       }
 
       // If DC (Discontinued) was selected, mark all future days as discontinued
@@ -1313,36 +1261,12 @@ export default function ViewMARForm() {
         }
 
         if (futureDays.length > 0) {
-          // Upsert all future days - this will create new records or update existing ones
-          // The unique constraint on (mar_medication_id, day_number) will handle conflicts
-          const { error: futureError } = await supabase
-            .from('mar_administrations')
-            .upsert(futureDays, { 
-              onConflict: 'mar_medication_id,day_number',
-              ignoreDuplicates: false 
-            })
-
-          if (futureError) {
-            console.error('Error marking future days as discontinued:', futureError)
-            // Don't throw - the main record was saved successfully
-          } else {
-            // Refresh all administrations for this medication to get updated data
-            const { data: allAdminData, error: allAdminError } = await supabase
-              .from('mar_administrations')
-              .select('*')
-              .eq('mar_medication_id', medId)
-              .order('day_number', { ascending: true })
-
-            if (!allAdminError && allAdminData) {
-              const adminMap: { [day: number]: MARAdministration } = {}
-              allAdminData.forEach(admin => {
-                adminMap[admin.day_number] = admin
-              })
-              setAdministrations(prev => ({
-                ...prev,
-                [medId]: adminMap
-              }))
-            }
+          try {
+            await Promise.all(futureDays.map(fd => rdsUpsertAdministration(fd)))
+            // Reload form to get fresh administration data
+            await loadMARForm()
+          } catch (dcErr) {
+            console.error('Error marking future days as discontinued:', dcErr)
           }
         }
       }
@@ -1376,10 +1300,11 @@ export default function ViewMARForm() {
 
   /** Keep Progress Notes in sync with MAR PRN table rows (one progress note row per PRN record). */
   const syncPrnRecordToProgressNotes = async (recordId: string) => {
-    if (!marForm?.patient_id || !userProfile?.id) return
+    if (!marForm?.patient_id || !userProfile?.id || !marFormId) return
     try {
-      await upsertProgressNoteFromMarPrnRecordId(supabase, {
+      await upsertProgressNoteFromMarPrnRecordIdRds({
         recordId,
+        marFormId,
         patientId: marForm.patient_id,
         physicianName: marForm.physician_name ?? null,
         createdBy: userProfile.id,
@@ -1421,30 +1346,24 @@ export default function ViewMARForm() {
       setSaving(true)
       const nextEntryNumber = prnRecords.length + 1
 
-      const { data: inserted, error } = await supabase
-        .from('mar_prn_records')
-        .insert({
-          mar_form_id: marFormId,
-          start_date: normalizedStartDate || null,
-          date: normalizedDate,
-          hour: record.hour,
-          initials: record.initials,
-          medication: record.medication,
-          dosage: record.dosage?.trim() || null,
-          reason: record.reason,
-          result: record.result,
-          staff_signature: null,
-          signed_by: null,
-          entry_number: nextEntryNumber
-        })
-        .select('*')
-        .single()
-
-      if (error) throw error
+      const inserted = await rdsCreatePrnRecord({
+        mar_form_id: marFormId,
+        start_date: normalizedStartDate || null,
+        date: normalizedDate,
+        hour: record.hour,
+        initials: record.initials,
+        medication: record.medication,
+        dosage: record.dosage?.trim() || null,
+        reason: record.reason,
+        result: record.result,
+        staff_signature: null,
+        signed_by: null,
+        entry_number: nextEntryNumber,
+      })
 
       if (inserted && marForm.patient_id && shouldSyncMarPrnRecordToProgressNotes(inserted as MARPRNRecord)) {
         try {
-          await upsertProgressNoteFromPRNRecord(supabase, {
+          await upsertProgressNoteFromPRNRecordRds({
             patientId: marForm.patient_id,
             record: inserted as MARPRNRecord,
             physicianName: marForm.physician_name ?? null,
@@ -1479,14 +1398,13 @@ export default function ViewMARForm() {
     if (!marFormId) return
     try {
       setSaving(true)
-      const pn = await deleteLinkedProgressNoteForMarPrnRecordId(supabase, record.id)
+      const pn = await deleteLinkedProgressNoteForMarPrnRecordIdRds(record.id)
       if (!pn.ok) {
         setError(pn.reason)
         setTimeout(() => setError(''), 8000)
         return
       }
-      const { error } = await supabase.from('mar_prn_records').delete().eq('id', record.id)
-      if (error) throw error
+      await rdsDeletePrnRecord(record.id)
       setPrnRecordDeleteTarget(null)
       setPrnRecords((prev) => prev.filter((r) => r.id !== record.id))
       await loadMARForm()
@@ -1510,18 +1428,14 @@ export default function ViewMARForm() {
 
     try {
       setSaving(true)
-      const { error } = await supabase
-        .from('mar_prn_medications')
-        .insert({
-          mar_form_id: marFormId,
-          start_date: item.date,
-          medication: item.medication.trim(),
-          dosage: item.dosage?.trim() || null,
-          reason: item.reason.trim(),
-          created_by: userProfile.id,
-        })
-
-      if (error) throw error
+      await rdsCreatePrnMedication({
+        mar_form_id: marFormId,
+        start_date: item.date,
+        medication: item.medication.trim(),
+        dosage: item.dosage?.trim() || null,
+        reason: item.reason.trim(),
+        created_by: userProfile.id,
+      })
       await loadMARForm()
       setMessage('PRN medication added to list successfully!')
       setTimeout(() => setMessage(''), 3000)
@@ -1544,8 +1458,7 @@ export default function ViewMARForm() {
     try {
       setDeletingPrnLibraryItem(true)
       setError('')
-      const { error } = await supabase.from('mar_prn_medications').delete().eq('id', item.id)
-      if (error) throw error
+      await rdsDeletePrnMedication(item.id)
       setPrnListDeleteTarget(null)
       await loadMARForm()
       setMessage('PRN removed from list.')
@@ -1566,16 +1479,12 @@ export default function ViewMARForm() {
     try {
       setSavingPrnLibraryEdit(true)
       setError('')
-      const { error } = await supabase
-        .from('mar_prn_medications')
-        .update({
-          start_date: data.start_date,
-          medication: data.medication.trim(),
-          dosage: data.dosage?.trim() || null,
-          reason: data.reason.trim(),
-        })
-        .eq('id', id)
-      if (error) throw error
+      await rdsPatchPrnMedication(id, {
+        start_date: data.start_date,
+        medication: data.medication.trim(),
+        dosage: data.dosage?.trim() || null,
+        reason: data.reason.trim(),
+      })
       setPrnListEditTarget(null)
       await loadMARForm()
       setMessage('PRN list entry updated.')
@@ -1591,11 +1500,7 @@ export default function ViewMARForm() {
   const updatePRNRecordBatch = async (recordId: string, updates: Partial<MARPRNRecord>) => {
     try {
       setSaving(true)
-      const { error } = await supabase
-        .from('mar_prn_records')
-        .update(updates)
-        .eq('id', recordId)
-      if (error) throw error
+      await rdsPatchPrnRecord(recordId, updates)
       if (marForm?.patient_id && userProfile?.id) {
         await syncPrnRecordToProgressNotes(recordId)
       }
@@ -1627,12 +1532,7 @@ export default function ViewMARForm() {
         updateData.initials = (value.startsWith('data:image') || value.startsWith('s3:')) ? '' : value.slice(0, 10)
       }
 
-      const { error } = await supabase
-        .from('mar_prn_records')
-        .update(updateData)
-        .eq('id', recordId)
-
-      if (error) throw error
+      await rdsPatchPrnRecord(recordId, updateData)
 
       if (marForm?.patient_id && userProfile?.id) {
         await syncPrnRecordToProgressNotes(recordId)
@@ -1657,12 +1557,7 @@ export default function ViewMARForm() {
     try {
       setSaving(true)
       
-      const { error } = await supabase
-        .from('mar_medications')
-        .update({ parameter: parameter?.trim() || null })
-        .eq('id', medicationId)
-
-      if (error) throw error
+      await rdsPatchMarMedication(medicationId, { parameter: parameter?.trim() || null })
 
       await loadMARForm()
       setMessage('Medication parameter updated successfully!')
@@ -1681,12 +1576,7 @@ export default function ViewMARForm() {
     try {
       setSaving(true)
       
-      const { error } = await supabase
-        .from('mar_medications')
-        .update({ notes: notes?.trim() || null })
-        .eq('id', medicationId)
-
-      if (error) throw error
+      await rdsPatchMarMedication(medicationId, { notes: notes?.trim() || null })
 
       await loadMARForm()
       setMessage('Medication notes updated successfully!')
@@ -1738,52 +1628,28 @@ export default function ViewMARForm() {
       // Update existing rows
       for (let i = 0; i < entry.ids.length; i++) {
         const id = entry.ids[i]
-        const updateData = { ...baseData }
-        if (i < entry.times.length) {
-          updateData.hour = entry.times[i] ?? null
-        }
-        const { error } = await supabase
-          .from('mar_medications')
-          .update(updateData)
-          .eq('id', id)
-        if (error) throw error
+        const updateData: any = { ...baseData }
+        if (i < entry.times.length) updateData.hour = entry.times[i] ?? null
+        await rdsPatchMarMedication(id, updateData)
       }
 
-      // If form has more times than existing rows (e.g. frequency 3 but only 2 rows), insert missing rows
+      // If form has more times than existing rows, insert missing rows
       if (entry.times.length > entry.ids.length) {
-        let baseOrder = 0
-        if (entry.ids.length > 0) {
-          const { data: existing } = await supabase
-            .from('mar_medications')
-            .select('display_order')
-            .in('id', entry.ids)
-          // Use the SAME display_order as the first row in the group so they stay together
-          baseOrder = existing?.length && existing[0].display_order != null
-            ? existing[0].display_order
-            : 0
-        } else {
-          const { data: maxRow } = await supabase
-            .from('mar_medications')
-            .select('display_order')
-            .eq('mar_form_id', marFormId)
-            .order('display_order', { ascending: false })
-            .limit(1)
-            .single()
-          baseOrder = (maxRow?.display_order ?? 0) + 10
-        }
-        const toInsert = []
+        // Determine base display_order from existing rows in the form
+        const formData = await rdsGetMarForm(marFormId)
+        const existingMeds: any[] = formData.medications || []
+        const groupMeds = existingMeds.filter((m: any) => entry.ids.includes(m.id))
+        const baseOrder = groupMeds.length > 0 && groupMeds[0].display_order != null
+          ? groupMeds[0].display_order
+          : (Math.max(0, ...existingMeds.map((m: any) => m.display_order ?? 0)) + 10)
         for (let i = entry.ids.length; i < entry.times.length; i++) {
-          toInsert.push({
+          await rdsCreateMarMedication({
             mar_form_id: marFormId,
             ...baseData,
             hour: entry.times[i] ?? null,
             display_order: baseOrder,
           })
         }
-        const { error: insertError } = await supabase
-          .from('mar_medications')
-          .insert(toInsert)
-        if (insertError) throw insertError
       }
 
       await loadMARForm()
@@ -2032,15 +1898,9 @@ export default function ViewMARForm() {
     const safeDay = Math.min(Math.max(1, day), lastDay)
     const noteDate = `${y}-${String(m).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`
 
-    const { data: existing, error: fetchError } = await supabase
-      .from('progress_note_entries')
-      .select('id, notes')
-      .eq('patient_id', patientId)
-      .eq('note_date', noteDate)
-      .limit(1)
-      .maybeSingle()
-
-    if (fetchError) throw new Error(`Progress note lookup failed: ${fetchError.message}`)
+    // Find existing progress note for this patient/date
+    const allNotes = await rdsListProgressNotes(patientId, true)
+    const existing = allNotes.find((n: any) => n.note_date === noteDate) ?? null
 
     const prefixWithTime = timeLabel ? `(from MAR, ${timeLabel})` : '(from MAR)'
 
@@ -2059,22 +1919,17 @@ export default function ViewMARForm() {
         let prev = (existing.notes || '').trim()
         if (timeLabel) prev = removeLinesForTime(prev, timeLabel)
         const newNotes = prev ? `${prev}\n\n${marBlock}` : marBlock
-        const { error: updateError } = await supabase
-          .from('progress_note_entries')
-          .update({ notes: newNotes, updated_at: new Date().toISOString() })
-          .eq('id', existing.id)
-        if (updateError) throw new Error(`Progress note update failed: ${updateError.message}`)
+        await rdsPatchProgressNote(existing.id, { notes: newNotes, updated_at: new Date().toISOString() })
       } else {
-        const { error: insertError } = await supabase.from('progress_note_entries').insert({
+        await rdsCreateProgressNote({
           patient_id: patientId,
           note_date: noteDate,
           notes: marBlock,
           signature: null,
           physician_name: marForm?.physician_name ?? null,
           is_addendum: false,
-          created_by: userProfile.id
+          created_by: userProfile.id,
         })
-        if (insertError) throw new Error(`Progress note insert failed: ${insertError.message}`)
       }
     } else if (existing?.notes?.includes('(from MAR)')) {
       let prev = (existing.notes || '').trim()
@@ -2083,12 +1938,7 @@ export default function ViewMARForm() {
       } else {
         prev = prev.split('(from MAR)')[0].trim()
       }
-      const newNotes = prev || ''
-      const { error: updateError } = await supabase
-        .from('progress_note_entries')
-        .update({ notes: newNotes, updated_at: new Date().toISOString() })
-        .eq('id', existing.id)
-      if (updateError) throw new Error(`Progress note update failed: ${updateError.message}`)
+      await rdsPatchProgressNote(existing.id, { notes: prev || '', updated_at: new Date().toISOString() })
     }
   }
 
@@ -2100,28 +1950,15 @@ export default function ViewMARForm() {
       
       const existingAdmin = administrations[medId]?.[day]
       
-      if (existingAdmin) {
-        const { error } = await supabase
-          .from('mar_administrations')
-          .update({ notes: note?.trim() || null, updated_at: new Date().toISOString() })
-          .eq('id', existingAdmin.id)
-
-        if (error) throw error
-      } else {
-        // If no administration exists, we need to create one with "R" status
-        // This shouldn't normally happen, but handle it just in case
-        const { error } = await supabase
-          .from('mar_administrations')
-          .insert({
-            mar_medication_id: medId,
-            day_number: day,
-            status: 'Given',
-            initials: 'R',
-            notes: note?.trim() || null
-          })
-
-        if (error) throw error
-      }
+      await rdsUpsertAdministration({
+        mar_medication_id: medId,
+        day_number: day,
+        status: existingAdmin?.status ?? 'Given',
+        initials: existingAdmin?.initials ?? 'R',
+        notes: note?.trim() || null,
+        updated_at: new Date().toISOString(),
+        ...(existingAdmin ? { id: existingAdmin.id } : {}),
+      })
 
       if (marForm?.patient_id && marForm?.month_year) {
         const med = medications.find((m) => m.id === medId)
@@ -2227,19 +2064,12 @@ export default function ViewMARForm() {
       
       try {
         setSaving(true)
-        const { error } = await supabase
-          .from('mar_prn_records')
-          .update({ start_date: valueToSave })
-          .eq('mar_form_id', marFormId)
-          .eq('medication', medicationName)
-        
-        if (error) throw error
-        
-        // Update local state for all matching records
-        setPrnRecords(prev => prev.map(r => 
+        await Promise.all(
+          recordsToUpdate.map(r => rdsPatchPrnRecord(r.id, { start_date: valueToSave }))
+        )
+        setPrnRecords(prev => prev.map(r =>
           r.medication === medicationName ? { ...r, start_date: valueToSave } : r
         ))
-        
         setMessage(`Start date updated for all ${recordsToUpdate.length} record(s) of ${medicationName}`)
         setTimeout(() => setMessage(''), 3000)
       } catch (err: any) {
@@ -2292,29 +2122,13 @@ export default function ViewMARForm() {
       // Calculate display_order based on insert position
       let displayOrder: number
       if (position) {
-        // First, ensure ALL existing medications have display_order set
-        // This prevents sorting issues when mixing entries with and without display_order
         const medsNeedingOrder = medications.filter(m => m.display_order == null)
         if (medsNeedingOrder.length > 0) {
-          // Assign display_order to all existing meds based on their CURRENT visual order
-          // (which is the order in the medications array)
-          const updates = medications.map((med, index) => ({
-            id: med.id,
-            display_order: (index + 1) * 10
-          }))
-          
-          // Update all medications with their display_order
+          const updates = medications.map((med, index) => ({ id: med.id, display_order: (index + 1) * 10 }))
           for (const update of updates) {
-            await supabase
-              .from('mar_medications')
-              .update({ display_order: update.display_order })
-              .eq('id', update.id)
+            await rdsPatchMarMedication(update.id, { display_order: update.display_order })
           }
-          
-          // Update local state to reflect new display_orders
-          medications.forEach((med, index) => {
-            med.display_order = (index + 1) * 10
-          })
+          medications.forEach((med, index) => { med.display_order = (index + 1) * 10 })
         }
         
         const targetMed = medications.find(m => m.id === position.targetMedId)
@@ -2378,12 +2192,7 @@ export default function ViewMARForm() {
       }
       
       // Insert all medications
-      const { data: newMeds, error: medError } = await supabase
-        .from('mar_medications')
-        .insert(medicationsToInsert)
-        .select()
-
-      if (medError) throw medError
+      const newMeds = await Promise.all(medicationsToInsert.map(m => rdsCreateMarMedication(m)))
       if (!newMeds || newMeds.length === 0) throw new Error('Failed to create medications')
 
       // Populate initials for the START DATE of each medication
@@ -2418,13 +2227,10 @@ export default function ViewMARForm() {
                 administered_at: new Date().toISOString()
               }))
               
-              const { error: adminError } = await supabase
-                .from('mar_administrations')
-                .insert(adminRecords)
-
-              if (adminError) {
-                console.error('Error creating administration for start date:', adminError)
-                // Don't throw - medications were created successfully
+              try {
+                await Promise.all(adminRecords.map((ar: any) => rdsUpsertAdministration(ar)))
+              } catch (adminErr) {
+                console.error('Error creating administration for start date:', adminErr)
               }
             }
           } catch (e) {
@@ -2469,27 +2275,13 @@ export default function ViewMARForm() {
       // Calculate display_order based on insert position
       let displayOrder: number
       if (position) {
-        // First, ensure ALL existing medications have display_order set
         const medsNeedingOrder = medications.filter(m => m.display_order == null)
         if (medsNeedingOrder.length > 0) {
-          // Assign display_order to all existing meds based on their CURRENT visual order
-          const updates = medications.map((med, index) => ({
-            id: med.id,
-            display_order: (index + 1) * 10
-          }))
-          
-          // Update all medications with their display_order
+          const updates = medications.map((med, index) => ({ id: med.id, display_order: (index + 1) * 10 }))
           for (const update of updates) {
-            await supabase
-              .from('mar_medications')
-              .update({ display_order: update.display_order })
-              .eq('id', update.id)
+            await rdsPatchMarMedication(update.id, { display_order: update.display_order })
           }
-          
-          // Update local state to reflect new display_orders
-          medications.forEach((med, index) => {
-            med.display_order = (index + 1) * 10
-          })
+          medications.forEach((med, index) => { med.display_order = (index + 1) * 10 })
         }
         
         const targetMed = medications.find(m => m.id === position.targetMedId)
@@ -2530,7 +2322,6 @@ export default function ViewMARForm() {
         }
       }
       
-      // Create vital sign entries (one for each time if multiple times per day)
       const vitalRowsToInsert = Array.from({ length: frequency }, (_, i) => ({
         mar_form_id: marFormId,
         medication_name: 'VITALS',
@@ -2542,17 +2333,11 @@ export default function ViewMARForm() {
         route: vitalsData.initials || null,
         frequency: frequency,
         frequency_display: vitalsData.frequencyDisplay || null,
-        display_order: displayOrder
+        display_order: displayOrder,
       }))
 
-      const { data: newVitals, error: vitalError } = await supabase
-        .from('mar_medications')
-        .insert(vitalRowsToInsert)
-        .select()
+      const newVitals = await Promise.all(vitalRowsToInsert.map(r => rdsCreateMarMedication(r)))
 
-      if (vitalError) throw vitalError
-
-      // Populate initials for the START DATE of the vitals entry (only for the first row)
       if (newVitals && newVitals.length > 0) {
         const firstVital = newVitals[0]
         const startDateParts = vitalsData.startDate.split('-')
@@ -2560,22 +2345,17 @@ export default function ViewMARForm() {
           const startYear = parseInt(startDateParts[0], 10)
           const startMonth = parseInt(startDateParts[1], 10) - 1
           const startDay = parseInt(startDateParts[2], 10)
-          
           const formParsed = parseMARMonthYear(marForm.month_year)
           const formYear = formParsed?.y
           const formMonthIndex = formParsed != null ? formParsed.m - 1 : -1
-          
           if (formYear != null && formMonthIndex >= 0 && startMonth === formMonthIndex && startYear === formYear) {
-            // Create administration record for the start day (only for the first vitals row)
-            await supabase
-              .from('mar_administrations')
-              .insert({
-                mar_medication_id: firstVital.id,
-                day_number: startDay,
-                status: 'Given',
-                initials: vitalsData.initials.trim(),
-                administered_at: new Date().toISOString()
-              })
+            await rdsUpsertAdministration({
+              mar_medication_id: firstVital.id,
+              day_number: startDay,
+              status: 'Given',
+              initials: vitalsData.initials.trim(),
+              administered_at: new Date().toISOString(),
+            }).catch(console.error)
           }
         }
       }
@@ -2600,24 +2380,8 @@ export default function ViewMARForm() {
       setSaving(true)
       setError('')
       
-      // First, delete all administration records for this medication
-      const { error: adminError } = await supabase
-        .from('mar_administrations')
-        .delete()
-        .eq('mar_medication_id', medId)
-      
-      if (adminError) {
-        console.error('Error deleting administrations:', adminError)
-        // Continue anyway - the medication delete might still work due to CASCADE
-      }
-      
-      // Delete the medication entry
-      const { error: medError } = await supabase
-        .from('mar_medications')
-        .delete()
-        .eq('id', medId)
-      
-      if (medError) throw medError
+      // Delete the medication entry (CASCADE on RDS will remove administrations)
+      await rdsDeleteMarMedication(medId)
       
       // Reload the form to reflect changes
       await loadMARForm()
@@ -2799,18 +2563,10 @@ export default function ViewMARForm() {
 
       try {
         setSaving(true)
-        const updates = newMedications.map((med, index) => ({
-          id: med.id,
-          display_order: (index + 1) * 10,
-        }))
-
+        const updates = newMedications.map((med, index) => ({ id: med.id, display_order: (index + 1) * 10 }))
         for (const update of updates) {
-          await supabase
-            .from('mar_medications')
-            .update({ display_order: update.display_order })
-            .eq('id', update.id)
+          await rdsPatchMarMedication(update.id, { display_order: update.display_order })
         }
-
         setMessage('Row order updated!')
         setTimeout(() => setMessage(''), 2000)
       } catch (err: any) {
@@ -2848,21 +2604,11 @@ export default function ViewMARForm() {
 
     try {
       setSaving(true)
-      const { error: formErr } = await supabase
-        .from('mar_forms')
-        .update({ mar_chart_row_order: newOrderJson })
-        .eq('id', marFormId)
-      if (formErr) throw formErr
+      await rdsPatchMarForm(marFormId, { mar_chart_row_order: newOrderJson })
 
-      const updates = newMedsFlat.map((med, index) => ({
-        id: med.id,
-        display_order: (index + 1) * 10,
-      }))
+      const updates = newMedsFlat.map((med, index) => ({ id: med.id, display_order: (index + 1) * 10 }))
       for (const update of updates) {
-        await supabase
-          .from('mar_medications')
-          .update({ display_order: update.display_order })
-          .eq('id', update.id)
+        await rdsPatchMarMedication(update.id, { display_order: update.display_order })
       }
 
       setMessage('Row order updated!')
@@ -2896,17 +2642,12 @@ export default function ViewMARForm() {
     try {
       setSaving(true)
       
-      // Update both affected rows
       const updates = [
         { id: newMedications[currentIndex].id, display_order: (currentIndex + 1) * 10 },
-        { id: newMedications[newIndex].id, display_order: (newIndex + 1) * 10 }
+        { id: newMedications[newIndex].id, display_order: (newIndex + 1) * 10 },
       ]
-
       for (const update of updates) {
-        await supabase
-          .from('mar_medications')
-          .update({ display_order: update.display_order })
-          .eq('id', update.id)
+        await rdsPatchMarMedication(update.id, { display_order: update.display_order })
       }
 
       setMessage('Row moved!')
@@ -2924,97 +2665,16 @@ export default function ViewMARForm() {
 
   const updateVitalSigns = async (day: number, field: string, value: number | string) => {
     if (!userProfile || !marForm || !marFormId) return
-    
-    // Handle string fields (bowel_movement) differently from numeric fields
+
     const isStringField = field === 'bowel_movement'
-    
-    // For string fields, allow empty strings
-    if (isStringField) {
-      try {
-        setSaving(true)
-        const existing = vitalSigns[day]
-        const updateData: any = {
-          mar_form_id: marFormId,
-          day_number: day,
-          [field]: value || null
-        }
-
-        if (existing) {
-          const { error } = await supabase
-            .from('mar_vital_signs')
-            .update(updateData)
-            .eq('id', existing.id)
-          if (error) throw error
-        } else {
-          const { error } = await supabase
-            .from('mar_vital_signs')
-            .insert(updateData)
-          if (error) throw error
-        }
-
-        await loadMARForm()
-      } catch (err: any) {
-        console.error('Error updating vital signs:', err)
-        setError(err.message || 'Failed to update vital signs')
-        setTimeout(() => setError(''), 5000)
-      } finally {
-        setSaving(false)
-      }
-      return
-    }
-    
-    // For numeric fields, handle as before
-    const numValue = typeof value === 'string' ? parseFloat(value) : value
-    if (!numValue || numValue === 0) {
-      const existing = vitalSigns[day]
-      if (existing) {
-        try {
-          setSaving(true)
-          const updateData: any = {
-            mar_form_id: marFormId,
-            day_number: day,
-            [field]: null
-          }
-          const { error } = await supabase
-            .from('mar_vital_signs')
-            .update(updateData)
-            .eq('id', existing.id)
-          if (error) throw error
-          await loadMARForm()
-        } catch (err: any) {
-          console.error('Error updating vital signs:', err)
-        } finally {
-          setSaving(false)
-        }
-      }
-      return
-    }
-    
     try {
       setSaving(true)
       const existing = vitalSigns[day]
-
-      const updateData: any = {
-        mar_form_id: marFormId,
-        day_number: day,
-        [field]: numValue
-      }
-
-      if (existing) {
-        const { error } = await supabase
-          .from('mar_vital_signs')
-          .update(updateData)
-          .eq('id', existing.id)
-
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('mar_vital_signs')
-          .insert(updateData)
-
-        if (error) throw error
-      }
-
+      const fieldValue = isStringField
+        ? (value || null)
+        : (typeof value === 'string' ? parseFloat(value) : value) || null
+      const payload: any = { mar_form_id: marFormId, day_number: day, [field]: fieldValue }
+      await rdsUpsertVitalSigns({ ...payload, ...(existing ? { id: existing.id } : {}) })
       await loadMARForm()
     } catch (err: any) {
       console.error('Error updating vital signs:', err)
@@ -3027,157 +2687,57 @@ export default function ViewMARForm() {
 
   const loadMARForm = async () => {
     if (!marFormId || typeof marFormId !== 'string') return
-    
-    try {
-      // Load MAR form
-      const { data: formData, error: formError } = await supabase
-        .from('mar_forms')
-        .select('*')
-        .eq('id', marFormId)
-        .single()
 
-      if (formError) throw formError
-      if (!formData) {
+    try {
+      const result = await rdsGetMarForm(marFormId)
+      if (!result) {
         setError('MAR form not found')
         setLoading(false)
         return
       }
-      
-      // If patient_name is missing, load it from patients table
-      if (!formData.patient_name && formData.patient_id) {
-        const { data: patientData } = await supabase
-          .from('patients')
-          .select('patient_name, record_number, date_of_birth, sex')
-          .eq('id', formData.patient_id)
-          .single()
-        
-        if (patientData) {
-          formData.patient_name = patientData.patient_name
-          formData.record_number = formData.record_number || patientData.record_number
-          formData.date_of_birth = formData.date_of_birth || patientData.date_of_birth
-          formData.sex = formData.sex || patientData.sex
-        }
-      }
-      
+
+      const { form: formData, medications: medsData, administrations: adminData,
+        vital_signs: vsData, prn_medications: prnMedsData, prn_records: prnData } = result
+
       setMarForm(formData)
 
-      // Load medications
-      const { data: medsData, error: medsError } = await supabase
-        .from('mar_medications')
-        .select('*')
-        .eq('mar_form_id', marFormId)
-        .order('display_order', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: true })
-
-      if (medsError) throw medsError
-      
-      // Sort medications by display_order (primary), falling back to original grouping logic
-      const sortedMeds = (medsData || []).sort((a, b) => {
-        // If both have display_order, use that
-        if (a.display_order != null && b.display_order != null) {
-          return a.display_order - b.display_order
-        }
-        
-        // If only one has display_order, prioritize the one that has it
+      const sortedMeds = (medsData || []).sort((a: any, b: any) => {
+        if (a.display_order != null && b.display_order != null) return a.display_order - b.display_order
         if (a.display_order != null) return -1
         if (b.display_order != null) return 1
-        
-        // Fallback: original sorting logic for backward compatibility
         const aIsVitals = a.medication_name === 'VITALS' || a.notes === 'Vital Signs Entry'
         const bIsVitals = b.medication_name === 'VITALS' || b.notes === 'Vital Signs Entry'
-        
-        if (aIsVitals && !bIsVitals) return -1 // a (vitals) comes first
-        if (!aIsVitals && bIsVitals) return 1  // b (vitals) comes first
-        
-        // For same type, group by medication name, dosage, and dates
+        if (aIsVitals && !bIsVitals) return -1
+        if (!aIsVitals && bIsVitals) return 1
         if (!aIsVitals && !bIsVitals) {
           const aKey = `${a.medication_name}|${a.dosage}|${a.start_date}|${a.stop_date || ''}`
           const bKey = `${b.medication_name}|${b.dosage}|${b.start_date}|${b.stop_date || ''}`
-          
-          if (aKey !== bKey) {
-            return aKey.localeCompare(bKey)
-          }
-          // Same medication group, sort by hour
-          return a.hour.localeCompare(b.hour)
+          if (aKey !== bKey) return aKey.localeCompare(bKey)
+          return (a.hour || '').localeCompare(b.hour || '')
         }
-        
         return 0
       })
-      
       setMedications(sortedMeds)
 
-      // Load administrations for all medications
-      if (sortedMeds && sortedMeds.length > 0) {
-        const medIds = sortedMeds.map(m => m.id)
-        const { data: adminData, error: adminError } = await supabase
-          .from('mar_administrations')
-          .select('*')
-          .in('mar_medication_id', medIds)
+      const adminMap: { [medId: string]: { [day: number]: MARAdministration } } = {}
+      adminData?.forEach((admin: any) => {
+        if (!adminMap[admin.mar_medication_id]) adminMap[admin.mar_medication_id] = {}
+        const dn = typeof admin.day_number === 'number' ? admin.day_number : Number(admin.day_number)
+        adminMap[admin.mar_medication_id][dn] = admin
+      })
+      setAdministrations(adminMap)
 
-        if (adminError) throw adminError
-
-        // Organize by medication and day
-        const adminMap: { [medId: string]: { [day: number]: MARAdministration } } = {}
-        adminData?.forEach(admin => {
-          if (!adminMap[admin.mar_medication_id]) {
-            adminMap[admin.mar_medication_id] = {}
-          }
-          const dn =
-            typeof admin.day_number === 'number' ? admin.day_number : Number(admin.day_number)
-          adminMap[admin.mar_medication_id][dn] = admin
-        })
-        setAdministrations(adminMap)
-      }
-
-      // Load PRN records
-      const { data: prnData, error: prnError } = await supabase
-        .from('mar_prn_records')
-        .select('*')
-        .eq('mar_form_id', marFormId)
-        .order('entry_number', { ascending: true })
-
-      if (prnError) throw prnError
       setPrnRecords(prnData || [])
+      setPrnMedicationList((prnMedsData || []) as MARPRNMedication[])
 
-      // Load PRN medication library (used by Add PRN Record medication dropdown)
-      const { data: prnMedsData, error: prnMedsError } = await supabase
-        .from('mar_prn_medications')
-        .select('*')
-        .eq('mar_form_id', marFormId)
-        .order('created_at', { ascending: false })
-
-      if (prnMedsError) {
-        // Allow app to function before migration is applied.
-        if (prnMedsError.message?.includes('does not exist')) {
-          setPrnMedicationList([])
-        } else {
-          throw prnMedsError
-        }
-      } else {
-        setPrnMedicationList((prnMedsData || []) as MARPRNMedication[])
-      }
-
-      // Build staff initials legend from PRN records
       const initialsMap: { [initials: string]: string } = {}
-      prnData?.forEach(prn => {
-        if (prn.initials && prn.staff_signature) {
-          initialsMap[prn.initials] = prn.staff_signature
-        }
+      prnData?.forEach((prn: any) => {
+        if (prn.initials && prn.staff_signature) initialsMap[prn.initials] = prn.staff_signature
       })
       setStaffInitials(initialsMap)
 
-      // Load vital signs
-      const { data: vsData, error: vsError } = await supabase
-        .from('mar_vital_signs')
-        .select('*')
-        .eq('mar_form_id', marFormId)
-
-      if (vsError) throw vsError
-
       const vsMap: { [day: number]: MARVitalSigns } = {}
-      vsData?.forEach(vs => {
-        vsMap[vs.day_number] = vs
-      })
+      vsData?.forEach((vs: any) => { vsMap[vs.day_number] = vs })
       setVitalSigns(vsMap)
 
       setLoading(false)
@@ -4715,17 +4275,10 @@ export default function ViewMARForm() {
                                   onUpdate={async (newHour) => {
                                     try {
                                       setSaving(true)
-                                      const { error } = await supabase
-                                        .from('mar_medications')
-                                        .update({ hour: newHour })
-                                        .eq('id', med.id)
-                                      
-                                      if (error) throw error
-                                      
-                                      setMedications(prev => prev.map(m => 
+                                      await rdsPatchMarMedication(med.id, { hour: newHour })
+                                      setMedications(prev => prev.map(m =>
                                         m.id === med.id ? { ...m, hour: newHour } : m
                                       ))
-                                      
                                       setMessage(`${isVitalsEntry ? 'Vitals' : 'Medication'} time updated successfully`)
                                       setTimeout(() => setMessage(''), 2000)
                                     } catch (err) {

@@ -8,6 +8,7 @@ import PatientStickyBar from '../../../components/PatientStickyBar'
 import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../components/EditPatientInfoModal'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../../../lib/auth'
+import { rdsGetPatient, rdsListMarForms, rdsListProgressNotes, rdsPatchPatient } from '../../../lib/rdsApi'
 import { useReadOnly } from '../../../contexts/ReadOnlyContext'
 import type { Patient, UserProfile } from '../../../types/auth'
 import { PatientSummaryCard } from '../../../components/PatientSummaryCard'
@@ -153,13 +154,14 @@ export default function PatientHub() {
         if (!cancelled) setFacilityName(hospitalData?.name ?? null)
       }
 
-      const { data, error: fetchError } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('id', loadPatientId)
-        .single()
+      let data: Patient | null = null
+      try {
+        data = await rdsGetPatient(loadPatientId)
+      } catch (_) {
+        data = null
+      }
       if (cancelled) return
-      if (fetchError || !data) {
+      if (!data) {
         setError('Patient not found')
         setPatient(null)
         setActivityRows([])
@@ -168,71 +170,55 @@ export default function PatientHub() {
       }
       setPatient(data)
 
-      const [marRes, progressRes, patientMarFormsRes] = await Promise.all([
-        supabase
-          .from('mar_forms')
-          .select('id, status, month_year, updated_at, created_at')
-          .eq('patient_id', loadPatientId)
-          .order('updated_at', { ascending: false })
-          .limit(1),
-        supabase
-          .from('progress_note_entries')
-          .select('id, updated_at, note_date')
-          .eq('patient_id', loadPatientId)
-          .order('updated_at', { ascending: false })
-          .limit(1),
-        supabase
-          .from('mar_forms')
-          .select('id, month_year')
-          .eq('patient_id', loadPatientId),
+      const [allMarForms, allProgressNotes] = await Promise.all([
+        rdsListMarForms(loadPatientId).catch(() => [] as any[]),
+        rdsListProgressNotes(loadPatientId).catch(() => [] as any[]),
       ])
 
       if (cancelled) return
 
-      const latestMar = marRes.data?.[0]
-      const latestProgressEntry = progressRes.data?.[0]
-      const patientMarForms = patientMarFormsRes.data || []
-      const patientMarFormIds = patientMarForms.map((form) => form.id)
-      const monthByMarFormId = new Map(patientMarForms.map((form) => [form.id, form.month_year]))
+      // Sort MAR forms newest-first
+      const sortedForms = [...allMarForms].sort(
+        (a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+      )
+      const latestMar = sortedForms[0] ?? null
+      const monthByMarFormId = new Map(allMarForms.map((f: any) => [f.id, f.month_year]))
 
-      let latestVitalsActivity:
-        | {
-            mar_form_id: string
-            day_number?: number | null
-            updated_at?: string | null
-            created_at?: string | null
-            source: 'reading' | 'entry'
+      const sortedNotes = [...allProgressNotes].sort(
+        (a, b) => new Date(b.updated_at || b.note_date).getTime() - new Date(a.updated_at || a.note_date).getTime()
+      )
+      const latestProgressEntry = sortedNotes[0] ?? null
+
+      // Check vitals from the most recent MAR form that has vital_signs data
+      let latestVitalsActivity: {
+        mar_form_id: string
+        day_number?: number | null
+        updated_at?: string | null
+        created_at?: string | null
+        source: 'reading'
+      } | null = null
+
+      for (const form of sortedForms) {
+        try {
+          const { data: session } = await supabase.auth.getSession()
+          const token = session?.session?.access_token
+          if (!token) break
+          const vsRes = await fetch(`/api/rds/mar/vital-signs?mar_form_id=${form.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (vsRes.ok) {
+            const vsRows: any[] = await vsRes.json()
+            if (vsRows.length > 0) {
+              const latest = vsRows.sort(
+                (a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+              )[0]
+              latestVitalsActivity = { ...latest, mar_form_id: form.id, source: 'reading' }
+              break
+            }
           }
-        | null = null
-
-      if (patientMarFormIds.length > 0) {
-        const [vitalsReadingRes, vitalsEntryRes] = await Promise.all([
-          supabase
-            .from('mar_vital_signs')
-            .select('mar_form_id, day_number, updated_at, created_at')
-            .in('mar_form_id', patientMarFormIds)
-            .order('updated_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-          supabase
-            .from('mar_medications')
-            .select('mar_form_id, updated_at, created_at')
-            .in('mar_form_id', patientMarFormIds)
-            .or('medication_name.eq.VITALS,notes.eq.Vital Signs Entry')
-            .order('updated_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-        ])
-
-        const latestReading = vitalsReadingRes.data
-          ? { ...vitalsReadingRes.data, source: 'reading' as const }
-          : null
-        const latestEntry = vitalsEntryRes.data
-          ? { ...vitalsEntryRes.data, source: 'entry' as const }
-          : null
-        const readingMs = activityTimestampMs(latestReading?.updated_at || latestReading?.created_at)
-        const entryMs = activityTimestampMs(latestEntry?.updated_at || latestEntry?.created_at)
-        latestVitalsActivity = readingMs >= entryMs ? latestReading : latestEntry
+        } catch (_) {
+          break
+        }
       }
 
       const rows: BinderActivityRow[] = []
@@ -349,14 +335,7 @@ export default function PatientHub() {
           readOnly={isReadOnly}
           onClose={() => setShowEditModal(false)}
           onSave={async ({ patientId: pid, payload }: EditPatientInfoSaveArgs) => {
-            const { data, error: saveError } = await supabase
-              .from('patients')
-              .update({ ...payload, updated_at: new Date().toISOString() })
-              .eq('id', pid!)
-              .select('*')
-              .single()
-            if (saveError) throw saveError
-            return data as Patient
+            return rdsPatchPatient(pid!, { ...payload, sync_mar_forms: true }) as Promise<Patient>
           }}
           onSaved={(updatedPatient) => {
             setPatient(updatedPatient)
