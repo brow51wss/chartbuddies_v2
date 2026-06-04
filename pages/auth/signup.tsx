@@ -200,7 +200,6 @@ export default function Signup() {
         if (signInError) {
           // If sign in fails, might need email confirmation
           // The trigger should still create the profile, so we'll wait for it
-          console.log('No immediate session, waiting for trigger to create profile...')
         } else {
           isAuthenticated = !!signInData.session
           currentSession = signInData.session
@@ -246,7 +245,6 @@ export default function Signup() {
 
       if (!profileExists) {
         // Try using the database function which bypasses RLS
-        console.log('Trigger did not create profile, using database function...')
         const { data: profileId, error: functionError } = await supabase
           .rpc('create_user_profile_safe', {
             p_user_id: authData.user.id,
@@ -266,7 +264,6 @@ export default function Signup() {
         }
 
         if (profileId) {
-          console.log('Profile created successfully via function, profile_id:', profileId)
           profileExists = true
         } else {
           // Function returned NULL, which means an error occurred
@@ -343,7 +340,6 @@ export default function Signup() {
 
         // We have authData.user.id, so we can proceed even without a session
         // The function will work with SECURITY DEFINER
-        console.log('Creating hospital via function...', { userId: authData.user.id, hasSession: !!currentSession })
         
         // Create hospital using the safe function (bypasses RLS)
         // We pass the user ID explicitly if needed, but the function should work with SECURITY DEFINER
@@ -358,7 +354,6 @@ export default function Signup() {
           console.error('Hospital creation error:', hospitalError)
           // If function doesn't exist, try direct insert as fallback
           if (hospitalError.message?.includes('does not exist') || hospitalError.code === '42883') {
-            console.log('Function not found, trying direct insert...')
             const { data: directInsert, error: directError } = await supabase
               .from('hospitals')
               .insert({
@@ -424,7 +419,6 @@ export default function Signup() {
         // Use function first (bypasses RLS), fallback to direct update
         let profileError: any = null
         
-        console.log('Updating profile to superadmin...', { userId: authData.user.id, hospitalId: finalHospital.id })
         
         // Try using function first (bypasses RLS)
         const { error: functionError } = await supabase
@@ -437,7 +431,6 @@ export default function Signup() {
           })
         
         if (functionError) {
-          console.log('Function update failed, trying direct update...', functionError)
           // Fallback to direct update
           const { error: directUpdateError } = await supabase
             .from('user_profiles')
@@ -453,10 +446,8 @@ export default function Signup() {
             profileError = directUpdateError
             console.error('Direct update also failed:', directUpdateError)
           } else {
-            console.log('Direct update succeeded')
           }
         } else {
-          console.log('Function update succeeded')
         }
 
         if (profileError) {

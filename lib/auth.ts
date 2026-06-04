@@ -22,7 +22,7 @@ export async function getUserProfile(userId?: string): Promise<UserProfile | nul
 
   // If that fails, try using the function that bypasses RLS
   if (error || !data) {
-    console.log('Direct query failed, trying function...', error)
+    console.error('[auth] Direct profile query failed, trying function:', error?.message)
     const { data: functionData, error: functionError } = await supabase
       .rpc('get_user_profile_safe', { p_user_id: targetUserId })
     

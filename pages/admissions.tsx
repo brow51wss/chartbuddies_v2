@@ -253,7 +253,6 @@ export default function Admissions() {
     }
 
     if (!refreshedProfile.hospital_id) {
-      console.log('Hospital ID missing, attempting to auto-fix...')
 
       try {
         const { data: existingHospitals, error: hospitalError } = await supabase
@@ -267,7 +266,6 @@ export default function Admissions() {
 
         if (existingHospitals && existingHospitals.length > 0) {
           hospitalId = existingHospitals[0].id
-          console.log('Found existing hospital:', existingHospitals[0].name)
         } else {
           const defaultHospitalName = refreshedProfile.full_name
             ? `${refreshedProfile.full_name}'s Hospital`
@@ -288,7 +286,6 @@ export default function Admissions() {
           }
 
           hospitalId = newHospital.id
-          console.log('Created default hospital:', defaultHospitalName)
         }
 
         const { error: updateError } = await supabase
@@ -309,7 +306,6 @@ export default function Admissions() {
         }
 
         refreshedProfile.hospital_id = updatedProfile.hospital_id
-        console.log('Successfully fixed hospital_id:', refreshedProfile.hospital_id)
       } catch (fixError: any) {
         console.error('Auto-fix failed:', fixError)
         setError(

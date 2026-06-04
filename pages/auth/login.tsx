@@ -61,7 +61,6 @@ export default function Login() {
       
       if (!functionError && functionProfile && functionProfile.length > 0) {
         profile = functionProfile[0]
-        console.log('Profile found via function')
       } else {
         // Fallback to regular query
         profile = await getCurrentUserProfile()
@@ -69,7 +68,6 @@ export default function Login() {
       
       // If profile still doesn't exist, try to create it
       if (!profile) {
-        console.log('Profile not found, attempting to create via function...')
         
         // Try using the database function first (bypasses RLS)
         const { data: profileId, error: createError } = await supabase
@@ -80,7 +78,6 @@ export default function Login() {
           })
         
         if (!createError && profileId) {
-          console.log('Profile created, fetching again...')
           // Wait a moment and fetch again
           await new Promise(resolve => setTimeout(resolve, 500))
           
@@ -96,7 +93,6 @@ export default function Login() {
         } else if (createError) {
           // If it's a duplicate key error, profile exists - fetch it
           if (createError.code === '23505' || createError.message?.includes('duplicate')) {
-            console.log('Profile already exists, fetching via function...')
             await new Promise(resolve => setTimeout(resolve, 500))
             
             const { data: existingProfile } = await supabase
