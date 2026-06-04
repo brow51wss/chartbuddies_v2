@@ -243,6 +243,13 @@ Merged from external `MAR_To-Do_List.md` (MAR + Patient Binder UX, Apr 22 / May 
 2. **TODO** — **Search + sort** for deleted patients (parity with active list patterns).
 3. **TODO** — **Strict delete/retention checks** for **custom legend** data before allowing deletion.
 
+#### Database cascade cleanup (Supabase)
+
+1. **TODO** — Add Supabase **database trigger** on `auth.users` DELETE to auto-delete: `user_profiles`, `signature_setup_tokens`, `facility_invites` (where `used_by` or `invited_email` matches).
+2. **TODO** — Add `ON DELETE CASCADE` to FK on `signature_setup_tokens.user_id` → `user_profiles.id`.
+3. **TODO** — **Soft-delete** `facility_invites` on user deletion (add `deleted_at` column; preserve row for audit history but filter from active queries). Do NOT hard cascade — audit trail of who was invited is worth keeping.
+4. **NOTE** — RDS PHI tables store Supabase user UUIDs (`nurse_id`, `recorded_by`, `signed_by`) but no FK bridge exists across databases — cleanup there requires application logic or a scheduled job.
+
 #### Testing & QA (team checklist)
 
 1. **TODO** — Repro **missing-note** bug: medication with **3 administration times** × **NG / DC / W / R** dropdowns (document findings).
