@@ -14,6 +14,9 @@ import { Pool, PoolClient, QueryResult } from 'pg'
 import { createClient } from '@supabase/supabase-js'
 import getConfig from 'next/config'
 
+// Allow self-signed / AWS-managed TLS certs in Lambda environments
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+
 // ---------------------------------------------------------------------------
 // Connection pool (singleton, reused across Lambda warm invocations)
 // ---------------------------------------------------------------------------
