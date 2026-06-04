@@ -95,19 +95,13 @@ export async function resolveCallerFromToken(
   }
   const token = authHeader.slice(7)
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  )
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  if (authError || !user) throw new Error('Invalid or expired token')
-
-  // Use service role to read user_profiles without RLS interference
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
+
+  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+  if (authError || !user) throw new Error('Invalid or expired token')
 
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('user_profiles')
