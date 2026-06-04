@@ -44,13 +44,13 @@ function getPool(): Pool {
 // Raw query helpers
 // ---------------------------------------------------------------------------
 
-export async function rdsQuery<T = any>(
+export async function rdsQuery(
   sql: string,
   params?: any[],
-): Promise<QueryResult<T>> {
+): Promise<QueryResult<any>> {
   const client = await getPool().connect()
   try {
-    return await client.query<T>(sql, params)
+    return await client.query(sql, params)
   } finally {
     client.release()
   }
