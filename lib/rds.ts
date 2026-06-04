@@ -95,10 +95,13 @@ export async function resolveCallerFromToken(
   }
   const token = authHeader.slice(7)
 
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl) throw new Error('NEXT_PUBLIC_SUPABASE_URL env var is not set')
+  if (!serviceRoleKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY env var is not set')
+
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
 
   const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
   if (authError || !user) throw new Error('Invalid or expired token')
