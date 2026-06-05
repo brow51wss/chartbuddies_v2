@@ -214,8 +214,8 @@ export default function EventPage() {
           </div>
         </section>
 
-        {/* Early Access / QR section */}
-        <section className="bg-white border-t border-gray-100 py-16 sm:py-20">
+        {/* Early Access / QR section — mobile only */}
+        <section className="lg:hidden bg-white border-t border-gray-100 py-16 sm:py-20">
           <div className="max-w-4xl mx-auto px-6 sm:px-10 lg:px-16">
 
             {/* Label */}
@@ -264,6 +264,24 @@ export default function EventPage() {
             </div>
           </div>
         </section>
+
+        {/* Fixed QR panel — desktop only */}
+        <div className="hidden lg:flex fixed right-6 top-1/2 -translate-y-1/2 z-40 flex-col items-center bg-lasso-navy rounded-2xl shadow-xl p-5 gap-4 w-56">
+          <span className="text-xs font-bold tracking-widest uppercase text-lasso-blue">Early Access</span>
+          <div className="bg-white rounded-xl p-2.5">
+            <img src={QR_URL} alt="QR Code" className="w-36 h-36 block" />
+          </div>
+          <div className="text-center">
+            <p className="text-white font-bold text-xs">Scan with your phone</p>
+            <p className="text-white/50 text-xs mt-1 leading-relaxed">Get free access starting next week</p>
+          </div>
+          <a
+            href={EARLY_ACCESS_URL}
+            className="text-xs text-lasso-teal/80 hover:text-lasso-teal underline underline-offset-2"
+          >
+            or visit the link
+          </a>
+        </div>
 
         {/* Footer */}
         <footer className="bg-white border-t border-gray-200">
