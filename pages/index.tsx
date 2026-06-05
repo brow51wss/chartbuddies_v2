@@ -51,14 +51,25 @@ export default function Home() {
         <header className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
             <Link href="/" className="flex items-center">
-              <img src="/images/icon-wordmark.webp" alt="Lasso" className="h-9 w-auto" />
+              <img src="/images/icon-wordmark.webp" alt="Lasso" className="h-10 w-auto" />
             </Link>
-            <a
-              href="/early-access"
-              className="px-5 py-2.5 bg-lasso-navy text-white text-sm font-semibold rounded-xl hover:bg-lasso-teal transition-colors"
-            >
-              Early Access
-            </a>
+            <nav className="flex items-center gap-4">
+              <a href="#features" className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-lasso-teal dark:hover:text-lasso-blue">Features</a>
+              <a href="#workflow" className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-lasso-teal dark:hover:text-lasso-blue">Workflow</a>
+              <a href="#security" className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-lasso-teal dark:hover:text-lasso-blue">Security</a>
+              <a
+                href={loginUrl}
+                className="px-4 py-2 bg-gradient-to-r from-lasso-navy to-lasso-teal text-white rounded-lg hover:from-lasso-teal hover:to-lasso-blue text-sm font-medium shadow-md transition-all duration-200"
+              >
+                Log in
+              </a>
+              <a
+                href={signupUrl}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
+              >
+                Get Started
+              </a>
+            </nav>
           </div>
         </header>
 
