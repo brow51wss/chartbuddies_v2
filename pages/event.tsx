@@ -1,26 +1,73 @@
 import Head from 'next/head'
-import Image from 'next/image'
 
 const EARLY_ACCESS_URL = 'https://www.lasso-app.com/early-access'
-const QR_URL = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(EARLY_ACCESS_URL)}&format=png&margin=12&color=142F61&bgcolor=ffffff`
+const QR_URL = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(EARLY_ACCESS_URL)}&format=png&margin=10&color=142F61&bgcolor=ffffff`
 
 const currentFeatures = [
-  { label: 'Digital Medication Administration Record (MAR)', desc: 'Replace paper MAR entirely — track every dose, time, and nurse initial' },
-  { label: 'Progress Notes with Digital Signatures', desc: 'Sign and lock notes from any browser — legally compliant documentation' },
-  { label: 'PRN (As-Needed) Medication Tracking', desc: 'Log PRN doses with timestamps, reasons, and outcomes' },
-  { label: 'Vital Signs Documentation', desc: 'Record vitals directly inside the patient chart' },
-  { label: 'Patient Profile Management', desc: 'Diagnoses, allergies, diet, physician, and facility details in one place' },
-  { label: 'HIPAA-Compliant from Day One', desc: 'PHI stored in encrypted AWS RDS — built to meet federal requirements' },
+  {
+    label: 'Digital MAR',
+    desc: 'Full medication schedule — track every dose, time, and nurse initial',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Progress Notes',
+    desc: 'Sign and lock clinical notes from any browser — legally compliant',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'PRN Tracking',
+    desc: 'Log as-needed meds with timestamps, reasons, and outcomes',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Vital Signs',
+    desc: 'Record vitals directly inside each patient chart',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Patient Profiles',
+    desc: 'Diagnoses, allergies, diet, physician, facility — all in one place',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'HIPAA-Compliant',
+    desc: 'PHI in encrypted AWS infrastructure — built to federal standards',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+      </svg>
+    ),
+  },
 ]
 
 const comingFeatures = [
   'Mobile app — document at the bedside',
-  'Monthly MAR duplication — carry forward medications automatically',
-  'Automated compliance reports & audit exports',
-  'Physician portal access',
+  'Auto-duplicate MAR month-to-month',
+  'Automated compliance & audit exports',
+  'Physician portal',
   'Family communication portal',
   'Pharmacy integration',
-  'Multi-facility management dashboard',
+  'Multi-facility dashboard',
 ]
 
 export default function EventPage() {
@@ -31,151 +78,106 @@ export default function EventPage() {
         <meta name="robots" content="noindex" />
       </Head>
 
-      <div
-        className="min-h-screen w-full flex flex-col"
-        style={{ backgroundColor: '#142F61', fontFamily: 'system-ui, -apple-system, sans-serif' }}
-      >
+      <div className="min-h-screen flex flex-col bg-white" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+
         {/* Header */}
-        <header className="flex items-center justify-between px-16 pt-10 pb-6">
-          <img src="/images/icon-wordmark.webp" alt="Lasso" style={{ height: 48, width: 'auto', filter: 'brightness(0) invert(1)' }} />
-          <div style={{ textAlign: 'right' }}>
-            <span style={{ color: '#00B6E2', fontWeight: 700, fontSize: 13, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-              Now Available
-            </span>
-            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 2 }}>
-              Designed for residential care homes
-            </p>
+        <header className="bg-white border-b border-gray-200 px-12 py-4 flex justify-between items-center flex-shrink-0">
+          <img src="/images/icon-wordmark.webp" alt="Lasso" className="h-10 w-auto" />
+          <div className="text-right">
+            <span className="text-xs font-bold tracking-widest uppercase text-lasso-teal">Now Available</span>
+            <p className="text-xs text-gray-500 mt-0.5">Purpose-built for residential care homes</p>
           </div>
         </header>
 
-        {/* Main content */}
-        <main className="flex-1 flex flex-row px-16 pb-10 gap-12">
+        {/* Main body */}
+        <main className="flex-1 flex min-h-0">
 
-          {/* Left column */}
-          <div className="flex-1 flex flex-col justify-between">
+          {/* Left panel — navy */}
+          <div className="flex-1 bg-lasso-navy flex flex-col justify-between px-14 py-10">
+
             {/* Headline */}
-            <div style={{ marginBottom: 32 }}>
-              <h1 style={{ color: '#ffffff', fontSize: 42, fontWeight: 800, lineHeight: 1.15, marginBottom: 12 }}>
+            <div>
+              <h1 className="text-4xl font-extrabold text-white leading-tight mb-4">
                 The Digital MAR Built for<br />
-                <span style={{ color: '#00B6E2' }}>Residential Care Homes</span>
+                <span className="text-lasso-blue">Residential Care Homes</span>
               </h1>
-              <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 16, maxWidth: 540, lineHeight: 1.6 }}>
-                Lasso replaces paper MAR and binders with a secure, HIPAA-compliant web app — purpose-built for care home nurses and administrators.
+              <p className="text-base text-white/60 max-w-lg leading-relaxed">
+                Lasso replaces paper binders with a secure, HIPAA-compliant EHR — progress notes, vital signs, and medication administration in one place.
               </p>
             </div>
 
-            {/* Current features */}
-            <div style={{ marginBottom: 28 }}>
-              <p style={{ color: '#00799E', fontWeight: 700, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 14 }}>
-                Available Today
-              </p>
-              <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+            {/* Available Today */}
+            <div className="flex-1 flex flex-col justify-center py-6">
+              <p className="text-xs font-bold tracking-widest uppercase text-lasso-teal mb-4">Available Today</p>
+              <div className="grid grid-cols-2 gap-4">
                 {currentFeatures.map((f) => (
-                  <div key={f.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                    <span style={{ color: '#00B6E2', fontSize: 16, marginTop: 1, flexShrink: 0 }}>✓</span>
+                  <div key={f.label} className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-lasso-teal/20 flex items-center justify-center text-lasso-blue flex-shrink-0 mt-0.5">
+                      {f.icon}
+                    </div>
                     <div>
-                      <p style={{ color: '#ffffff', fontSize: 13, fontWeight: 600, marginBottom: 1 }}>{f.label}</p>
-                      <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, lineHeight: 1.4 }}>{f.desc}</p>
+                      <p className="text-sm font-semibold text-white">{f.label}</p>
+                      <p className="text-xs text-white/45 leading-snug mt-0.5">{f.desc}</p>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Coming soon */}
-            <div
-              style={{
-                background: 'rgba(0,182,226,0.07)',
-                border: '1px solid rgba(0,182,226,0.2)',
-                borderRadius: 10,
-                padding: '14px 18px',
-              }}
-            >
-              <p style={{ color: '#00B6E2', fontWeight: 700, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10 }}>
-                Coming Soon
-              </p>
-              <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+            {/* Coming Soon */}
+            <div className="border border-lasso-teal/20 bg-lasso-teal/5 rounded-xl px-5 py-4">
+              <p className="text-xs font-bold tracking-widest uppercase text-lasso-blue mb-3">Coming Soon</p>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-1.5">
                 {comingFeatures.map((f) => (
-                  <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#00799E', flexShrink: 0 }} />
-                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>{f}</p>
+                  <div key={f} className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-lasso-teal flex-shrink-0" />
+                    <p className="text-xs text-white/55">{f}</p>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Right column — QR code */}
-          <div
-            style={{
-              width: 320,
-              flexShrink: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 20,
-            }}
-          >
-            <div
-              style={{
-                background: '#ffffff',
-                borderRadius: 16,
-                padding: 20,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 16,
-              }}
-            >
-              <div
-                style={{
-                  background: '#00B6E2',
-                  borderRadius: 8,
-                  padding: '6px 16px',
-                }}
-              >
-                <span style={{ color: '#142F61', fontWeight: 800, fontSize: 13, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                  Early Access
-                </span>
-              </div>
+          {/* Right panel — white, QR code */}
+          <div className="w-80 bg-gray-50 border-l border-gray-200 flex flex-col items-center justify-center px-8 py-10 flex-shrink-0 gap-6">
 
-              <img
-                src={QR_URL}
-                alt="QR Code"
-                style={{ width: 240, height: 240, display: 'block' }}
-              />
-
-              <div style={{ textAlign: 'center' }}>
-                <p style={{ color: '#142F61', fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
-                  Scan to register
-                </p>
-                <p style={{ color: '#5B5B5B', fontSize: 12, lineHeight: 1.5 }}>
-                  Get early access to Lasso<br />starting next week — free.
-                </p>
-              </div>
+            <div className="text-center">
+              <span className="inline-block bg-lasso-navy text-lasso-blue text-xs font-bold tracking-widest uppercase px-4 py-1.5 rounded-full mb-3">
+                Early Access
+              </span>
+              <p className="text-lasso-navy font-bold text-lg leading-snug">
+                Get free early access<br />starting next week
+              </p>
             </div>
 
-            <div style={{ textAlign: 'center' }}>
-              <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>
-                Or visit
+            <div className="bg-white rounded-2xl p-4 border border-gray-200">
+              <img
+                src={QR_URL}
+                alt="QR Code — scan to register"
+                className="w-56 h-56 block"
+              />
+            </div>
+
+            <div className="text-center">
+              <p className="text-sm font-semibold text-lasso-navy">Scan with your phone</p>
+              <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                Fill in your details and we&apos;ll reach out with access next week
               </p>
-              <p style={{ color: '#00B6E2', fontSize: 12, fontWeight: 600, marginTop: 2 }}>
-                lasso-app.com/early-access
-              </p>
+            </div>
+
+            <div className="text-center">
+              <p className="text-xs text-gray-400">Or visit</p>
+              <p className="text-xs font-semibold text-lasso-teal mt-0.5">lasso-app.com/early-access</p>
             </div>
           </div>
         </main>
 
         {/* Footer */}
-        <footer style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '12px 64px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11 }}>
-            HIPAA-Compliant · AWS Encrypted Storage · Built for Residential Care
-          </p>
-          <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11 }}>
-            lasso-app.com
-          </p>
+        <footer className="bg-white border-t border-gray-200 px-12 py-3 flex justify-between items-center flex-shrink-0">
+          <p className="text-xs text-gray-400">HIPAA-Compliant · AWS Encrypted Storage · Role-Based Access</p>
+          <p className="text-xs text-gray-400">lasso-app.com</p>
         </footer>
+
       </div>
     </>
   )
