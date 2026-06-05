@@ -297,7 +297,11 @@ export default function EventPage() {
               <a href="https://app.lasso-app.com/auth/login" className="text-gray-600 hover:text-lasso-teal">Log in</a>
             </nav>
           </div>
-          <p className="text-center text-xs text-gray-400 pb-6">© Lasso Health. All rights reserved.</p>
+          <p className="text-center text-xs text-gray-400 pb-2">© Lasso Health. All rights reserved.</p>
+          <div className="flex justify-center gap-6 text-xs text-gray-400 pb-6">
+            <a href="/privacy" className="hover:text-lasso-teal">Privacy Policy</a>
+            <a href="/terms" className="hover:text-lasso-teal">Terms of Service</a>
+          </div>
         </footer>
 
       </div>

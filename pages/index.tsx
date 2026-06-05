@@ -357,6 +357,10 @@ export default function Home() {
           <p className="mt-6 text-center text-xs text-gray-500 dark:text-gray-500">
             © Lasso Health. All rights reserved.
           </p>
+          <div className="mt-2 flex justify-center gap-6 text-xs text-gray-400 dark:text-gray-500">
+            <a href="/privacy" className="hover:text-lasso-teal dark:hover:text-lasso-blue">Privacy Policy</a>
+            <a href="/terms" className="hover:text-lasso-teal dark:hover:text-lasso-blue">Terms of Service</a>
+          </div>
         </footer>
       </div>
     </>
