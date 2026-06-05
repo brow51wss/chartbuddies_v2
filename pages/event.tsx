@@ -127,7 +127,7 @@ export default function EventPage() {
 
                 {/* Product preview label */}
                 <span className="absolute top-4 right-4 text-xs font-semibold tracking-widest uppercase text-gray-300">
-                  Product Preview
+                  PATIENT SUMMARY
                 </span>
 
                 {/* Card header */}
