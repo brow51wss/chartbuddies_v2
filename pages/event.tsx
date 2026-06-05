@@ -265,22 +265,19 @@ export default function EventPage() {
           </div>
         </section>
 
-        {/* Fixed QR panel — desktop only */}
-        <div className="hidden lg:flex fixed right-6 top-1/2 -translate-y-1/2 z-40 flex-col items-center bg-lasso-navy rounded-2xl shadow-xl p-5 gap-4 w-56">
-          <span className="text-xs font-bold tracking-widest uppercase text-lasso-blue">Early Access</span>
-          <div className="bg-white rounded-xl p-2.5">
-            <img src={QR_URL} alt="QR Code" className="w-36 h-36 block" />
+        {/* Fixed QR panel — desktop only, bottom right, horizontal */}
+        <div className="hidden lg:flex fixed bottom-6 right-6 z-40 flex-row items-center bg-lasso-navy rounded-2xl shadow-xl px-5 py-4 gap-4">
+          <div className="bg-white rounded-lg p-1.5 flex-shrink-0">
+            <img src={QR_URL} alt="QR Code" className="w-20 h-20 block" />
           </div>
-          <div className="text-center">
-            <p className="text-white font-bold text-xs">Scan with your phone</p>
-            <p className="text-white/50 text-xs mt-1 leading-relaxed">Get free access starting next week</p>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-bold tracking-widest uppercase text-lasso-blue">Early Access</span>
+            <p className="text-white font-bold text-sm">Scan with your phone</p>
+            <p className="text-white/50 text-xs leading-relaxed">Get free access starting next week</p>
+            <a href={EARLY_ACCESS_URL} className="text-xs text-lasso-teal/80 hover:text-lasso-teal underline underline-offset-2 mt-0.5">
+              or visit the link
+            </a>
           </div>
-          <a
-            href={EARLY_ACCESS_URL}
-            className="text-xs text-lasso-teal/80 hover:text-lasso-teal underline underline-offset-2"
-          >
-            or visit the link
-          </a>
         </div>
 
         {/* Footer */}
