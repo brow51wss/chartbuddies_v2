@@ -74,8 +74,8 @@ export default function TermsPage() {
               </p>
               <ul className="list-disc list-inside space-y-2 mb-3">
                 <li><strong>Superadmin</strong> — facility administrator with full access to manage patients, staff, and records</li>
-                <li><strong>Head Nurse</strong> — clinical lead with access to patient records and care documentation</li>
-                <li><strong>Nurse</strong> — care staff with access to documentation workflows within their facility</li>
+                <li><strong>Primary Caregiver</strong> — clinical lead with access to patient records and care documentation</li>
+                <li><strong>Substitute Caregiver</strong> — care staff with access to documentation workflows within their facility</li>
               </ul>
               <p>
                 You are responsible for maintaining the confidentiality of your login credentials. You must not share
