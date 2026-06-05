@@ -44,11 +44,11 @@ export default function EarlyAccessPage() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta property="og:title" content="Early Access — Lasso" />
         <meta property="og:description" content="Get free early access to Lasso, the digital MAR built for residential care homes." />
-        <meta property="og:image" content="https://www.lasso-app.com/Lasso-OpenGraph.jpg" />
+        <meta property="og:image" content="https://www.lasso-app.com/Lasso-OpenGraph2.jpg" />
         <meta property="og:url" content="https://www.lasso-app.com/early-access" />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:image" content="https://www.lasso-app.com/Lasso-OpenGraph.jpg" />
+        <meta name="twitter:image" content="https://www.lasso-app.com/Lasso-OpenGraph2.jpg" />
       </Head>
 
       <div
