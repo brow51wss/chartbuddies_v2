@@ -81,12 +81,14 @@ export default function EventPage() {
       <div className="min-h-screen flex flex-col bg-white" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-12 py-4 flex justify-between items-center flex-shrink-0">
-          <img src="/images/icon-wordmark.webp" alt="Lasso" className="h-10 w-auto" />
-          <div className="text-right">
-            <span className="text-xs font-bold tracking-widest uppercase text-lasso-teal">Now Available</span>
-            <p className="text-xs text-gray-500 mt-0.5">Purpose-built for residential care homes</p>
-          </div>
+        <header className="bg-white border-b border-gray-200 px-8 sm:px-12 py-4 flex justify-between items-center flex-shrink-0">
+          <img src="/images/icon-wordmark.webp" alt="Lasso" className="h-9 w-auto" />
+          <a
+            href="/early-access"
+            className="px-5 py-2.5 bg-lasso-navy text-white text-sm font-semibold rounded-xl hover:bg-lasso-teal transition-colors"
+          >
+            Early Access
+          </a>
         </header>
 
         {/* Main body */}
