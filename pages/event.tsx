@@ -1,7 +1,7 @@
 import Head from 'next/head'
 import Image from 'next/image'
 
-const EARLY_ACCESS_URL = 'https://app.lasso-app.com/early-access'
+const EARLY_ACCESS_URL = 'https://www.lasso-app.com/early-access'
 const QR_URL = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(EARLY_ACCESS_URL)}&format=png&margin=12&color=142F61&bgcolor=ffffff`
 
 const currentFeatures = [
@@ -161,7 +161,7 @@ export default function EventPage() {
                 Or visit
               </p>
               <p style={{ color: '#00B6E2', fontSize: 12, fontWeight: 600, marginTop: 2 }}>
-                app.lasso-app.com/early-access
+                lasso-app.com/early-access
               </p>
             </div>
           </div>
