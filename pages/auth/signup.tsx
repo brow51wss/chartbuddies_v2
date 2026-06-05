@@ -497,7 +497,7 @@ export default function Signup() {
         <title>Sign Up - Lasso</title>
       </Head>
       <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-8">
+        <div className="max-w-[800px] w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-8">
           {/* Logo inside the box */}
           <div className="mb-8 text-center">
             <img 
