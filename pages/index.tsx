@@ -45,6 +45,13 @@ export default function Home() {
       <Head>
         <title>Lasso | EHR for Care Teams</title>
         <meta name="description" content="Lasso is an electronic health record for care teams. Progress notes, vital signs, and medication administration in one place." />
+        <meta property="og:title" content="Lasso | EHR for Care Teams" />
+        <meta property="og:description" content="Progress notes, vital signs, and medication administration in one place — HIPAA-compliant EHR for care teams." />
+        <meta property="og:image" content="https://www.lasso-app.com/Lasso-OpenGraph.jpg" />
+        <meta property="og:url" content="https://www.lasso-app.com" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://www.lasso-app.com/Lasso-OpenGraph.jpg" />
       </Head>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         {/* Header */}

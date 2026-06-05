@@ -67,6 +67,13 @@ export default function EventPage() {
         <title>Lasso — Early Access</title>
         <meta name="robots" content="noindex" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta property="og:title" content="Lasso — Early Access" />
+        <meta property="og:description" content="The Digital MAR built for residential care homes. Get free early access starting next week." />
+        <meta property="og:image" content="https://www.lasso-app.com/Lasso-OpenGraph.jpg" />
+        <meta property="og:url" content="https://www.lasso-app.com/event" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://www.lasso-app.com/Lasso-OpenGraph.jpg" />
       </Head>
 
       <div className="min-h-screen flex flex-col bg-gray-50" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
