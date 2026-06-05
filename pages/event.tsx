@@ -1,5 +1,62 @@
 import Head from 'next/head'
 
+const availableFeatures = [
+  {
+    label: 'Digital MAR',
+    desc: 'Full medication schedule — track every dose, time, and nurse initial',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Progress Notes',
+    desc: 'Sign and lock clinical notes from any browser — legally compliant',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'PRN Tracking',
+    desc: 'Log as-needed meds with timestamps, reasons, and outcomes',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Vital Signs',
+    desc: 'Record vitals directly inside each patient chart',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Patient Profiles',
+    desc: 'Diagnoses, allergies, diet, physician, facility — all in one place',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'HIPAA-Compliant',
+    desc: 'PHI in encrypted AWS infrastructure — built to federal standards',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+      </svg>
+    ),
+  },
+]
+
 export default function EventPage() {
   return (
     <>
@@ -100,6 +157,27 @@ export default function EventPage() {
 
           </div>
         </main>
+
+        {/* Available Today */}
+        <section className="bg-white border-t border-gray-100 py-16 sm:py-20">
+          <div className="max-w-6xl mx-auto px-6 sm:px-10 lg:px-16">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-lasso-navy">Available Today</h2>
+              <div className="mt-3 mx-auto w-10 h-0.5 bg-lasso-teal rounded-full" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {availableFeatures.map((f) => (
+                <div key={f.label} className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                  <div className="w-10 h-10 rounded-lg bg-lasso-teal/10 flex items-center justify-center text-lasso-teal mb-4">
+                    {f.icon}
+                  </div>
+                  <p className="text-sm font-bold text-lasso-navy mb-1">{f.label}</p>
+                  <p className="text-sm text-gray-500 leading-relaxed">{f.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
       </div>
     </>
