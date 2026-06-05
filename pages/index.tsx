@@ -31,12 +31,25 @@ export default function Home() {
 
   if (checking) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center p-24">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto" />
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
-        </div>
-      </main>
+      <>
+        <Head>
+          <title>Lasso | EHR for Care Teams</title>
+          <meta name="description" content="Lasso is an electronic health record for care teams. Progress notes, vital signs, and medication administration in one place." />
+          <meta property="og:title" content="Lasso | EHR for Care Teams" />
+          <meta property="og:description" content="Progress notes, vital signs, and medication administration in one place — HIPAA-compliant EHR for care teams." />
+          <meta property="og:image" content="https://www.lasso-app.com/Lasso-OpenGraph.jpg" />
+          <meta property="og:url" content="https://www.lasso-app.com" />
+          <meta property="og:type" content="website" />
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:image" content="https://www.lasso-app.com/Lasso-OpenGraph.jpg" />
+        </Head>
+        <main className="flex min-h-screen flex-col items-center justify-center p-24">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lasso-navy mx-auto" />
+            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+          </div>
+        </main>
+      </>
     )
   }
 
@@ -372,4 +385,8 @@ export default function Home() {
       </div>
     </>
   )
+}
+
+export async function getStaticProps() {
+  return { props: {} }
 }
