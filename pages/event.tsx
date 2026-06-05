@@ -274,7 +274,7 @@ export default function EventPage() {
             <span className="text-xs font-bold tracking-widest uppercase text-lasso-blue">Early Access</span>
             <p className="text-white font-bold text-sm">Scan with your phone</p>
             <p className="text-white/50 text-xs leading-relaxed">Get free access starting next week</p>
-            <a href={EARLY_ACCESS_URL} className="text-xs text-lasso-teal/80 hover:text-lasso-teal underline underline-offset-2 mt-0.5">
+            <a href={EARLY_ACCESS_URL} className="text-xs text-lasso-blue hover:text-lasso-blue/80 underline underline-offset-2 mt-0.5">
               or visit the link
             </a>
           </div>
