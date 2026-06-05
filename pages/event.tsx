@@ -179,6 +179,31 @@ export default function EventPage() {
           </div>
         </section>
 
+        {/* Coming Soon */}
+        <section className="bg-gray-50 border-t border-gray-100 py-16 sm:py-20">
+          <div className="max-w-6xl mx-auto px-6 sm:px-10 lg:px-16">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-lasso-navy">Coming Soon</h2>
+              <div className="mt-3 mx-auto w-10 h-0.5 bg-lasso-teal rounded-full" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[
+                'Mobile app — document at the bedside',
+                'Auto-duplicate MAR month-to-month',
+                'Automated compliance & audit exports',
+                'Physician portal',
+                'Family communication portal',
+                'Pharmacy integration',
+              ].map((item) => (
+                <div key={item} className="bg-white border border-gray-200 rounded-xl px-5 py-4 flex items-center gap-3 shadow-sm">
+                  <span className="text-lasso-teal font-bold text-lg leading-none flex-shrink-0">+</span>
+                  <p className="text-sm text-gray-700">{item}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
       </div>
     </>
   )
