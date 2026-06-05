@@ -329,6 +329,8 @@ export function PatientProfileFormFields({
                         value={v.dateOfBirth}
                         onChange={onChange}
                         required={mode.type === 'full'}
+                        min="1900-01-01"
+                        max={new Date().toISOString().split('T')[0]}
                         className={`${patientProfileInputClass} min-w-0 w-full pr-8 ${highlightClass('dateOfBirth')}`}
                       />
                       <FieldCompleteCheck show={shouldShowCheck('dateOfBirth')} />

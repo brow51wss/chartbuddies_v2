@@ -101,7 +101,17 @@ export function validatePatientProfileWizardStep1Fields(v: PatientProfileFormVal
 
   if (!v.firstName.trim()) errors.firstName = 'First name is required.'
   if (!v.lastName.trim()) errors.lastName = 'Last name is required.'
-  if (!v.dateOfBirth) errors.dateOfBirth = 'Date of birth is required.'
+  if (!v.dateOfBirth) {
+    errors.dateOfBirth = 'Date of birth is required.'
+  } else {
+    const dobYear = new Date(v.dateOfBirth).getUTCFullYear()
+    const currentYear = new Date().getFullYear()
+    if (dobYear < 1900 || dobYear.toString().length > 4) {
+      errors.dateOfBirth = 'Please enter a valid year (1900 or later).'
+    } else if (dobYear > currentYear) {
+      errors.dateOfBirth = 'Date of birth cannot be in the future.'
+    }
+  }
   if (!v.sex) errors.sex = 'Sex is required.'
   if (!v.dateOfAdmission) errors.dateOfAdmission = 'Date of admission is required.'
   const state = v.state.trim().toUpperCase()
