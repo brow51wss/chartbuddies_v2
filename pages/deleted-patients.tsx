@@ -171,7 +171,7 @@ export default function DeletedPatientsPage() {
     try {
       await rdsPatchPatient(patientId, { deleted_at: null })
       setPatients((prev) => prev.filter((p) => p.id !== patientId))
-      setMessage(`"${patientName}" has been unarchived.`)
+      setMessage(`"${patientName}" has been restored.`)
       setTimeout(() => setMessage(''), 3000)
     } catch (err: any) {
       setError(err.message || 'Failed to restore patient')
@@ -391,7 +391,7 @@ export default function DeletedPatientsPage() {
                               disabled={restoringId === patient.id}
                               className="text-sm font-medium text-lasso-teal hover:text-lasso-blue dark:text-lasso-teal disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              {restoringId === patient.id ? 'Restoring...' : 'Unarchive'}
+                              {restoringId === patient.id ? 'Restoring...' : 'Rest'}
                             </button>
                           }
                         />
@@ -447,7 +447,7 @@ export default function DeletedPatientsPage() {
                                 disabled={restoringId === patient.id}
                                 className="text-sm font-medium text-lasso-teal hover:text-lasso-blue dark:text-lasso-teal disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                {restoringId === patient.id ? 'Restoring...' : 'Unarchive'}
+                                {restoringId === patient.id ? 'Restoring...' : 'Restore'}
                               </button>
                             </td>
                           </tr>
