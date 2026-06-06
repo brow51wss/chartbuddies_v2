@@ -17,6 +17,10 @@ import {
   rdsCreateProgressNote,
   rdsPatchProgressNote,
   rdsUpsertAdministration,
+  rdsGetProgressNoteSummary,
+  rdsGetLatestProgressNoteSummaryWeightUnit,
+  rdsUpsertProgressNoteSummary,
+  rdsPatchProgressNoteSummary,
 } from '../../../../lib/rdsApi'
 import { formatCalendarDate, localTodayYMD } from '../../../../lib/calendarDate'
 import { getCurrentUserProfile } from '../../../../lib/auth'
@@ -570,14 +574,11 @@ export default function ProgressNotesPage() {
     setSummaryLoading(true)
     const prevMonth = getPreviousMonthYear(summaryMonthYear)
     Promise.all([
-      supabase.from('progress_note_monthly_summaries').select('*').eq('patient_id', patientId).eq('month_year', summaryMonthYear).maybeSingle(),
-      supabase.from('progress_note_monthly_summaries').select('*').eq('patient_id', patientId).eq('month_year', prevMonth).maybeSingle(),
-      supabase.from('progress_note_monthly_summaries').select('weight_unit').eq('patient_id', patientId).order('month_year', { ascending: false }).limit(1).maybeSingle()
-    ]).then(([currentRes, previousRes, latestRes]) => {
+      rdsGetProgressNoteSummary(patientId, summaryMonthYear),
+      rdsGetProgressNoteSummary(patientId, prevMonth),
+      rdsGetLatestProgressNoteSummaryWeightUnit(patientId),
+    ]).then(([data, previous, latest]) => {
       setSummaryLoading(false)
-      const data = currentRes.data as ProgressNoteMonthlySummary | null
-      const previous = previousRes.data as ProgressNoteMonthlySummary | null
-      const latest = latestRes.data as { weight_unit?: string } | null
       const defaultWeightUnit = (latest?.weight_unit && (latest.weight_unit === 'kg' || latest.weight_unit === 'lbs')) ? latest.weight_unit : 'lbs'
       setSummary(data)
       summaryRef.current = data
@@ -619,40 +620,30 @@ export default function ProgressNotesPage() {
     const existing = summaryRef.current
     setSummarySaving(true)
     setError('')
-    const { id: _id, created_by: _cb, created_at: _ca, updated_at: _ua, ...rest } = form
-    const payload = {
-      patient_id: patientId,
-      month_year: summaryMonthYear,
-      ...rest,
-      updated_at: new Date().toISOString()
-    }
-    if (existing?.id) {
-      const { data, error: updateError } = await supabase
-        .from('progress_note_monthly_summaries')
-        .update(payload)
-        .eq('id', existing.id)
-        .select()
-        .single()
-      if (!updateError && data) {
-        setSummary(data as ProgressNoteMonthlySummary)
-        summaryRef.current = data as ProgressNoteMonthlySummary
+    try {
+      const { id: _id, created_by: _cb, created_at: _ca, updated_at: _ua, ...rest } = form
+      const payload = {
+        patient_id: patientId,
+        month_year: summaryMonthYear,
+        ...rest,
       }
-      if (updateError) setError(updateError.message)
-    } else {
-      const { data, error: insertError } = await supabase
-        .from('progress_note_monthly_summaries')
-        .insert({ ...payload, created_by: userProfile.id })
-        .select()
-        .single()
-      if (!insertError && data) {
-        setSummary(data as ProgressNoteMonthlySummary)
-        summaryRef.current = data as ProgressNoteMonthlySummary
+      let saved: any
+      if (existing?.id) {
+        saved = await rdsPatchProgressNoteSummary(existing.id, payload)
+      } else {
+        saved = await rdsUpsertProgressNoteSummary({ ...payload, created_by: userProfile.id })
       }
-      if (insertError) setError(insertError.message)
+      if (saved) {
+        setSummary(saved as ProgressNoteMonthlySummary)
+        summaryRef.current = saved as ProgressNoteMonthlySummary
+      }
+      setMessage('Saved')
+      setTimeout(() => setMessage(''), 2000)
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to save summary')
+    } finally {
+      setSummarySaving(false)
     }
-    setSummarySaving(false)
-    setMessage('Saved')
-    setTimeout(() => setMessage(''), 2000)
   }
 
   const SUMMARY_DEBOUNCE_MS = 600

@@ -199,6 +199,64 @@ export async function rdsDeletePrnRecord(prnRecordId: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Nurse Patient Assignments
+// ---------------------------------------------------------------------------
+
+export async function rdsListNurseAssignments(params: { nurse_id?: string; patient_id?: string }): Promise<any[]> {
+  const qs = params.patient_id
+    ? `patient_id=${params.patient_id}`
+    : `nurse_id=${params.nurse_id}`
+  return rdsApiFetch(`/api/rds/nurse-assignments?${qs}`)
+}
+
+export async function rdsCreateNurseAssignment(body: {
+  nurse_id: string
+  patient_id: string
+  assigned_by: string
+  is_active?: boolean
+}): Promise<any> {
+  return rdsApiFetch('/api/rds/nurse-assignments', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Progress Note Monthly Summaries
+// ---------------------------------------------------------------------------
+
+export async function rdsGetProgressNoteSummary(
+  patientId: string,
+  monthYear: string,
+): Promise<any | null> {
+  return rdsApiFetch(
+    `/api/rds/progress-note-summaries?patient_id=${patientId}&month_year=${encodeURIComponent(monthYear)}`,
+  )
+}
+
+export async function rdsGetLatestProgressNoteSummaryWeightUnit(
+  patientId: string,
+): Promise<{ weight_unit?: string } | null> {
+  return rdsApiFetch(
+    `/api/rds/progress-note-summaries?patient_id=${patientId}&latest_weight_unit=true`,
+  )
+}
+
+export async function rdsUpsertProgressNoteSummary(body: Record<string, any>): Promise<any> {
+  return rdsApiFetch('/api/rds/progress-note-summaries', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function rdsPatchProgressNoteSummary(id: string, body: Record<string, any>): Promise<any> {
+  return rdsApiFetch(`/api/rds/progress-note-summaries/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Progress Notes
 // ---------------------------------------------------------------------------
 

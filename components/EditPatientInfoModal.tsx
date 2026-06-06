@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { rdsGetPatient } from '../lib/rdsApi'
 import { computeAgeFromISODate } from '../lib/patientName'
 import type { Patient } from '../types/auth'
 import {
@@ -198,13 +198,7 @@ export default function EditPatientInfoModal({
 
     void (async () => {
       try {
-        const { data, error } = await supabase
-          .from('patients')
-          .select('*')
-          .eq('id', patientId)
-          .single()
-
-        if (error) throw error
+        const data = await rdsGetPatient(patientId)
         if (!data) throw new Error('Patient not found')
         if (cancelled) return
 

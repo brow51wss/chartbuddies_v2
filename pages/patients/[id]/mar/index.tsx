@@ -63,7 +63,7 @@ export default function MARIndex() {
         status: 'active',
       })
 
-      await ensureProgressNoteSummaryForMonth(supabase, patientId, monthYear, profile.id)
+      await ensureProgressNoteSummaryForMonth(patientId, monthYear, profile.id)
 
       router.push(`/patients/${patientId}/mar/${newForm.id}`)
     } catch (err: any) {

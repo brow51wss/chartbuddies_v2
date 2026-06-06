@@ -193,7 +193,7 @@ export default function NewMARForm() {
         vital_signs_instructions: vitalSignsInstructions || null,
       })
 
-      await ensureProgressNoteSummaryForMonth(supabase, patient.id, patientInfo.monthYear, userProfile.id)
+      await ensureProgressNoteSummaryForMonth(patient.id, patientInfo.monthYear, userProfile.id)
 
       for (const med of medications) {
         if (!med.medicationName || !med.dosage || !med.startDate || !med.hour) continue

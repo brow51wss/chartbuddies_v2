@@ -1,6 +1,6 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { rdsGetProgressNoteSummary, rdsUpsertProgressNoteSummary } from './rdsApi'
 
-/** Normalize MAR-style month/year (e.g. "February 2026", "2026-02") to YYYY-MM for progress_note_monthly_summaries. */
+/** Normalize MAR-style month/year (e.g. "February 2026", "2026-02") to YYYY-MM. */
 export function monthYearToYYYYMM(monthYear: string): string | null {
   const raw = String(monthYear || '').trim().replace(/\//g, '-')
   const parts = raw.split('-').map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n))
@@ -14,7 +14,7 @@ export function monthYearToYYYYMM(monthYear: string): string | null {
   }
   const months: Record<string, number> = {
     january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
-    july: 7, august: 8, september: 9, october: 10, november: 11, december: 12
+    july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
   }
   const lower = raw.toLowerCase()
   for (const [name, num] of Object.entries(months)) {
@@ -27,26 +27,22 @@ export function monthYearToYYYYMM(monthYear: string): string | null {
   return null
 }
 
-/** Ensure a progress_note_monthly_summary exists for this patient + month (e.g. when a MAR is created). */
+/**
+ * Ensure a progress_note_monthly_summary exists for this patient + month.
+ * Called when a MAR is created/opened so the Page 2 record is pre-seeded.
+ */
 export async function ensureProgressNoteSummaryForMonth(
-  supabase: SupabaseClient,
   patientId: string,
   monthYear: string,
-  createdBy: string
+  createdBy: string,
 ): Promise<void> {
   const monthKey = monthYearToYYYYMM(monthYear)
   if (!monthKey) return
-  const { data: existing } = await supabase
-    .from('progress_note_monthly_summaries')
-    .select('id')
-    .eq('patient_id', patientId)
-    .eq('month_year', monthKey)
-    .limit(1)
-    .maybeSingle()
+  const existing = await rdsGetProgressNoteSummary(patientId, monthKey)
   if (existing) return
-  await supabase.from('progress_note_monthly_summaries').insert({
+  await rdsUpsertProgressNoteSummary({
     patient_id: patientId,
     month_year: monthKey,
-    created_by: createdBy
+    created_by: createdBy,
   })
 }

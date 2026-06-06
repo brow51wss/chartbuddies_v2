@@ -4,6 +4,7 @@ import Head from 'next/head'
 import ProtectedRoute from '../components/ProtectedRoute'
 import AppHeader from '../components/AppHeader'
 import { supabase } from '../lib/supabase'
+import { rdsCreatePatient, rdsCreateNurseAssignment } from '../lib/rdsApi'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
 import {
   PATIENT_PROFILE_FIELD_IDS,
@@ -370,25 +371,16 @@ export default function Admissions() {
         row.patient_photo = admissionPatientPhoto
       }
 
-      const { data, error: insertError } = await supabase.from('patients').insert([row]).select()
+      const newPatient = await rdsCreatePatient(row)
 
-      if (insertError) {
-        if (
-          insertError.message?.includes('column') &&
-          (insertError.message?.includes('does not exist') || insertError.code === 'PGRST204')
-        ) {
-          setError(
-            'Database is missing patient contact columns. Apply migration `067_add_patient_contact_and_admission.sql` (or run latest Supabase migrations), then try again.'
-          )
-          return
-        }
-        throw insertError
+      if (!newPatient?.id) {
+        throw new Error('Patient was created but no ID was returned.')
       }
 
-      if (activeProfile.role === 'nurse' && data?.[0]?.id) {
-        await supabase.from('nurse_patient_assignments').insert({
+      if (activeProfile.role === 'nurse' && newPatient.id) {
+        await rdsCreateNurseAssignment({
           nurse_id: activeProfile.id,
-          patient_id: data[0].id,
+          patient_id: newPatient.id,
           assigned_by: activeProfile.id,
         })
       }

@@ -315,7 +315,7 @@ export default function PatientForms() {
         physician_phone: sourceForm?.physician_phone || patient.physician_phone || null,
       })
 
-      await ensureProgressNoteSummaryForMonth(supabase, patient.id, monthYear, profile.id)
+      await ensureProgressNoteSummaryForMonth(patient.id, monthYear, profile.id)
 
       // Create medications from the duplicate list
       for (const med of medicationsToDuplicate) {
