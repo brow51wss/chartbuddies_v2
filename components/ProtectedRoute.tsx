@@ -18,11 +18,11 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
       try {
         const profile = await getCurrentUserProfile()
         if (!profile) {
-          router.push('/auth/login')
+          window.location.replace('/auth/login')
           return
         }
         if (allowedRoles && !allowedRoles.includes(profile.role)) {
-          router.push('/dashboard')
+          window.location.replace('/dashboard')
           return
         }
         setUserProfile(profile)

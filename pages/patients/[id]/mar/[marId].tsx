@@ -878,6 +878,7 @@ export default function ViewMARForm() {
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (readOnly) return // No unsaved changes in read-only
+      if (!userProfile) return // Not authenticated — don't block navigation
       e.preventDefault()
       e.returnValue = '' // Chrome requires returnValue to be set
       return '' // Some browsers require return value
@@ -909,13 +910,15 @@ export default function ViewMARForm() {
       window.removeEventListener('beforeunload', handleBeforeUnload)
       window.removeEventListener('popstate', handlePopState)
     }
-  }, [readOnly])
+  }, [readOnly, userProfile])
 
   // Handle Next.js router navigation
   useEffect(() => {
     const handleRouteChangeStart = (url: string) => {
       // Don't show modal if navigating to the same page
       if (url === router.asPath) return
+      // Always allow navigation to auth routes (unauthenticated redirect)
+      if (url.startsWith('/auth/')) return
       // In read-only, allow navigation without confirmation
       if (readOnly) return
       
