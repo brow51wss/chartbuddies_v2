@@ -391,7 +391,7 @@ export default function DeletedPatientsPage() {
                               disabled={restoringId === patient.id}
                               className="text-sm font-medium text-lasso-teal hover:text-lasso-blue dark:text-lasso-teal disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              {restoringId === patient.id ? 'Restoring...' : 'Rest'}
+                              {restoringId === patient.id ? 'Restoring...' : 'Restore'}
                             </button>
                           }
                         />
