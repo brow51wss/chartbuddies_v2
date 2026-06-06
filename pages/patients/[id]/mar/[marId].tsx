@@ -6375,6 +6375,7 @@ function AddMedicationOrVitalsForm({
   isEditMode = false,
   dateMin,
   dateMax,
+  stopDateMax,
 }: { 
   onSubmit: (data: {
     type: 'medication' | 'vitals'
@@ -6425,6 +6426,8 @@ function AddMedicationOrVitalsForm({
   isEditMode?: boolean
   dateMin?: string
   dateMax?: string
+  /** Max allowed for the stop date. If omitted, stop date has no upper bound (any future month is valid). */
+  stopDateMax?: string
 }) {
   const [entryType, setEntryType] = useState<'medication' | 'vitals'>(
     isEditMode && editData ? (editData.isVitals ? 'vitals' : 'medication') : defaultType
@@ -6689,7 +6692,7 @@ function AddMedicationOrVitalsForm({
                 value={medicationData.stopDate}
                 onChange={(e) => setMedicationData({ ...medicationData, stopDate: e.target.value })}
                 min={dateMin}
-                max={dateMax}
+                max={stopDateMax}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
@@ -6841,7 +6844,7 @@ function AddMedicationOrVitalsForm({
                 value={vitalsData.stopDate}
                 onChange={(e) => setVitalsData({ ...vitalsData, stopDate: e.target.value })}
                 min={dateMin}
-                max={dateMax}
+                max={stopDateMax}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
