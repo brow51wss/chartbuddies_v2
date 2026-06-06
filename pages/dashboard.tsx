@@ -331,6 +331,24 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* Onboarding reminder for nurses who skipped signature setup */}
+          {userProfile?.role === 'nurse' && (!userProfile?.staff_signature || !userProfile?.staff_initials) && (
+            <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 rounded-md shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-amber-900 dark:text-amber-200">Action required: Complete your account setup</p>
+                <p className="text-sm text-amber-800 dark:text-amber-300 mt-0.5">
+                  Your signature and initials are required to sign MAR records and document care. You won&apos;t be able to record any medication administrations until this is done.
+                </p>
+              </div>
+              <Link
+                href="/onboarding"
+                className="flex-shrink-0 inline-block bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+              >
+                Set Up Now
+              </Link>
+            </div>
+          )}
+
           {/* Patient list (default dashboard view) */}
           <div>
             <div className="mb-6 flex flex-wrap items-end justify-between gap-4">

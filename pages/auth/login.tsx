@@ -17,11 +17,15 @@ export default function Login() {
   const loginInFlightRef = useRef(false)
 
   useEffect(() => {
-    // Redirect if already logged in
+      // Redirect if already logged in
     const checkSession = async () => {
       const profile = await getCurrentUserProfile()
       if (profile) {
-        router.push('/dashboard')
+        if (profile.role === 'nurse' && (!profile.staff_signature || !profile.staff_initials)) {
+          router.push('/onboarding')
+        } else {
+          router.push('/dashboard')
+        }
       }
     }
     checkSession()
@@ -119,7 +123,11 @@ export default function Login() {
             }
           })
         }
-        router.push('/dashboard')
+        if (profile.role === 'nurse' && (!profile.staff_signature || !profile.staff_initials)) {
+          router.push('/onboarding')
+        } else {
+          router.push('/dashboard')
+        }
       } else {
         setError('User profile not found. Please contact administrator.')
       }

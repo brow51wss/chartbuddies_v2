@@ -25,13 +25,19 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
           window.location.replace('/dashboard')
           return
         }
+        // Nurses who haven't set up signature must complete onboarding first
+        const onOnboardingPage = router.pathname === '/onboarding'
+        if (!onOnboardingPage && profile.role === 'nurse' && (!profile.staff_signature || !profile.staff_initials)) {
+          window.location.replace('/onboarding')
+          return
+        }
         setUserProfile(profile)
       } finally {
         setLoading(false)
       }
     }
     checkAuth()
-  }, [router, allowedRoles])
+  }, [router.pathname, allowedRoles])
 
   if (loading) {
     return (
