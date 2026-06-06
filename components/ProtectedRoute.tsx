@@ -15,17 +15,20 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
 
   useEffect(() => {
     const checkAuth = async () => {
-      const profile = await getCurrentUserProfile()
-      if (!profile) {
-        router.push('/auth/login')
-        return
+      try {
+        const profile = await getCurrentUserProfile()
+        if (!profile) {
+          router.push('/auth/login')
+          return
+        }
+        if (allowedRoles && !allowedRoles.includes(profile.role)) {
+          router.push('/dashboard')
+          return
+        }
+        setUserProfile(profile)
+      } finally {
+        setLoading(false)
       }
-      if (allowedRoles && !allowedRoles.includes(profile.role)) {
-        router.push('/dashboard')
-        return
-      }
-      setUserProfile(profile)
-      setLoading(false)
     }
     checkAuth()
   }, [router, allowedRoles])
