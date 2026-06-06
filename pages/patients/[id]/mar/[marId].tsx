@@ -2382,8 +2382,17 @@ export default function ViewMARForm() {
       
       // Delete the medication entry (CASCADE on RDS will remove administrations)
       await rdsDeleteMarMedication(medId)
-      
-      // Reload the form to reflect changes
+
+      // Optimistically remove from local state immediately so the row disappears
+      // even if the subsequent reload has a slight delay
+      setMedications((prev) => prev.filter((m) => m.id !== medId))
+      setAdministrations((prev) => {
+        const next = { ...prev }
+        delete next[medId]
+        return next
+      })
+
+      // Reload the form to sync full server state
       await loadMARForm()
       
       setMessage('Entry deleted successfully!')
@@ -6500,13 +6509,21 @@ function AddMedicationOrVitalsForm({
           return
         }
       }
-      // No longer validating initials/legend - they are optional
+      // Stop date cannot be before start date
+      if (medicationData.stopDate && medicationData.startDate && medicationData.stopDate < medicationData.startDate) {
+        alert('Stop date cannot be before the start date.')
+        return
+      }
     } else {
       if (!vitalsData.notes.trim() || !vitalsData.startDate) {
         alert('Please fill in all required fields')
         return
       }
-      // Times are optional for vitals - no validation needed
+      // Stop date cannot be before start date (vitals)
+      if (vitalsData.stopDate && vitalsData.startDate && vitalsData.stopDate < vitalsData.startDate) {
+        alert('Stop date cannot be before the start date.')
+        return
+      }
     }
 
     setIsSubmitting(true)
