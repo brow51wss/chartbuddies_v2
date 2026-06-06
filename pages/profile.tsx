@@ -344,19 +344,7 @@ export default function Profile() {
                 )}
               </div>
 
-              {/* Role (Read-only) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Role
-                </label>
-                <input
-                  type="text"
-                  value={userProfile?.role?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) || ''}
-                  disabled
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 dark:bg-gray-700 dark:border-gray-600 dark:text-white cursor-not-allowed"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Role is managed by administrators</p>
-              </div>
+              {/* Role hidden from view */}
 
               {/* Facility (Read-only) - assigned via your account */}
               <div>
