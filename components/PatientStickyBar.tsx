@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { formatCalendarDate } from '../lib/calendarDate'
 import { parsePatientNameParts, computeAgeFromISODate } from '../lib/patientName'
-import { supabase } from '../lib/supabase'
+import { rdsGetPatient } from '../lib/rdsApi'
 import type { Patient } from '../types/auth'
 
 const TOGGLE_PATIENT_STICKY_BAR_EVENT = 'lasso:toggle-patient-sticky-bar'
@@ -94,13 +94,7 @@ export default function PatientStickyBar({
 
     void (async () => {
       try {
-        const { data, error } = await supabase
-          .from('patients')
-          .select('*')
-          .eq('id', patientId)
-          .single()
-
-        if (error) throw error
+        const data = await rdsGetPatient(patientId)
         if (!cancelled) setPatientDetails((data as Patient) ?? null)
       } catch (err) {
         if (!cancelled) {
