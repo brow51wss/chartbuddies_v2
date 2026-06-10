@@ -80,12 +80,20 @@ function InitialsOrSignatureDisplay({
     : value.startsWith('data:image') ? value : null
   if (imgSrc) {
     return (
-      <img
-        src={imgSrc}
-        alt={variant === 'initials' ? 'Initials' : 'Signature'}
-        className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
-        style={{ maxHeight: '3em', maxWidth: '7em', verticalAlign: 'middle', display: 'inline-block' }}
-      />
+      <>
+        <img
+          src={imgSrc}
+          alt={variant === 'initials' ? 'Initials' : 'Signature'}
+          className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
+          style={{ maxHeight: '3em', maxWidth: '7em', verticalAlign: 'middle', display: 'inline-block' }}
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+            const fb = e.currentTarget.nextSibling as HTMLElement
+            if (fb) fb.style.removeProperty('display')
+          }}
+        />
+        <span style={{ display: 'none' }} className="text-xs italic text-gray-400">—</span>
+      </>
     )
   }
 
@@ -101,12 +109,20 @@ function InitialsOrSignatureDisplay({
     if (drawnField?.startsWith('s3:')) {
       const drawnSrc = `/api/signature-image?key=${encodeURIComponent(drawnField.slice(3))}`
       return (
-        <img
-          src={drawnSrc}
-          alt={variant === 'initials' ? 'Initials' : 'Signature'}
-          className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
-          style={{ maxHeight: '3em', maxWidth: '7em', verticalAlign: 'middle', display: 'inline-block' }}
-        />
+        <>
+          <img
+            src={drawnSrc}
+            alt={variant === 'initials' ? 'Initials' : 'Signature'}
+            className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
+            style={{ maxHeight: '3em', maxWidth: '7em', verticalAlign: 'middle', display: 'inline-block' }}
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+              const fb = e.currentTarget.nextSibling as HTMLElement
+              if (fb) fb.style.removeProperty('display')
+            }}
+          />
+          <span style={{ display: 'none' }} className="text-xs italic text-gray-400">—</span>
+        </>
       )
     }
     if (drawnField?.startsWith('data:image')) {

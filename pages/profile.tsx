@@ -267,7 +267,17 @@ export default function Profile() {
                       return imgSrc ? (
                         <div>
                           <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current signature</span>
-                          <img src={imgSrc} alt="Your signature" className="max-h-14 rounded bg-white dark:bg-gray-700" />
+                          <img
+                            src={imgSrc}
+                            alt="Your signature"
+                            className="max-h-14 rounded bg-white dark:bg-gray-700"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              const fb = e.currentTarget.nextSibling as HTMLElement
+                              if (fb) fb.style.removeProperty('display')
+                            }}
+                          />
+                          <span style={{ display: 'none' }} className="text-xs italic text-gray-400">Signature on file</span>
                         </div>
                       ) : (
                         <div>
@@ -285,7 +295,17 @@ export default function Profile() {
                       return imgSrc ? (
                         <div>
                           <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current initials</span>
-                          <img src={imgSrc} alt="Your initials" className="max-h-10 rounded bg-white dark:bg-gray-700" />
+                          <img
+                            src={imgSrc}
+                            alt="Your initials"
+                            className="max-h-10 rounded bg-white dark:bg-gray-700"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              const fb = e.currentTarget.nextSibling as HTMLElement
+                              if (fb) fb.style.removeProperty('display')
+                            }}
+                          />
+                          <span style={{ display: 'none' }} className="text-xs italic text-gray-400">Initials on file</span>
                         </div>
                       ) : (
                         <div>

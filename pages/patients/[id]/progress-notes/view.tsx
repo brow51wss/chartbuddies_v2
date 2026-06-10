@@ -85,12 +85,20 @@ function InitialsOrSignatureDisplay({
     : value.startsWith('data:image') ? value : null
   if (imgSrc) {
     return (
-      <img
-        src={imgSrc}
-        alt={variant === 'initials' ? 'Initials' : 'Signature'}
-        className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
-        style={{ maxHeight: variant === 'initials' ? '1.25em' : '2.5em', maxWidth: variant === 'initials' ? '3em' : '12em', verticalAlign: 'middle', display: 'inline-block' }}
-      />
+      <>
+        <img
+          src={imgSrc}
+          alt={variant === 'initials' ? 'Initials' : 'Signature'}
+          className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
+          style={{ maxHeight: variant === 'initials' ? '1.25em' : '2.5em', maxWidth: variant === 'initials' ? '3em' : '12em', verticalAlign: 'middle', display: 'inline-block' }}
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+            const fb = e.currentTarget.nextSibling as HTMLElement
+            if (fb) fb.style.removeProperty('display')
+          }}
+        />
+        <span style={{ display: 'none' }} className="text-xs italic text-gray-400">—</span>
+      </>
     )
   }
   return <span className={`lasso-signature-mark lasso-signature-mark--plain lasso-signature-mark--${variant}`}>{value}</span>
