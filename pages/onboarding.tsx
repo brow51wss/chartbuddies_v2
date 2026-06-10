@@ -1,44 +1,22 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile } from '../lib/auth'
-import SignaturePad from '../components/SignaturePad'
 
-type Step = 'welcome' | 'signature' | 'initials' | 'done'
+type Step = 'welcome' | 'sent' | 'done'
 
-function usePadSize() {
-  const getSize = useCallback(() => {
-    if (typeof window === 'undefined') return { sigW: 380, sigH: 160, iniW: 240, iniH: 100 }
-    const w = Math.min(window.innerWidth * 0.88, 480)
-    return {
-      sigW: Math.round(w),
-      sigH: Math.round((160 / 380) * w),
-      iniW: Math.round(w * 0.6),
-      iniH: Math.round((100 / 240) * w * 0.6)
-    }
-  }, [])
-  const [size, setSize] = useState(getSize)
-  useEffect(() => {
-    setSize(getSize())
-    const onResize = () => setSize(getSize())
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [getSize])
-  return size
-}
-
-const STEPS: Step[] = ['welcome', 'signature', 'initials', 'done']
+const STEPS: Step[] = ['welcome', 'sent', 'done']
+const STEP_LABELS = ['Welcome', 'Setup', 'Done']
 
 function StepIndicator({ current }: { current: Step }) {
-  const labels = ['Welcome', 'Signature', 'Initials', 'Done']
   const activeIdx = STEPS.indexOf(current)
   return (
-    <div className="flex items-center justify-center gap-0 mb-8">
-      {labels.map((label, i) => (
+    <div className="flex items-center justify-center mb-8">
+      {STEP_LABELS.map((label, i) => (
         <div key={label} className="flex items-center">
           <div className="flex flex-col items-center">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold border-2 transition-all ${
@@ -50,12 +28,12 @@ function StepIndicator({ current }: { current: Step }) {
             }`}>
               {i < activeIdx ? '✓' : i + 1}
             </div>
-            <span className={`text-xs mt-1 font-medium ${i === activeIdx ? 'text-lasso-navy' : i < activeIdx ? 'text-lasso-navy' : 'text-gray-400'}`}>
+            <span className={`text-xs mt-1 font-medium ${i <= activeIdx ? 'text-lasso-navy' : 'text-gray-400'}`}>
               {label}
             </span>
           </div>
-          {i < labels.length - 1 && (
-            <div className={`w-10 sm:w-16 h-0.5 mb-5 mx-1 transition-all ${i < activeIdx ? 'bg-lasso-navy' : 'bg-gray-200'}`} />
+          {i < STEP_LABELS.length - 1 && (
+            <div className={`w-12 sm:w-20 h-0.5 mb-5 mx-1 transition-all ${i < activeIdx ? 'bg-lasso-navy' : 'bg-gray-200'}`} />
           )}
         </div>
       ))}
@@ -65,15 +43,13 @@ function StepIndicator({ current }: { current: Step }) {
 
 export default function Onboarding() {
   const router = useRouter()
-  const padSize = usePadSize()
-
   const [pageLoading, setPageLoading] = useState(true)
-  const [userId, setUserId] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState('')
   const [step, setStep] = useState<Step>('welcome')
-  const [signatureDataUrl, setSignatureDataUrl] = useState('')
-  const [initialsDataUrl, setInitialsDataUrl] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState('')
+  const [checking, setChecking] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -86,62 +62,62 @@ export default function Onboarding() {
         window.location.replace('/dashboard')
         return
       }
-      setUserId(profile.id)
+      setUserEmail(profile.email)
       setPageLoading(false)
     }
     checkAuth()
   }, [])
 
-  const handleUploadAndSave = async () => {
-    if (!signatureDataUrl) { setError('Please draw your signature first.'); return }
-    if (!initialsDataUrl) { setError('Please draw your initials first.'); return }
-    setSaving(true)
-    setError('')
+  // Auto-poll every 5s while on the 'sent' step
+  useEffect(() => {
+    if (step !== 'sent') {
+      if (pollRef.current) clearInterval(pollRef.current)
+      return
+    }
+    pollRef.current = setInterval(async () => {
+      const profile = await getCurrentUserProfile()
+      if (profile?.staff_signature && profile?.staff_initials) {
+        if (pollRef.current) clearInterval(pollRef.current)
+        setStep('done')
+      }
+    }, 5000)
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [step])
+
+  const handleSendEmail = async () => {
+    setSending(true)
+    setSendError('')
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token
       if (!token) throw new Error('Session expired. Please log in again.')
 
-      // Get pre-signed S3 upload URLs for both
-      const [sigRes, iniRes] = await Promise.all([
-        fetch('/api/signature-upload-url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ type: 'signature' })
-        }),
-        fetch('/api/signature-upload-url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ type: 'initials' })
-        })
-      ])
-      const [sigData, iniData] = await Promise.all([sigRes.json(), iniRes.json()])
-      if (!sigData.uploadUrl || !iniData.uploadUrl) throw new Error('Failed to get upload URLs.')
+      const res = await fetch('/api/send-signature-setup-email', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to send email.')
 
-      // Convert data URLs to blobs and upload to S3
-      const toBlob = async (dataUrl: string) => (await fetch(dataUrl)).blob()
-      const [sigBlob, iniBlob] = await Promise.all([toBlob(signatureDataUrl), toBlob(initialsDataUrl)])
-      const [sigUpload, iniUpload] = await Promise.all([
-        fetch(sigData.uploadUrl, { method: 'PUT', body: sigBlob, headers: { 'Content-Type': 'image/jpeg' } }),
-        fetch(iniData.uploadUrl, { method: 'PUT', body: iniBlob, headers: { 'Content-Type': 'image/jpeg' } })
-      ])
-      if (!sigUpload.ok || !iniUpload.ok) throw new Error('Upload failed. Please try again.')
-
-      // Save S3 keys to user_profiles in Supabase
-      const { error: updateError } = await supabase
-        .from('user_profiles')
-        .update({
-          staff_signature: `s3:${sigData.key}`,
-          staff_initials: `s3:${iniData.key}`
-        })
-        .eq('id', userId)
-      if (updateError) throw new Error('Failed to save. Please try again.')
-
-      setStep('done')
+      setStep('sent')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      setSendError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
-      setSaving(false)
+      setSending(false)
+    }
+  }
+
+  const handleCheckNow = async () => {
+    setSendError('')
+    setChecking(true)
+    const profile = await getCurrentUserProfile()
+    setChecking(false)
+    if (profile?.staff_signature && profile?.staff_initials) {
+      setStep('done')
+    } else {
+      setSendError("We haven't received your signature yet. Please complete the setup on your phone first.")
     }
   }
 
@@ -182,7 +158,7 @@ export default function Onboarding() {
                     </svg>
                   </div>
                   <h1 className="text-2xl font-bold text-gray-900 mb-2">Set up your signature</h1>
-                  <p className="text-gray-500 text-sm">Takes about 1 minute</p>
+                  <p className="text-gray-500 text-sm">Takes about 1 minute — done on your phone or tablet</p>
                 </div>
 
                 <div className="space-y-4 mb-8">
@@ -206,119 +182,98 @@ export default function Onboarding() {
                     </div>
                     <div>
                       <p className="font-semibold text-gray-800 text-sm">Legal and HIPAA accountability</p>
-                      <p className="text-gray-500 text-sm mt-0.5">Care records are legal documents. Your signature creates a verifiable, auditable trail that protects both the resident and you as a caregiver.</p>
+                      <p className="text-gray-500 text-sm mt-0.5">Care records are legal documents. Your signature creates a verifiable, auditable trail that protects both the resident and you.</p>
                     </div>
                   </div>
 
                   <div className="flex gap-3">
                     <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center">
                       <svg className="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                       </svg>
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-800 text-sm">Your initials for quick entries</p>
-                      <p className="text-gray-500 text-sm mt-0.5">Initials are used for brief confirmations and PRN records, keeping documentation fast without sacrificing accountability.</p>
+                      <p className="font-semibold text-gray-800 text-sm">Done on your phone — easier to sign</p>
+                      <p className="text-gray-500 text-sm mt-0.5">We&apos;ll email you a secure link. Open it on your phone or tablet and draw your signature and initials with your finger.</p>
                     </div>
                   </div>
                 </div>
 
+                {sendError && <p className="text-red-600 text-sm text-center mb-4">{sendError}</p>}
+
                 <button
-                  onClick={() => setStep('signature')}
-                  className="w-full bg-lasso-navy text-white py-3 rounded-xl font-semibold hover:bg-lasso-navy/90 transition-colors"
+                  onClick={handleSendEmail}
+                  disabled={sending}
+                  className="w-full bg-lasso-navy text-white py-3 rounded-xl font-semibold hover:bg-lasso-navy/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
                 >
-                  Get Started
+                  {sending ? (
+                    <>
+                      <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Sending…
+                    </>
+                  ) : 'Send Setup Link to My Email'}
                 </button>
                 <p className="text-center text-xs text-gray-400 mt-3">
-                  You can update your signature anytime in your{' '}
+                  You can update your signature anytime from your{' '}
                   <Link href="/profile" className="underline hover:text-gray-600">profile</Link>.
                 </p>
               </div>
             )}
 
-            {/* ── SIGNATURE ── */}
-            {step === 'signature' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                <h2 className="text-xl font-bold text-gray-900 mb-1">Draw your signature</h2>
-                <p className="text-sm text-gray-500 mb-6">Use your finger or stylus. This will appear on every MAR entry you sign.</p>
-
-                <div className="flex justify-center mb-2">
-                  <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-                    <SignaturePad
-                      value={signatureDataUrl}
-                      onChange={setSignatureDataUrl}
-                      width={padSize.sigW}
-                      height={padSize.sigH}
-                      placeholder="Sign here"
-                    />
-                  </div>
+            {/* ── SENT / WAITING ── */}
+            {step === 'sent' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 mb-4">
+                  <svg className="w-8 h-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
                 </div>
-                <p className="text-xs text-gray-400 text-center mb-6">Draw inside the box above, then tap Clear to redo.</p>
+                <h2 className="text-xl font-bold text-gray-900 mb-2">Check your email</h2>
+                <p className="text-gray-500 text-sm mb-1">We sent a setup link to</p>
+                <p className="font-semibold text-lasso-navy mb-6">{userEmail}</p>
 
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setStep('welcome')}
-                    className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (!signatureDataUrl) { setError('Please draw your signature before continuing.'); return }
-                      setError('')
-                      setStep('initials')
-                    }}
-                    className="flex-1 bg-lasso-navy text-white py-3 rounded-xl font-semibold hover:bg-lasso-navy/90 transition-colors"
-                  >
-                    Next
-                  </button>
+                <div className="bg-gray-50 rounded-xl p-4 text-left mb-6 space-y-3">
+                  {[
+                    'Open the email on your phone or tablet',
+                    'Tap the link — it opens a drawing screen',
+                    'Draw your signature, then your initials',
+                    'Come back here when done',
+                  ].map((s, i) => (
+                    <div key={s} className="flex items-start gap-3">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-lasso-navy text-white text-xs flex items-center justify-center font-bold mt-0.5">
+                        {i + 1}
+                      </span>
+                      <p className="text-sm text-gray-700">{s}</p>
+                    </div>
+                  ))}
                 </div>
-                {error && <p className="text-red-600 text-sm text-center mt-3">{error}</p>}
-              </div>
-            )}
 
-            {/* ── INITIALS ── */}
-            {step === 'initials' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                <h2 className="text-xl font-bold text-gray-900 mb-1">Draw your initials</h2>
-                <p className="text-sm text-gray-500 mb-6">Used for quick confirmations and PRN records.</p>
+                {sendError && <p className="text-red-600 text-sm text-center mb-4">{sendError}</p>}
 
-                <div className="flex justify-center mb-2">
-                  <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-                    <SignaturePad
-                      value={initialsDataUrl}
-                      onChange={setInitialsDataUrl}
-                      width={padSize.iniW}
-                      height={padSize.iniH}
-                      placeholder="Initials here"
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-gray-400 text-center mb-6">Draw inside the box above, then tap Clear to redo.</p>
+                <button
+                  onClick={handleCheckNow}
+                  disabled={checking}
+                  className="w-full bg-lasso-navy text-white py-3 rounded-xl font-semibold hover:bg-lasso-navy/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {checking ? (
+                    <>
+                      <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Checking…
+                    </>
+                  ) : "I've completed the setup"}
+                </button>
 
-                {error && <p className="text-red-600 text-sm text-center mb-4">{error}</p>}
+                <button
+                  onClick={handleSendEmail}
+                  disabled={sending}
+                  className="w-full mt-3 py-2.5 text-sm text-gray-500 hover:text-gray-700 underline disabled:opacity-50"
+                >
+                  {sending ? 'Resending…' : 'Resend email'}
+                </button>
 
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => { setError(''); setStep('signature') }}
-                    disabled={saving}
-                    className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={handleUploadAndSave}
-                    disabled={saving}
-                    className="flex-1 bg-lasso-navy text-white py-3 rounded-xl font-semibold hover:bg-lasso-navy/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-                  >
-                    {saving ? (
-                      <>
-                        <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Saving…
-                      </>
-                    ) : 'Save & Continue'}
-                  </button>
-                </div>
+                <p className="text-xs text-gray-400 mt-5">
+                  This page checks automatically every few seconds once you&apos;ve completed setup on your phone.
+                </p>
               </div>
             )}
 
@@ -331,7 +286,9 @@ export default function Onboarding() {
                   </svg>
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">You&apos;re all set!</h2>
-                <p className="text-gray-500 mb-8">Your signature and initials have been saved. You can now sign MAR records and document care.</p>
+                <p className="text-gray-500 mb-8">
+                  Your signature and initials have been saved. You can now sign MAR records and document care.
+                </p>
                 <button
                   onClick={() => router.push('/dashboard')}
                   className="w-full bg-lasso-navy text-white py-3 rounded-xl font-semibold hover:bg-lasso-navy/90 transition-colors"
@@ -340,6 +297,7 @@ export default function Onboarding() {
                 </button>
               </div>
             )}
+
           </div>
         </div>
       </div>
