@@ -21,7 +21,7 @@ export default function Login() {
     const checkSession = async () => {
       const profile = await getCurrentUserProfile()
       if (profile) {
-        if (profile.role === 'nurse' && (!profile.staff_signature || !profile.staff_initials)) {
+        if (!profile.staff_signature || !profile.staff_initials) {
           router.push('/onboarding')
         } else {
           router.push('/dashboard')
@@ -123,7 +123,7 @@ export default function Login() {
             }
           })
         }
-        if (profile.role === 'nurse' && (!profile.staff_signature || !profile.staff_initials)) {
+        if (!profile.staff_signature || !profile.staff_initials) {
           router.push('/onboarding')
         } else {
           router.push('/dashboard')

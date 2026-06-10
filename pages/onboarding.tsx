@@ -82,10 +82,6 @@ export default function Onboarding() {
         window.location.replace('/auth/login')
         return
       }
-      if (profile.role !== 'nurse') {
-        window.location.replace('/dashboard')
-        return
-      }
       if (profile.staff_signature && profile.staff_initials) {
         window.location.replace('/dashboard')
         return

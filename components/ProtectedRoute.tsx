@@ -25,9 +25,9 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
           window.location.replace('/dashboard')
           return
         }
-        // Nurses who haven't set up signature must complete onboarding first
+        // All users must complete signature/initials setup before accessing the app
         const onOnboardingPage = router.pathname === '/onboarding'
-        if (!onOnboardingPage && profile.role === 'nurse' && (!profile.staff_signature || !profile.staff_initials)) {
+        if (!onOnboardingPage && (!profile.staff_signature || !profile.staff_initials)) {
           window.location.replace('/onboarding')
           return
         }
