@@ -194,7 +194,7 @@ export default function Profile() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              <fieldset disabled={saving} className={saving ? 'opacity-80' : ''}>
+              <fieldset disabled={saving} className={`space-y-6${saving ? ' opacity-80' : ''}`}>
               {/* Email (Read-only) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
