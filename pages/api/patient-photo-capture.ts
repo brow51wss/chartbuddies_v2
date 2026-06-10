@@ -1,29 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import getConfig from 'next/config'
+import { createS3Client, getS3Config } from '../../lib/s3Client'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-function getS3Config() {
-  try {
-    const { serverRuntimeConfig } = getConfig() || {}
-    return {
-      bucket: serverRuntimeConfig?.S3_BUCKET_NAME || process.env.S3_BUCKET_NAME || 'chartbuddies-signatures-prod',
-      region: serverRuntimeConfig?.AWS_S3_REGION || process.env.AWS_S3_REGION || 'us-east-2',
-    }
-  } catch {
-    return {
-      bucket: process.env.S3_BUCKET_NAME || 'chartbuddies-signatures-prod',
-      region: process.env.AWS_S3_REGION || 'us-east-2',
-    }
-  }
-}
-
-async function s3KeyToDataUrl(bucket: string, region: string, key: string): Promise<string> {
-  const s3 = new S3Client({ region })
+async function s3KeyToDataUrl(bucket: string, key: string): Promise<string> {
+  const s3 = createS3Client()
   const command = new GetObjectCommand({ Bucket: bucket, Key: key })
   const response = await s3.send(command)
   const chunks: Uint8Array[] = []
@@ -55,9 +40,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Generate presigned S3 upload URL so the client can upload directly,
     // bypassing WAF and Lambda payload limits.
-    const { bucket, region } = getS3Config()
+    const { bucket } = getS3Config()
     const key = `patient-photos/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
-    const s3 = new S3Client({ region })
+    const s3 = createS3Client()
     const uploadUrl = await getSignedUrl(
       s3,
       new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: 'image/jpeg' }),
@@ -85,10 +70,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Fetch image from S3 and convert to base64 data URL for the existing RPC.
-    const { bucket, region } = getS3Config()
+    const { bucket } = getS3Config()
     let photoDataUrl: string
     try {
-      photoDataUrl = await s3KeyToDataUrl(bucket, region, key)
+      photoDataUrl = await s3KeyToDataUrl(bucket, key)
     } catch (err) {
       console.error('[patient-photo-capture] s3 fetch:', err)
       return res.status(500).json({ success: false, error: 'Failed to retrieve photo' })

@@ -1,13 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createS3Client, getS3Config } from '../../lib/s3Client'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-const S3_BUCKET = process.env.S3_BUCKET_NAME || 'chartbuddies-signatures-prod'
-const S3_REGION = process.env.AWS_REGION || process.env.AWS_S3_REGION || 'us-east-2'
 
 export const config = {
   api: {
@@ -18,9 +16,10 @@ export const config = {
 }
 
 async function makeUploadUrl(key: string): Promise<string> {
-  const s3 = new S3Client({ region: S3_REGION })
+  const { bucket } = getS3Config()
+  const s3 = createS3Client()
   const command = new PutObjectCommand({
-    Bucket: S3_BUCKET,
+    Bucket: bucket,
     Key: key,
     ContentType: 'image/jpeg',
   })
