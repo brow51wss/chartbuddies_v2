@@ -39,7 +39,7 @@ export type PatientProfileUpdatePayload = {
   home_phone: string | null
   email: string | null
   admission_date: string | null
-  patient_photo: string | null
+  patient_photo?: string | null
 }
 
 export type EditPatientInfoSaveArgs = {
@@ -92,7 +92,7 @@ function buildPatientProfileUpdatePayload(
   facilityDisplayName: string | null | undefined,
   patientPhoto: string | null
 ): PatientProfileUpdatePayload {
-  return {
+  const payload: PatientProfileUpdatePayload = {
     patient_name: patientName,
     date_of_birth: form.dateOfBirth,
     sex: form.sex as Patient['sex'],
@@ -109,8 +109,15 @@ function buildPatientProfileUpdatePayload(
     home_phone: form.homePhone.trim() || null,
     email: form.email.trim() || null,
     admission_date: form.dateOfAdmission || null,
-    patient_photo: patientPhoto,
   }
+
+  // Only include patient_photo when it's a new s3: key or an explicit clear (null).
+  // Never re-send an existing data URL — it's already in the DB and would exceed WAF limits.
+  if (patientPhoto === null || (typeof patientPhoto === 'string' && patientPhoto.startsWith('s3:'))) {
+    payload.patient_photo = patientPhoto
+  }
+
+  return payload
 }
 
 export default function EditPatientInfoModal({
