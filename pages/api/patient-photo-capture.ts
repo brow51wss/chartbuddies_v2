@@ -1,20 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { createS3Client, getS3Config } from '../../lib/s3Client'
 import { rdsQuery } from '../../lib/rds'
 
-async function s3KeyToDataUrl(bucket: string, key: string): Promise<string> {
-  const s3 = createS3Client()
-  const command = new GetObjectCommand({ Bucket: bucket, Key: key })
-  const response = await s3.send(command)
-  const chunks: Uint8Array[] = []
-  const stream = response.Body as AsyncIterable<Uint8Array>
-  for await (const chunk of stream) {
-    chunks.push(chunk)
-  }
-  const buffer = Buffer.concat(chunks)
-  return `data:image/jpeg;base64,${buffer.toString('base64')}`
+function maskPatientName(fullName: string): string {
+  return fullName
+    .trim()
+    .split(/\s+/)
+    .map(word => word.length <= 1 ? word : word[0] + '*'.repeat(word.length - 1))
+    .join(' ')
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -45,10 +40,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       { expiresIn: 600 }
     )
 
+    const rawName: string = row.patient_name || ''
+    const displayName = rawName ? maskPatientName(rawName) : 'Patient'
+
     return res.status(200).json({
       valid: true,
       patientId: row.patient_id,
-      patientName: row.patient_name || 'Patient',
+      patientName: displayName,
       photoUploadUrl: uploadUrl,
       photoKey: key,
     })
@@ -76,19 +74,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const patientId = tokenRow.patient_id
 
-    // Fetch photo from S3 and convert to data URL for storage
-    const { bucket } = getS3Config()
-    let photoDataUrl: string
+    // Store the S3 key reference (never download the image through Lambda)
     try {
-      photoDataUrl = await s3KeyToDataUrl(bucket, key)
-    } catch (err) {
-      console.error('[patient-photo-capture] s3 fetch:', err)
-      return res.status(500).json({ success: false, error: 'Failed to retrieve photo' })
-    }
-
-    // Save photo to RDS patients table and consume the token
-    try {
-      await rdsQuery('UPDATE patients SET patient_photo = $1 WHERE id = $2', [photoDataUrl, patientId])
+      await rdsQuery('UPDATE patients SET patient_photo = $1 WHERE id = $2', [`s3:${key}`, patientId])
       await rdsQuery('DELETE FROM patient_photo_capture_tokens WHERE token = $1', [t])
     } catch (err) {
       console.error('[patient-photo-capture] rds update:', err)
