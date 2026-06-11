@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, getFromEmail } from '../../lib/ses'
 import { buildEmailHtml } from '../../lib/emailTemplate'
+import { rdsQuery } from '../../lib/rds'
 import crypto from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -44,16 +45,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     let patientNameForEmail = 'New patient'
     if (patientIdStr) {
-      const { data: patientRow, error: patientErr } = await supabase
-        .from('patients')
-        .select('id, patient_name')
-        .eq('id', patientIdStr)
-        .maybeSingle()
-
-      if (patientErr || !patientRow) {
+      const { rows } = await rdsQuery(
+        'SELECT id, patient_name FROM patients WHERE id = $1',
+        [patientIdStr]
+      )
+      if (!rows[0]) {
         return res.status(403).json({ error: 'Patient not found or access denied' })
       }
-      patientNameForEmail = String(patientRow.patient_name || 'Patient')
+      patientNameForEmail = String(rows[0].patient_name || 'Patient')
     }
 
     if (patientIdStr) {
