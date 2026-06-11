@@ -19,27 +19,21 @@ export function getS3Config(): { bucket: string; region: string } {
 /**
  * Returns an S3Client configured for the app's bucket region.
  *
- * Credential resolution order:
- * 1. If AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY are set AND there is no
- *    AWS_SESSION_TOKEN, treat them as long-term IAM user credentials and pass
- *    them explicitly (covers local dev via .env.local).
- * 2. Otherwise fall back to the SDK default credential chain, which correctly
- *    handles Lambda execution-role STS credentials (all three env vars including
- *    the session token) as well as instance profiles and ECS task roles.
+ * Credential resolution:
+ * - If APP_AWS_ACCESS_KEY_ID + APP_AWS_SECRET_ACCESS_KEY are set, use them
+ *   as explicit long-term IAM user credentials (works for both local dev and
+ *   Amplify env vars without colliding with Lambda's auto-injected AWS_* vars).
+ * - Otherwise fall through to the SDK default credential chain (Lambda
+ *   execution role, instance profile, etc.).
  */
 export function createS3Client(region?: string): S3Client {
   const { region: defaultRegion } = getS3Config()
   const resolvedRegion = region || defaultRegion
 
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
-  const sessionToken = process.env.AWS_SESSION_TOKEN
+  const accessKeyId = process.env.APP_AWS_ACCESS_KEY_ID
+  const secretAccessKey = process.env.APP_AWS_SECRET_ACCESS_KEY
 
-  // Only use explicit credentials when they are long-term IAM user keys
-  // (no session token). Lambda execution-role creds always carry a session
-  // token — let the SDK default chain handle those so all three values are
-  // picked up correctly.
-  if (accessKeyId && secretAccessKey && !sessionToken) {
+  if (accessKeyId && secretAccessKey) {
     return new S3Client({
       region: resolvedRegion,
       credentials: { accessKeyId, secretAccessKey },
