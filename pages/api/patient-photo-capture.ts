@@ -1,11 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { createClient } from '@supabase/supabase-js'
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { createS3Client, getS3Config } from '../../lib/s3Client'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+import { rdsQuery } from '../../lib/rds'
 
 async function s3KeyToDataUrl(bucket: string, key: string): Promise<string> {
   const s3 = createS3Client()
@@ -21,25 +18,24 @@ async function s3KeyToDataUrl(bucket: string, key: string): Promise<string> {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
   if (req.method === 'GET') {
     const token = typeof req.query.token === 'string' ? req.query.token.trim() : ''
     if (!token) {
       return res.status(400).json({ valid: false, error: 'Missing token' })
     }
-    const { data, error } = await supabase.rpc('get_patient_photo_capture_context', { p_token: token })
-    if (error) {
-      console.error('[patient-photo-capture] get_patient_photo_capture_context:', error)
-      return res.status(500).json({ valid: false })
-    }
-    const ctx = data as { valid?: boolean; patientId?: string; patientName?: string } | null
-    if (!ctx?.valid) {
+
+    const { rows } = await rdsQuery(
+      `SELECT t.patient_id, t.expires_at, p.patient_name
+       FROM patient_photo_capture_tokens t
+       LEFT JOIN patients p ON p.id = t.patient_id
+       WHERE t.token = $1`,
+      [token]
+    )
+    const row = rows[0]
+    if (!row || new Date(row.expires_at) < new Date()) {
       return res.status(200).json({ valid: false })
     }
 
-    // Generate presigned S3 upload URL so the client can upload directly,
-    // bypassing WAF and Lambda payload limits.
     const { bucket } = getS3Config()
     const key = `patient-photos/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
     const s3 = createS3Client()
@@ -51,8 +47,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       valid: true,
-      patientId: ctx.patientId,
-      patientName: ctx.patientName,
+      patientId: row.patient_id,
+      patientName: row.patient_name || 'Patient',
       photoUploadUrl: uploadUrl,
       photoKey: key,
     })
@@ -69,7 +65,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ success: false, error: 'Invalid photo key' })
     }
 
-    // Fetch image from S3 and convert to base64 data URL for the existing RPC.
+    // Validate token in RDS
+    const { rows: tokenRows } = await rdsQuery(
+      'SELECT patient_id, expires_at FROM patient_photo_capture_tokens WHERE token = $1',
+      [t]
+    )
+    const tokenRow = tokenRows[0]
+    if (!tokenRow || new Date(tokenRow.expires_at) < new Date()) {
+      return res.status(400).json({ success: false, error: 'Link expired or invalid' })
+    }
+    const patientId = tokenRow.patient_id
+
+    // Fetch photo from S3 and convert to data URL for storage
     const { bucket } = getS3Config()
     let photoDataUrl: string
     try {
@@ -79,17 +86,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ success: false, error: 'Failed to retrieve photo' })
     }
 
-    const { data: ok, error } = await supabase.rpc('complete_patient_photo_capture', {
-      p_token: t,
-      p_photo_data: photoDataUrl,
-    })
-    if (error) {
-      console.error('[patient-photo-capture] complete_patient_photo_capture:', error)
-      return res.status(500).json({ success: false, error: 'Failed to save' })
+    // Save photo to RDS patients table and consume the token
+    try {
+      await rdsQuery('UPDATE patients SET patient_photo = $1 WHERE id = $2', [photoDataUrl, patientId])
+      await rdsQuery('DELETE FROM patient_photo_capture_tokens WHERE token = $1', [t])
+    } catch (err) {
+      console.error('[patient-photo-capture] rds update:', err)
+      return res.status(500).json({ success: false, error: 'Failed to save photo' })
     }
-    if (!ok) {
-      return res.status(400).json({ success: false, error: 'Link expired or invalid' })
-    }
+
     return res.status(200).json({ success: true })
   }
 

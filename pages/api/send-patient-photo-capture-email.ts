@@ -67,28 +67,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       patientNameForEmail = String(rows[0].patient_name || 'Patient')
     }
 
+    // Delete any existing tokens for this user+patient from RDS
     if (patientIdStr) {
-      await supabase
-        .from('patient_photo_capture_tokens')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('patient_id', patientIdStr)
+      await rdsQuery(
+        'DELETE FROM patient_photo_capture_tokens WHERE user_id = $1 AND patient_id = $2',
+        [user.id, patientIdStr]
+      )
     } else {
-      await supabase.from('patient_photo_capture_tokens').delete().eq('user_id', user.id).is('patient_id', null)
+      await rdsQuery(
+        'DELETE FROM patient_photo_capture_tokens WHERE user_id = $1 AND patient_id IS NULL',
+        [user.id]
+      )
     }
 
     const setupToken = crypto.randomBytes(32).toString('hex')
     const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000).toISOString()
 
-    const { error: insertError } = await supabase.from('patient_photo_capture_tokens').insert({
-      user_id: user.id,
-      patient_id: patientIdStr,
-      token: setupToken,
-      expires_at: expiresAt,
-    })
-
-    if (insertError) {
-      console.error('[send-patient-photo-capture-email] insert token:', insertError.code, insertError.message)
+    try {
+      await rdsQuery(
+        'INSERT INTO patient_photo_capture_tokens (user_id, patient_id, token, expires_at) VALUES ($1, $2, $3, $4)',
+        [user.id, patientIdStr, setupToken, expiresAt]
+      )
+    } catch (insertErr) {
+      const msg = insertErr instanceof Error ? insertErr.message : String(insertErr)
+      console.error('[send-patient-photo-capture-email] insert token:', msg)
       return res.status(500).json({ error: 'Failed to create capture link' })
     }
 
