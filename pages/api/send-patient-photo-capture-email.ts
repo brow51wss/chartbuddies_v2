@@ -10,6 +10,18 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 const TOKEN_EXPIRY_HOURS = 24
 
+/** Masks a patient name for safe use in emails.
+ *  Each word keeps only its first letter; the rest become asterisks.
+ *  e.g. "Bobby S Drake" → "B**** S D****"
+ */
+function maskPatientName(fullName: string): string {
+  return fullName
+    .trim()
+    .split(/\s+/)
+    .map(word => word.length <= 1 ? word : word[0] + '*'.repeat(word.length - 1))
+    .join(' ')
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method !== 'POST') {
@@ -90,12 +102,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const setupUrl = `${baseUrl}/auth/patient-photo-capture?token=${encodeURIComponent(setupToken)}`
 
     const fromEmail = getFromEmail()
-    const safeName = String(patientNameForEmail || '')
+    const maskedName = patientIdStr ? maskPatientName(patientNameForEmail) : ''
+    const safeMaskedName = maskedName
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/"/g, '&quot;')
     const subject = patientIdStr
-      ? `Patient photo — ${patientNameForEmail}`
+      ? `Patient photo — ${maskedName}`
       : 'Patient photo — open link on your phone'
 
     await sendEmail({
@@ -103,10 +116,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       to: user.email,
       subject,
       html: buildEmailHtml({
-        preheader: `Open on your phone to take a patient photo for ${safeName}`,
-        heading: patientIdStr ? `Patient photo — ${safeName}` : 'Take a patient photo',
+        preheader: `Open on your phone to take a patient photo`,
+        heading: patientIdStr ? `Patient photo — ${safeMaskedName}` : 'Take a patient photo',
         paragraphs: [
-          `You requested to take or update a patient photo${patientIdStr ? ` for <strong>${safeName}</strong>` : ''}.`,
+          `You requested to take or update a patient photo${patientIdStr ? ` for <strong>${safeMaskedName}</strong>` : ''}.`,
           '<strong>Open this link on your phone</strong> and tap "Open camera." The photo will be saved automatically once you confirm.',
           `This link is valid for ${TOKEN_EXPIRY_HOURS} hours and can only be used once.`,
         ],
