@@ -166,7 +166,11 @@ export default function PatientStickyBar({
             <div className="mb-5 flex flex-col gap-4 rounded-xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center">
               {patientDetails?.patient_photo ? (
                 <img
-                  src={patientDetails.patient_photo}
+                  src={
+                    patientDetails.patient_photo.startsWith('s3:')
+                      ? `/api/signature-image?key=${encodeURIComponent(patientDetails.patient_photo.slice(3))}`
+                      : patientDetails.patient_photo
+                  }
                   alt={`${resolvedPatientName || 'Patient'} photo`}
                   className="h-24 w-24 shrink-0 rounded-full border border-white/20 object-cover"
                 />

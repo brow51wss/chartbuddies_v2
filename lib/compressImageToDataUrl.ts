@@ -33,3 +33,41 @@ export async function compressImageFileToDataUrl(
     bitmap.close()
   }
 }
+
+/**
+ * Resize and re-encode an image file to a JPEG Blob suitable for direct S3 upload.
+ * Avoids producing a large base64 data URL in memory.
+ * Runs in the browser only.
+ */
+export async function compressImageFileToJpegBlob(
+  file: File,
+  options?: { maxEdge?: number; quality?: number }
+): Promise<Blob> {
+  const maxEdge = options?.maxEdge ?? 1024
+  const quality = options?.quality ?? 0.82
+  if (typeof createImageBitmap !== 'function') {
+    return file
+  }
+  const bitmap = await createImageBitmap(file)
+  try {
+    const { width, height } = bitmap
+    const scale = Math.min(1, maxEdge / Math.max(width, height, 1))
+    const w = Math.max(1, Math.round(width * scale))
+    const h = Math.max(1, Math.round(height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas not supported')
+    ctx.drawImage(bitmap, 0, 0, w, h)
+    return await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        b => (b ? resolve(b) : reject(new Error('toBlob failed'))),
+        'image/jpeg',
+        quality
+      )
+    )
+  } finally {
+    bitmap.close()
+  }
+}

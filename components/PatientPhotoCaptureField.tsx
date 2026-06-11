@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { compressImageFileToDataUrl } from '../lib/compressImageToDataUrl'
+import { compressImageFileToJpegBlob } from '../lib/compressImageToDataUrl'
 import { PATIENT_SUMMARY_PHOTO_PLACEHOLDER } from './PatientSummaryCard'
 
 type Props = {
@@ -35,12 +35,36 @@ export function PatientPhotoCaptureField({ patientId, value, onChange, disabled 
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file || !file.type.startsWith('image/')) return
+    setLinkError('')
     try {
-      const dataUrl = await compressImageFileToDataUrl(file, { maxEdge: 1024, quality: 0.82 })
-      onChange(dataUrl)
+      // Compress to a JPEG blob (stays binary — never becomes a large data URL)
+      const blob = await compressImageFileToJpegBlob(file, { maxEdge: 1024, quality: 0.82 })
+
+      // Get a presigned S3 upload URL from the server
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const urlRes = await fetch('/api/patient-photo-upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ patientId: patientId ?? 'new' }),
+      })
+      if (!urlRes.ok) throw new Error('Could not get upload URL')
+      const { uploadUrl, key } = await urlRes.json() as { uploadUrl: string; key: string }
+
+      // Upload directly to S3
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/jpeg' },
+        body: blob,
+      })
+      if (!uploadRes.ok) throw new Error('Upload failed')
+
+      onChange(`s3:${key}`)
       setModalOpen(false)
-    } catch {
-      setLinkError('Could not read that image. Try another file.')
+    } catch (err) {
+      setLinkError(err instanceof Error ? err.message : 'Could not upload that image. Try another file.')
     }
   }
 
@@ -130,8 +154,16 @@ export function PatientPhotoCaptureField({ patientId, value, onChange, disabled 
       </label>
       <div className="flex flex-col items-center gap-3">
         <div className="flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-900">
-          {value && (value.startsWith('data:image') || value.startsWith('http')) ? (
-            <img src={value} alt="Patient" className="h-full w-full object-cover" />
+          {value && (value.startsWith('data:image') || value.startsWith('http') || value.startsWith('s3:')) ? (
+            <img
+              src={
+                value.startsWith('s3:')
+                  ? `/api/signature-image?key=${encodeURIComponent(value.slice(3))}`
+                  : value
+              }
+              alt="Patient"
+              className="h-full w-full object-cover"
+            />
           ) : (
             <img
               src={PATIENT_SUMMARY_PHOTO_PLACEHOLDER}

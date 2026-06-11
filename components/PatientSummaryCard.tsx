@@ -49,10 +49,12 @@ export function PatientSummaryCard({
   'aria-label': ariaLabel,
   className = '',
 }: Props) {
-  const photoSrc =
-    patient.patient_photo && patient.patient_photo.trim().length > 0
-      ? patient.patient_photo
-      : PATIENT_SUMMARY_PHOTO_PLACEHOLDER
+  const rawPhoto = patient.patient_photo?.trim()
+  const photoSrc = rawPhoto
+    ? rawPhoto.startsWith('s3:')
+      ? `/api/signature-image?key=${encodeURIComponent(rawPhoto.slice(3))}`
+      : rawPhoto
+    : PATIENT_SUMMARY_PHOTO_PLACEHOLDER
 
   const nameClass =
     'mt-3 w-full text-center text-base font-semibold leading-snug text-gray-900 dark:text-white'

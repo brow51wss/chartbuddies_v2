@@ -5,7 +5,8 @@ import { createS3Client, getS3Config } from '../../lib/s3Client'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const key = typeof req.query.key === 'string' ? req.query.key : ''
-  if (!key || !key.startsWith('signatures/')) {
+  const validPrefix = key.startsWith('signatures/') || key.startsWith('patient-photos/')
+  if (!key || !validPrefix) {
     return res.status(400).json({ error: 'Invalid key' })
   }
 
