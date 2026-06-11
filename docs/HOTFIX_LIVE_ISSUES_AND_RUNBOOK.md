@@ -39,6 +39,7 @@ Suggested branch name:
 | LIVE-004 | closed | high | `/` (homepage) | Editorial placeholder copy is visible (`Remove:` / `Replace with:` instructions shown to users). | All homepage visitors | 2026-03-19 | TODO | Closed after manual production verification (private window + hard refresh): no visible `Remove:`/`Replace with:` strings. |
 | LIVE-005 | closed | high | `/` (homepage) | Unfinished placeholder text visible (`Need a sentence here`). | All homepage visitors | 2026-03-19 | TODO | Closed after manual production verification: placeholder text no longer visible on homepage. |
 | LIVE-006 | closed | high | `/` (homepage) | Draft/internal content exposed (raw replacement bullets and headings like `replace existing quote with:`). | All homepage visitors | 2026-03-19 | TODO | Closed after manual production verification: draft helper/instruction copy not present on homepage. |
+| LIVE-007 | closed | high | `/profile`, `/patients/[id]/mar/[marId]`, `/patients/[id]/progress-notes/view` | Signature and initials images broken (showing broken icon or fallback text) on live site. | All users with signatures set up | 2026-06-10 | dev | See resolution note below. |
 
 ---
 
@@ -424,6 +425,31 @@ Only after all P0/P1 live issues are closed:
 2. Rebase/merge latest `main` hotfix changes.
 3. Re-test billing pages.
 4. Continue Stripe integration work.
+
+---
+
+## 12) Incident Resolution Notes
+
+### LIVE-007 — Broken signature/initials images on live site (resolved 2026-06-11)
+
+**Issue:**
+User signatures and initials uploaded via the email-link setup flow were stored correctly in S3 (`chartbuddies-signatures-prod`, `us-east-2`), but images appeared broken on `/profile`, MAR signed rows, and progress notes view on the live site (`app.lasso-app.com`). The fallback text ("Signature on file" / "—") was shown instead of the actual images.
+
+**Root cause:**
+The Amplify Lambda execution role has `s3:PutObject` permission (required to generate pre-signed upload URLs during signature setup) but **does NOT have `s3:GetObject`** permission. The `/api/signature-image` route generates a pre-signed GET URL using server-side credentials; without GetObject access, S3 returns 403 and the browser shows a broken image.
+
+**What made this tricky:**
+AWS Lambda runtimes automatically inject `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` into the process environment from the execution role. Using those same env var names in Amplify environment variables for user-provided IAM credentials would cause the SDK to mix a long-term IAM key with the Lambda role's session token — resulting in an auth error.
+
+**Resolution:**
+1. Created `lib/s3Client.ts` — a shared `createS3Client()` factory used by all four S3-touching API routes (`signature-image`, `signature-upload-url`, `signature-setup`, `patient-photo-capture`).
+2. Used **non-standard env var names** `APP_AWS_ACCESS_KEY_ID` / `APP_AWS_SECRET_ACCESS_KEY` for the explicit IAM user credentials. Lambda never auto-sets these names, so there is no collision with execution-role credentials.
+3. Added `APP_AWS_ACCESS_KEY_ID` and `APP_AWS_SECRET_ACCESS_KEY` (from IAM user `wss-dev`, which has `AdministratorAccess`) to **Amplify environment variables** and triggered a redeploy.
+4. Added the same two vars to `.env.local` for local development (`.env.local` is gitignored).
+5. Added `onError` fallback handlers to all `<img>` tags displaying signatures/initials so broken images degrade gracefully to text instead of showing a broken icon.
+
+**Key rule going forward:**
+> Never use `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` directly in Amplify env vars for user-provided credentials — Lambda auto-injects those names from the execution role. Always use `APP_AWS_*` prefixed names for explicit IAM user credentials in this project.
 
 ---
 
