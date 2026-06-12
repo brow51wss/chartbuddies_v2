@@ -4191,8 +4191,8 @@ export default function ViewMARForm() {
                                             medication_name: med.medication_name,
                                             dosage: med.dosage,
                                             route: med.route,
-                                            start_date: med.start_date,
-                                            stop_date: med.stop_date,
+                                            start_date: med.start_date?.slice(0, 10) ?? '',
+                                            stop_date: med.stop_date?.slice(0, 10) ?? null,
                                             frequency: med.frequency ?? (isMulti ? sortedMeds.length : 1),
                                             frequency_display: med.frequency_display,
                                             notes: med.notes,
@@ -6473,8 +6473,8 @@ function AddMedicationOrVitalsForm({
   const [medicationData, setMedicationData] = useState({
     medicationName: isEditMode && editData && !editData.isVitals ? editData.medication_name : '',
     dosage: isEditMode && editData && !editData.isVitals ? editData.dosage : '',
-    startDate: isEditMode && editData && !editData.isVitals ? editData.start_date : defaultStartDate,
-    stopDate: isEditMode && editData && !editData.isVitals ? (editData.stop_date || '') : '',
+    startDate: isEditMode && editData && !editData.isVitals ? (editData.start_date?.slice(0, 10) || defaultStartDate) : defaultStartDate,
+    stopDate: isEditMode && editData && !editData.isVitals ? (editData.stop_date?.slice(0, 10) || '') : '',
     hour: isEditMode && editData && !editData.isVitals ? (editData.hour || defaultHour) : defaultHour,
     notes: isEditMode && editData && !editData.isVitals ? (editData.notes || '') : '',
     initials: '', // No longer collected from form, will be empty
@@ -6495,8 +6495,8 @@ function AddMedicationOrVitalsForm({
   const [vitalsData, setVitalsData] = useState({
     notes: isEditMode && editData && editData.isVitals ? editData.dosage : '', // Vitals uses dosage field for notes/description
     initials: isEditMode && editData && editData.isVitals ? (editData.route || '') : '', // For vitals, this is the default entry value stored in route field
-    startDate: isEditMode && editData && editData.isVitals ? editData.start_date : defaultStartDate,
-    stopDate: isEditMode && editData && editData.isVitals ? (editData.stop_date || '') : '',
+    startDate: isEditMode && editData && editData.isVitals ? (editData.start_date?.slice(0, 10) || defaultStartDate) : defaultStartDate,
+    stopDate: isEditMode && editData && editData.isVitals ? (editData.stop_date?.slice(0, 10) || '') : '',
     hour: isEditMode && editData && editData.isVitals ? (editData.hour || '') : '',
     frequency: isEditMode && editData && editData.isVitals ? (editData.frequency || 1) : 1,
     times: initialVitalsTimes as string[],
