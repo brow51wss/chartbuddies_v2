@@ -3385,7 +3385,7 @@ export default function ViewMARForm() {
               {/* Medication Administration Table - sticky header OUTSIDE overflow so it sticks to viewport; body has overflow-x for horizontal scroll */}
               <div className="relative overflow-visible">
                 {/* Sticky header: no overflow on sticky div so it sticks to viewport; inner div handles horizontal scroll sync */}
-                <div className="sticky top-[35px] z-[99999] bg-white dark:bg-gray-800 overflow-visible" style={{ marginBottom: -1 }}>
+                <div className="sticky top-[0px] z-[99999] bg-white dark:bg-gray-800 overflow-visible" style={{ marginBottom: -1 }}>
                   <div ref={marHeaderScrollRef} className="overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <table className="min-w-full border border-gray-300 dark:border-gray-600 border-b-0" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
                     <colgroup>
