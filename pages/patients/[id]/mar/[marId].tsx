@@ -2358,7 +2358,6 @@ export default function ViewMARForm() {
       const newVitals = await Promise.all(vitalRowsToInsert.map(r => rdsCreateMarMedication(r)))
 
       if (newVitals && newVitals.length > 0) {
-        const firstVital = newVitals[0]
         const startDateParts = vitalsData.startDate.split('-')
         if (startDateParts.length === 3 && vitalsData.initials) {
           const startYear = parseInt(startDateParts[0], 10)
@@ -2368,13 +2367,15 @@ export default function ViewMARForm() {
           const formYear = formParsed?.y
           const formMonthIndex = formParsed != null ? formParsed.m - 1 : -1
           if (formYear != null && formMonthIndex >= 0 && startMonth === formMonthIndex && startYear === formYear) {
-            await rdsUpsertAdministration({
-              mar_medication_id: firstVital.id,
-              day_number: startDay,
-              status: 'Given',
-              initials: vitalsData.initials.trim(),
-              administered_at: new Date().toISOString(),
-            }).catch(console.error)
+            await Promise.all(newVitals.map(vital =>
+              rdsUpsertAdministration({
+                mar_medication_id: vital.id,
+                day_number: startDay,
+                status: 'Given',
+                initials: vitalsData.initials.trim(),
+                administered_at: new Date().toISOString(),
+              }).catch(console.error)
+            ))
           }
         }
       }
@@ -4494,7 +4495,7 @@ export default function ViewMARForm() {
                                           <div
                                             onClick={isEditing && !isDiscontinued ? () => {
                                               setEditingCell({ medId: med.id, day })
-                                              setEditingCellValue(initials || '')
+                                              setEditingCellValue(initials || (isVitalsEntry ? (group.meds.find(m => m.route)?.route || '') : ''))
                                             } : undefined}
                                           className={`min-h-[24px] flex items-center justify-center gap-1 ${
                                               isEditing && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
