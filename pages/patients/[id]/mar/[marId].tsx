@@ -4250,9 +4250,9 @@ export default function ViewMARForm() {
                                         {med.route}
                                       </div>
                                     )}
-                                    {med.frequency && med.frequency > 1 && (
+                                    {(med.frequency_display || (med.frequency && med.frequency > 1)) && (
                                       <div className="text-xs text-gray-500 dark:text-gray-500">
-                                        {med.frequency_display || `${med.frequency} time${med.frequency > 1 ? 's' : ''} per day`}
+                                        {med.frequency_display || `${med.frequency} times per day`}
                                       </div>
                                     )}
                                     {isVitalsEntry && med.route && (
