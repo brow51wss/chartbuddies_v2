@@ -4333,7 +4333,7 @@ export default function ViewMARForm() {
                               const isDC = initialsForLogic === 'DC'
                               const isRefused = initialsForLogic === 'R'
                               const isWithheld = initialsForLogic === 'W' || initialsForLogic === 'H'
-                              const hasParameter = !!med.parameter
+                              const hasParameter = group.meds.some(m => !!m.parameter)
 
                               const { isDiscontinued, dcDay } = parsedMarMonthForRow
                                 ? getMarDiscontinuedBeforeSlotInfo(
