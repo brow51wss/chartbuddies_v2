@@ -781,7 +781,7 @@ export default function ViewMARForm() {
     return () => clearInterval(id)
   }, [])
   const { isReadOnly } = useReadOnly()
-  const readOnly = isReadOnly
+  const readOnly = isReadOnly || userProfile?.designation === 'SCG'
   const marRowReorderLocked = readOnly || !marTableShowFullChart || hasActiveMedSearch
   // Always allow editing of day cells (unless read-only view)
   const [isEditingBase] = useState(true)

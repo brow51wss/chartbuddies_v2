@@ -317,7 +317,7 @@ export default function ProgressNotesPage() {
   const saveSummaryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savePhysicianTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { isReadOnly } = useReadOnly()
-  const readOnly = isReadOnly
+  const readOnly = isReadOnly || userProfile?.designation === 'SCG'
 
   const monthFromQuery = typeof router.query.month === 'string' ? router.query.month.trim() : null
   const monthFilterKey = parseMonthQuery(monthFromQuery)
