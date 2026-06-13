@@ -157,7 +157,11 @@ export default function PatientHub() {
       let data: Patient | null = null
       try {
         data = await rdsGetPatient(loadPatientId)
-      } catch (_) {
+      } catch (err: any) {
+        if (err.message === 'Forbidden' || err.message?.includes('403')) {
+          router.replace('/dashboard')
+          return
+        }
         data = null
       }
       if (cancelled) return

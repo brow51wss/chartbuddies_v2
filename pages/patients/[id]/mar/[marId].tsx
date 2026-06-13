@@ -2772,6 +2772,10 @@ export default function ViewMARForm() {
       setLoading(false)
     } catch (err: any) {
       console.error('Error loading MAR form:', err)
+      if (err.message === 'Forbidden' || err.message?.includes('403')) {
+        router.replace('/dashboard')
+        return
+      }
       setError(err.message || 'Failed to load MAR form')
       setLoading(false)
     }

@@ -335,6 +335,7 @@ export default function ProgressNotesPage() {
   useEffect(() => {
     if (!patientId || typeof patientId !== 'string') return
     const load = async () => {
+      try {
       const profile = await getCurrentUserProfile()
       if (!profile) {
         router.push('/auth/login')
@@ -342,7 +343,13 @@ export default function ProgressNotesPage() {
       }
       setUserProfile(profile)
 
-      const patientData = await rdsGetPatient(patientId)
+      const patientData = await rdsGetPatient(patientId).catch((e: Error) => {
+        if (e.message === 'Forbidden' || e.message?.includes('403')) {
+          router.replace('/dashboard')
+          return null
+        }
+        throw e
+      })
       if (!patientData) {
         setError('Patient not found')
         setLoading(false)
@@ -404,6 +411,14 @@ export default function ProgressNotesPage() {
       }
 
       setLoading(false)
+      } catch (err: any) {
+        if (err.message === 'Forbidden' || err.message?.includes('403')) {
+          router.replace('/dashboard')
+        } else {
+          setError(err.message || 'Failed to load patient data')
+          setLoading(false)
+        }
+      }
     }
     load()
   }, [patientId, router])
