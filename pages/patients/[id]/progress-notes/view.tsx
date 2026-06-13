@@ -958,7 +958,7 @@ export default function ProgressNotesPage() {
                   )}
                   {!readOnly && newNoteSigned && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-2">
+                    <td colSpan={4} className="px-4 py-2 text-right">
                       <button
                         type="button"
                         onClick={handleAddEntry}
