@@ -4554,7 +4554,7 @@ export default function ViewMARForm() {
                                               )
                                             )}
                                             {isRefused && !isDC && (
-                                              readOnly ? (
+                                              (readOnly || !scgCanEditCell) ? (
                                                 <div className="font-bold text-red-600 dark:text-red-400">R</div>
                                               ) : (
                                               <div className="flex flex-col items-center justify-center gap-1 w-full">
@@ -4578,7 +4578,7 @@ export default function ViewMARForm() {
                                               )
                                             )}
                                             {isWithheld && !isDC && (
-                                              readOnly ? (
+                                              (readOnly || !scgCanEditCell) ? (
                                                 <div className="font-bold text-orange-600 dark:text-orange-400">W</div>
                                               ) : (
                                               <div className="flex flex-col items-center justify-center gap-1 w-full">
@@ -4602,7 +4602,7 @@ export default function ViewMARForm() {
                                               )
                                             )}
                                             {isGiven && !isDC && !isRefused && !isWithheld && (
-                                              hasParameter && initials && !readOnly ? (
+                                              hasParameter && initials && !readOnly && scgCanEditCell ? (
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
@@ -4882,6 +4882,14 @@ export default function ViewMARForm() {
                         const hasTime = !!prn.hour
                         const hasResult = !!prn.result?.trim()
                         const hasInitials = !!prn.initials?.trim()
+                        // SCG can only edit PRN records they created (initials match) or new ones (no initials yet)
+                        const _prnUserRaw = (userProfile?.staff_initials || '').trim()
+                        const _prnUserText = (userProfile?.staff_initials_text || '').trim().toUpperCase()
+                        const _prnCellIsText = prn.initials ? !prn.initials.startsWith('s3:') && !prn.initials.startsWith('data:') : true
+                        const prnIsOwn = !isSCG || !prn.initials ||
+                          (_prnUserRaw && prn.initials === _prnUserRaw) ||
+                          (_prnCellIsText && _prnUserText && prn.initials.trim().toUpperCase() === _prnUserText)
+                        const prnReadOnly = readOnly || !prnIsOwn
                         const nextStepText = !hasTime
                           ? 'Set time first'
                           : !hasResult
@@ -4913,10 +4921,10 @@ export default function ViewMARForm() {
                               : '—'}
                           </td>
                           <td 
-                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
-                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'date', prn.date) : undefined}
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!prnReadOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
+                            onClick={!prnReadOnly ? () => handlePRNFieldEdit(prn.id, 'date', prn.date) : undefined}
                           >
-                            {!readOnly &&
+                            {!prnReadOnly &&
                             editingPRNField?.recordId === prn.id &&
                             editingPRNField?.field === 'date' &&
                             editingPRNField.surface === 'table' ? (
@@ -4942,10 +4950,10 @@ export default function ViewMARForm() {
                             )}
                           </td>
                           <td 
-                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
-                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'medication', prn.medication) : undefined}
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!prnReadOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
+                            onClick={!prnReadOnly ? () => handlePRNFieldEdit(prn.id, 'medication', prn.medication) : undefined}
                           >
-                            {!readOnly &&
+                            {!prnReadOnly &&
                             editingPRNField?.recordId === prn.id &&
                             editingPRNField?.field === 'medication' &&
                             editingPRNField.surface === 'table' ? (
@@ -4989,10 +4997,10 @@ export default function ViewMARForm() {
                             )}
                           </td>
                           <td 
-                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
-                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'dosage', prn.dosage) : undefined}
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!prnReadOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
+                            onClick={!prnReadOnly ? () => handlePRNFieldEdit(prn.id, 'dosage', prn.dosage) : undefined}
                           >
-                            {!readOnly &&
+                            {!prnReadOnly &&
                             editingPRNField?.recordId === prn.id &&
                             editingPRNField?.field === 'dosage' &&
                             editingPRNField.surface === 'table' ? (
@@ -5020,10 +5028,10 @@ export default function ViewMARForm() {
                             )}
                           </td>
                           <td 
-                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
-                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'reason', prn.reason) : undefined}
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!prnReadOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
+                            onClick={!prnReadOnly ? () => handlePRNFieldEdit(prn.id, 'reason', prn.reason) : undefined}
                           >
-                            {!readOnly &&
+                            {!prnReadOnly &&
                             editingPRNField?.recordId === prn.id &&
                             editingPRNField?.field === 'reason' &&
                             editingPRNField.surface === 'table' ? (
@@ -5073,10 +5081,10 @@ export default function ViewMARForm() {
                             )}
                           </td>
                           <td 
-                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!readOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
-                            onClick={!readOnly ? () => handlePRNFieldEdit(prn.id, 'hour', prn.hour) : undefined}
+                            className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${!prnReadOnly ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : ''}`}
+                            onClick={!prnReadOnly ? () => handlePRNFieldEdit(prn.id, 'hour', prn.hour) : undefined}
                           >
-                            {!readOnly &&
+                            {!prnReadOnly &&
                             editingPRNField?.recordId === prn.id &&
                             editingPRNField?.field === 'hour' &&
                             editingPRNField.surface === 'table' ? (
@@ -5110,12 +5118,12 @@ export default function ViewMARForm() {
                           </td>
                           <td 
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
-                              readOnly ? '' : hasTime ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
+                              prnReadOnly ? '' : hasTime ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
                             }`}
-                            onClick={readOnly || !hasTime ? undefined : () => handlePRNFieldEdit(prn.id, 'result', prn.result)}
-                            title={readOnly ? '' : resultHelperText}
+                            onClick={prnReadOnly || !hasTime ? undefined : () => handlePRNFieldEdit(prn.id, 'result', prn.result)}
+                            title={prnReadOnly ? '' : resultHelperText}
                           >
-                            {!readOnly &&
+                            {!prnReadOnly &&
                             hasTime &&
                             editingPRNField?.recordId === prn.id &&
                             editingPRNField?.field === 'result' &&
@@ -5141,7 +5149,7 @@ export default function ViewMARForm() {
                               </div>
                             ) : prn.result?.trim() ? (
                               <span>{prn.result}</span>
-                            ) : !readOnly && !hasTime ? (
+                            ) : !prnReadOnly && !hasTime ? (
                               <span className="text-xs text-amber-600 dark:text-amber-400">{resultHelperText}</span>
                             ) : (
                               <span>—</span>
@@ -5149,9 +5157,9 @@ export default function ViewMARForm() {
                           </td>
                           <td 
                             className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-800 dark:text-white ${
-                              readOnly ? '' : hasTime && hasResult ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
+                              prnReadOnly ? '' : hasTime && hasResult ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600' : 'opacity-50 cursor-not-allowed'
                             }`}
-                            onClick={readOnly ? undefined : () => {
+                            onClick={prnReadOnly ? undefined : () => {
                               if (hasTime && hasResult) {
                                 if (!prn.initials) {
                                   let userInitials: string | null = null
@@ -5179,9 +5187,9 @@ export default function ViewMARForm() {
                                 handlePRNFieldEdit(prn.id, 'initials', prn.initials)
                               }
                             }}
-                            title={readOnly ? '' : initialsHelperText}
+                            title={prnReadOnly ? '' : initialsHelperText}
                           >
-                            {!readOnly &&
+                            {!prnReadOnly &&
                             editingPRNField?.recordId === prn.id &&
                             editingPRNField?.field === 'initials' &&
                             editingPRNField.surface === 'table' ? (
@@ -5207,7 +5215,7 @@ export default function ViewMARForm() {
                               </div>
                             ) : prn.initials ? (
                               <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
-                            ) : !readOnly && hasTime && hasResult && (userProfile?.staff_initials || userProfile?.full_name) ? (
+                            ) : !prnReadOnly && hasTime && hasResult && (userProfile?.staff_initials || userProfile?.full_name) ? (
                               <button
                                 type="button"
                                 onClick={async (e) => {
@@ -5240,12 +5248,12 @@ export default function ViewMARForm() {
                               </button>
                             ) : hasTime && hasResult ? (
                               <span className="text-xs text-amber-600 dark:text-amber-400">Set initials in Profile</span>
-                            ) : !readOnly && initialsHelperText ? (
+                            ) : !prnReadOnly && initialsHelperText ? (
                               <span className="text-xs text-amber-600 dark:text-amber-400">{initialsHelperText}</span>
                             ) : (
                               <span className="text-gray-400">—</span>
                             )}
-                            {!readOnly && (
+                            {!prnReadOnly && (
                               <div
                                 className={`mt-1.5 text-[11px] leading-tight ${
                                   hasTime && hasResult && hasInitials
@@ -5257,7 +5265,7 @@ export default function ViewMARForm() {
                               </div>
                             )}
                           </td>
-                          {!readOnly && (
+                          {!prnReadOnly && (
                             <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 align-top">
                               <button
                                 type="button"
