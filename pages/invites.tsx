@@ -203,8 +203,8 @@ export default function InvitesPage() {
           </div>
         )}
 
-        <form onSubmit={handleCreateInvite} className="space-y-6 bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-200 dark:border-gray-700">
-          <fieldset disabled={creating} className={creating ? 'opacity-80' : ''}>
+        <form onSubmit={handleCreateInvite} className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-200 dark:border-gray-700">
+          <fieldset disabled={creating} className={`space-y-6${creating ? ' opacity-80' : ''}`}>
           <div>
             <label htmlFor="hospital" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Facility
