@@ -4342,10 +4342,14 @@ export default function ViewMARForm() {
                               const isRefused = initialsForLogic === 'R'
                               const isWithheld = initialsForLogic === 'W' || initialsForLogic === 'H'
                               const hasParameter = group.meds.some(m => !!m.parameter)
-                              // SCG can only add/edit notes on their own entries (where initials match their text initials)
+                              // SCG can only add/edit notes on their own entries.
+                              // Uses same dual-match logic as the cell onClick guard.
+                              const _scgUserRaw = (userProfile?.staff_initials || '').trim()
+                              const _scgUserText = (userProfile?.staff_initials_text || '').trim().toUpperCase()
+                              const _cellIsText = initials && !initials.startsWith('s3:') && !initials.startsWith('data:')
                               const scgCanEditCell = !isSCG || !initials ||
-                                initials.startsWith('s3:') || initials.startsWith('data:') ||
-                                (userProfile?.staff_initials_text || '').trim().toUpperCase() === initialsForLogic
+                                (_scgUserRaw && initials === _scgUserRaw) ||
+                                (_cellIsText && _scgUserText && initials.trim().toUpperCase() === _scgUserText)
 
                               const { isDiscontinued, dcDay } = parsedMarMonthForRow
                                 ? getMarDiscontinuedBeforeSlotInfo(
@@ -4505,11 +4509,16 @@ export default function ViewMARForm() {
                                         <div className="flex flex-col gap-1 w-full">
                                           <div
                                             onClick={isEditing && !isDiscontinued ? () => {
-                                              // SCG cannot overwrite an existing entry recorded by a different user
-                                              if (isSCG && initials && !initials.startsWith('s3:') && !initials.startsWith('data:')) {
+                                              // SCG cannot overwrite an existing entry recorded by a different user.
+                                              // An entry is considered "own" if the raw stored value matches the user's
+                                              // staff_initials exactly, OR the text version matches staff_initials_text.
+                                              if (isSCG && initials) {
+                                                const userInitialsRaw = (userProfile?.staff_initials || '').trim()
                                                 const userInitialsText = (userProfile?.staff_initials_text || '').trim().toUpperCase()
-                                                const cellInitialsText = initials.trim().toUpperCase()
-                                                if (cellInitialsText && userInitialsText && cellInitialsText !== userInitialsText) return
+                                                const isCellText = !initials.startsWith('s3:') && !initials.startsWith('data:')
+                                                const isOwnExact = userInitialsRaw && initials === userInitialsRaw
+                                                const isOwnText = isCellText && userInitialsText && initials.trim().toUpperCase() === userInitialsText
+                                                if (!isOwnExact && !isOwnText) return
                                               }
                                               setEditingCell({ medId: med.id, day })
                                               setEditingCellValue(initials || (isVitalsEntry ? (group.meds.find(m => m.route)?.route || '') : ''))
