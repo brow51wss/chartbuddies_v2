@@ -3612,7 +3612,7 @@ export default function ViewMARForm() {
                                             <span className="font-medium text-gray-500 dark:text-gray-400 text-[10px] uppercase tracking-wide">
                                               Notes
                                             </span>
-                                            {!readOnly ? (
+                                            {canEditStructure ? (
                                               <button
                                                 type="button"
                                                 onClick={(e) => {
@@ -3631,7 +3631,7 @@ export default function ViewMARForm() {
                                             <div className="text-[11px] text-gray-600 dark:text-gray-400 italic mt-0.5 break-words">
                                               {template.note}
                                             </div>
-                                          ) : !readOnly ? (
+                                          ) : canEditStructure ? (
                                             <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
                                               Optional — appears on Progress Notes as additional note
                                             </div>
@@ -3749,6 +3749,14 @@ export default function ViewMARForm() {
                                             const prnInitialsHelper =
                                               prnHasTime && prnHasResult && !prnHasInitials ? 'Set initials' : ''
                                             const showPrnResultInitialsRows = readOnly || prnHasTime
+                                            // SCG can only edit chart PRN records they created (or new ones with no initials)
+                                            const _prnCUserRaw = (userProfile?.staff_initials || '').trim()
+                                            const _prnCUserText = (userProfile?.staff_initials_text || '').trim().toUpperCase()
+                                            const _prnCCellIsText = prn.initials ? !prn.initials.startsWith('s3:') && !prn.initials.startsWith('data:') : true
+                                            const prnChartIsOwn = !isSCG || !prn.initials ||
+                                              (_prnCUserRaw && prn.initials === _prnCUserRaw) ||
+                                              (_prnCCellIsText && _prnCUserText && prn.initials.trim().toUpperCase() === _prnCUserText)
+                                            const prnChartReadOnly = readOnly || !prnChartIsOwn
                                             return (
                                               <div
                                                 key={prn.id}
@@ -3756,10 +3764,10 @@ export default function ViewMARForm() {
                                               >
                                           <div
                                             className={
-                                              readOnly ? '' : 'cursor-pointer rounded px-0.5 py-0.5 hover:bg-white/60 dark:hover:bg-black/25'
+                                              prnChartReadOnly ? '' : 'cursor-pointer rounded px-0.5 py-0.5 hover:bg-white/60 dark:hover:bg-black/25'
                                             }
                                             onClick={
-                                              !readOnly
+                                              !prnChartReadOnly
                                                 ? (e) => {
                                                     e.stopPropagation()
                                                     handlePRNFieldEdit(prn.id, 'hour', prn.hour, 'chart')
@@ -3768,7 +3776,7 @@ export default function ViewMARForm() {
                                             }
                                             title="Time administered"
                                           >
-                                            {!readOnly &&
+                                            {!prnChartReadOnly &&
                                             editingPRNField?.recordId === prn.id &&
                                             editingPRNField?.field === 'hour' &&
                                             editingPRNField.surface === 'chart' ? (
@@ -3808,7 +3816,7 @@ export default function ViewMARForm() {
                                               </div>
                                             ) : (
                                               <div className="font-semibold text-gray-900 dark:text-gray-100 leading-tight">
-                                                {prn.hour ? formatTimeDisplay(prn.hour) : readOnly ? '—' : 'Set time'}
+                                                {prn.hour ? formatTimeDisplay(prn.hour) : prnChartReadOnly ? '—' : 'Set time'}
                                               </div>
                                             )}
                                           </div>
@@ -3816,21 +3824,21 @@ export default function ViewMARForm() {
                                           <>
                                           <div
                                             className={`text-[11px] leading-snug break-words border-t border-emerald-800/15 dark:border-emerald-400/20 pt-1 ${
-                                              readOnly || !prnHasTime
+                                              prnChartReadOnly || !prnHasTime
                                                 ? ''
                                                 : 'cursor-pointer hover:bg-white/60 dark:hover:bg-black/25 rounded px-0.5'
                                             }`}
                                             onClick={
-                                              readOnly || !prnHasTime
+                                              prnChartReadOnly || !prnHasTime
                                                 ? undefined
                                                 : (e) => {
                                                     e.stopPropagation()
                                                     handlePRNFieldEdit(prn.id, 'result', prn.result, 'chart')
                                                   }
                                             }
-                                            title={readOnly ? '' : 'Result'}
+                                            title={prnChartReadOnly ? '' : 'Result'}
                                           >
-                                            {!readOnly &&
+                                            {!prnChartReadOnly &&
                                             prnHasTime &&
                                             editingPRNField?.recordId === prn.id &&
                                             editingPRNField?.field === 'result' &&
@@ -3852,7 +3860,7 @@ export default function ViewMARForm() {
                                               </div>
                                             ) : prn.result?.trim() ? (
                                               <span className="text-gray-800 dark:text-gray-100">{prn.result}</span>
-                                            ) : !readOnly && prnHasTime ? (
+                                            ) : !prnChartReadOnly && prnHasTime ? (
                                               <button
                                                 type="button"
                                                 onClick={(e) => {
@@ -3869,12 +3877,12 @@ export default function ViewMARForm() {
                                           </div>
                                           <div
                                             className={`text-[11px] leading-tight border-t border-emerald-800/15 dark:border-emerald-400/20 pt-1 ${
-                                              readOnly || !prnHasTime || !prnHasResult
+                                              prnChartReadOnly || !prnHasTime || !prnHasResult
                                                 ? ''
                                                 : 'cursor-pointer hover:bg-white/60 dark:hover:bg-black/25 rounded px-0.5'
                                             } ${!prnHasTime || !prnHasResult ? 'opacity-60' : ''}`}
                                             onClick={
-                                              readOnly || !prnHasTime || !prnHasResult
+                                              prnChartReadOnly || !prnHasTime || !prnHasResult
                                                 ? undefined
                                                 : (e) => {
                                                     e.stopPropagation()
@@ -3919,9 +3927,9 @@ export default function ViewMARForm() {
                                                     handlePRNFieldEdit(prn.id, 'initials', prn.initials, 'chart')
                                                   }
                                             }
-                                            title={readOnly ? '' : prnInitialsHelper}
+                                            title={prnChartReadOnly ? '' : prnInitialsHelper}
                                           >
-                                            {!readOnly &&
+                                            {!prnChartReadOnly &&
                                             editingPRNField?.recordId === prn.id &&
                                             editingPRNField?.field === 'initials' &&
                                             editingPRNField.surface === 'chart' ? (
@@ -3948,7 +3956,7 @@ export default function ViewMARForm() {
                                                 userProfile={userProfile}
                                                 facilityProfiles={facilityProfiles}
                                               />
-                                            ) : !readOnly && prnHasTime && prnHasResult && (userProfile?.staff_initials || userProfile?.full_name) ? (
+                                            ) : !prnChartReadOnly && prnHasTime && prnHasResult && (userProfile?.staff_initials || userProfile?.full_name) ? (
                                               <button
                                                 type="button"
                                                 onClick={async (e) => {
@@ -3988,7 +3996,7 @@ export default function ViewMARForm() {
                                               >
                                                 Initial
                                               </button>
-                                            ) : !readOnly && prnInitialsHelper ? (
+                                            ) : !prnChartReadOnly && prnInitialsHelper ? (
                                               <span className="text-[10px] text-amber-700 dark:text-amber-300">{prnInitialsHelper}</span>
                                             ) : (
                                               <span className="text-gray-400">—</span>
@@ -3996,7 +4004,7 @@ export default function ViewMARForm() {
                                           </div>
                                           </>
                                           ) : null}
-                                          {!readOnly && (
+                                          {!prnChartReadOnly && (
                                             <button
                                               type="button"
                                               onClick={(e) => {
