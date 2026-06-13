@@ -781,8 +781,11 @@ export default function ViewMARForm() {
     return () => clearInterval(id)
   }, [])
   const { isReadOnly } = useReadOnly()
-  const readOnly = isReadOnly || userProfile?.designation === 'SCG'
-  const marRowReorderLocked = readOnly || !marTableShowFullChart || hasActiveMedSearch
+  const readOnly = isReadOnly
+  const isSCG = userProfile?.designation === 'SCG'
+  // Structural edits (add/edit/delete rows, reorder) are blocked for SCG even in edit mode
+  const canEditStructure = !readOnly && !isSCG
+  const marRowReorderLocked = readOnly || isSCG || !marTableShowFullChart || hasActiveMedSearch
   // Always allow editing of day cells (unless read-only view)
   const [isEditingBase] = useState(true)
   const isEditing = isEditingBase && !readOnly
@@ -3154,7 +3157,7 @@ export default function ViewMARForm() {
                 <span>Medication Administration Record (MAR)</span>
               </h1>
               <div className="flex space-x-3">
-                {!readOnly && (
+                {canEditStructure && (
                   <>
                     <button
                       onClick={() => {
@@ -4115,7 +4118,7 @@ export default function ViewMARForm() {
                                 style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}
                               >
                                 {/* Add Row Indicator - Top: for first row keep pill inside cell so it's not clipped by scroll container */}
-                                {!readOnly && rowHover?.rowId === med.id && rowHover?.position === 'top' && (
+                                {canEditStructure && rowHover?.rowId === med.id && rowHover?.position === 'top' && (
                                   <div 
                                     className={`absolute left-0 right-0 min-h-[2rem] z-50 flex items-center cursor-pointer hover:bg-lasso-teal/20 transition-colors ${isFirstTableRow ? 'top-0' : '-top-7 pt-5 bg-transparent'}`}
                                     style={{ width: '5000px' }}
@@ -4133,7 +4136,7 @@ export default function ViewMARForm() {
                                   </div>
                                 )}
                                 {/* Add Row Indicator - Bottom */}
-                                {!readOnly && rowHover?.rowId === med.id && rowHover?.position === 'bottom' && (
+                                {canEditStructure && rowHover?.rowId === med.id && rowHover?.position === 'bottom' && (
                                   <div 
                                     className="absolute left-0 right-0 -bottom-1 min-h-[2rem] py-1 bg-lasso-teal z-50 flex items-center cursor-pointer hover:bg-lasso-blue transition-colors"
                                     style={{ width: '5000px' }}
@@ -4153,8 +4156,8 @@ export default function ViewMARForm() {
                                 <div className="flex gap-2 group/medcell">
                                   {/* Left column: drag handle + action icons (vertically stacked, aligned) */}
                                   <div className="flex flex-col items-start gap-1 shrink-0">
-                                    <DragHandleButton medId={med.id} readOnly={readOnly} reorderLocked={marRowReorderLocked} />
-                                    {!readOnly && (
+                                    <DragHandleButton medId={med.id} readOnly={!canEditStructure} reorderLocked={marRowReorderLocked} />
+                                    {canEditStructure && (
                                     <div className="flex flex-col items-start gap-1">
                                       {/* Add parameter - first (always showing) */}
                                       {!isVitalsEntry && med.medication_name && (
@@ -4339,6 +4342,10 @@ export default function ViewMARForm() {
                               const isRefused = initialsForLogic === 'R'
                               const isWithheld = initialsForLogic === 'W' || initialsForLogic === 'H'
                               const hasParameter = group.meds.some(m => !!m.parameter)
+                              // SCG can only add/edit notes on their own entries (where initials match their text initials)
+                              const scgCanEditCell = !isSCG || !initials ||
+                                initials.startsWith('s3:') || initials.startsWith('data:') ||
+                                (userProfile?.staff_initials_text || '').trim().toUpperCase() === initialsForLogic
 
                               const { isDiscontinued, dcDay } = parsedMarMonthForRow
                                 ? getMarDiscontinuedBeforeSlotInfo(
@@ -4375,7 +4382,7 @@ export default function ViewMARForm() {
                                   className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs relative ${cellBgClass} ${
                                     isEditing && isMedActive && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
                                   } ${isDiscontinued ? 'cursor-not-allowed' : ''}`}
-                                  onDoubleClick={isEditing && isMedActive && !isVitalsEntry && !isDiscontinued ? () => {
+                                  onDoubleClick={isEditing && isMedActive && !isVitalsEntry && !isDiscontinued && !isSCG ? () => {
                                     if (isGiven) {
                                       updateAdministration(med.id, day, 'Not Given', initials)
                                     }
@@ -4498,6 +4505,12 @@ export default function ViewMARForm() {
                                         <div className="flex flex-col gap-1 w-full">
                                           <div
                                             onClick={isEditing && !isDiscontinued ? () => {
+                                              // SCG cannot overwrite an existing entry recorded by a different user
+                                              if (isSCG && initials && !initials.startsWith('s3:') && !initials.startsWith('data:')) {
+                                                const userInitialsText = (userProfile?.staff_initials_text || '').trim().toUpperCase()
+                                                const cellInitialsText = initials.trim().toUpperCase()
+                                                if (cellInitialsText && userInitialsText && cellInitialsText !== userInitialsText) return
+                                              }
                                               setEditingCell({ medId: med.id, day })
                                               setEditingCellValue(initials || (isVitalsEntry ? (group.meds.find(m => m.route)?.route || '') : ''))
                                             } : undefined}
@@ -4506,7 +4519,7 @@ export default function ViewMARForm() {
                                             }`}
                                           >
                                             {isDC && !isDiscontinued && (
-                                              hasParameter && !readOnly ? (
+                                              hasParameter && !readOnly && scgCanEditCell ? (
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <div className="text-red-600 dark:text-red-400 font-bold text-xs">
@@ -4606,7 +4619,7 @@ export default function ViewMARForm() {
                                               )
                                           )}
                                             {isNotGiven && initials && !isDC && !isRefused && !isWithheld && (
-                                              hasParameter && !readOnly ? (
+                                              hasParameter && !readOnly && scgCanEditCell ? (
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <div className="text-red-600 dark:text-red-400 font-bold">
@@ -4632,7 +4645,7 @@ export default function ViewMARForm() {
                                               )
                                           )}
                                           {isPRN && (
-                                              hasParameter && !readOnly ? (
+                                              hasParameter && !readOnly && scgCanEditCell ? (
                                                 <div className="flex flex-col items-center justify-center gap-1 w-full">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
