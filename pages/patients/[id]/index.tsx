@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -103,6 +103,7 @@ export default function PatientHub() {
   const [activityRows, setActivityRows] = useState<BinderActivityRow[]>([])
   const [showActivityStatus, setShowActivityStatus] = useState(true)
   const [showEditModal, setShowEditModal] = useState(false)
+  const rightColRef = useRef<HTMLDivElement>(null)
   const { isReadOnly } = useReadOnly()
 
   const formatDateTimeLabel = (value?: string | null) => {
@@ -282,6 +283,7 @@ export default function PatientHub() {
     }
   }, [patientId, router.isReady, router])
 
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -360,15 +362,29 @@ export default function PatientHub() {
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-6">
             Select a module to access records and documentation for this patient
           </p>
-          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] lg:items-start">
-            <PatientSummaryCard
-              as="section"
-              aria-label="Patient details"
-              patient={patient}
-              showPatientName={false}
-            />
+          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start">
+            {/* Left — profile card, sticky so patient context stays visible while scrolling */}
+            <div className="lg:sticky lg:top-[85px] lg:self-start w-[200px]">
+              <PatientSummaryCard
+                as="section"
+                aria-label="Patient details"
+                patient={patient}
+                showPatientName={false}
+                showDiagnosis={false}
+                className="aspect-square !p-[25px] justify-center"
+              />
+            </div>
 
-            <div className="min-w-0 bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div ref={rightColRef} className="flex flex-col gap-4 min-w-0">
+            {/* Diagnosis */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 px-5 py-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Diagnosis</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                {patient.diagnosis || <span className="italic">N/A</span>}
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden">
               <button
                 type="button"
                 onClick={() => setShowActivityStatus((prev) => !prev)}
@@ -391,7 +407,14 @@ export default function PatientHub() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
-              {showActivityStatus && (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateRows: showActivityStatus ? '1fr' : '0fr',
+                  transition: 'grid-template-rows 300ms ease',
+                }}
+              >
+                <div className="overflow-hidden">
                 <div
                   id="activity-status-panel"
                   className="border-t border-gray-200 dark:border-gray-700 px-4 py-6 sm:px-6"
@@ -456,70 +479,73 @@ export default function PatientHub() {
                     </div>
                   )}
                 </div>
-              )}
+                </div>{/* overflow-hidden inner */}
+              </div>{/* grid-template-rows wrapper */}
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
-            {MODULES.map((module) => {
-              const isAvailable = module.status === 'available' && module.href
-              const href = module.href ? `/patients/${patient.id}/${module.href}` : '#'
-              const cardClasses = `group relative block bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border transition-all duration-300 ${
-                isAvailable
-                  ? 'cursor-pointer hover:shadow-xl hover:scale-[1.02] border-gray-200 dark:border-gray-700 hover:border-lasso-blue dark:hover:border-lasso-blue'
-                  : 'cursor-not-allowed opacity-25 border-gray-200 dark:border-gray-700'
-              }`
-              const content = (
-                <>
-                  <div
-                    className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${
-                      module.status === 'coming_soon' ? 'from-gray-400 to-gray-500' : module.gradient
-                    }`}
-                  />
-                  <div className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div
-                        className={`text-4xl ${module.status === 'coming_soon' ? 'grayscale' : ''}`}
-                        aria-hidden="true"
-                      >
-                        {module.icon}
+            {/* Module cards — inside right column */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {MODULES.map((module) => {
+                const isAvailable = module.status === 'available' && module.href
+                const href = module.href ? `/patients/${patient.id}/${module.href}` : '#'
+                const cardClasses = `group relative block bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border transition-all duration-300 ${
+                  isAvailable
+                    ? 'cursor-pointer hover:shadow-xl hover:scale-[1.02] border-gray-200 dark:border-gray-700 hover:border-lasso-blue dark:hover:border-lasso-blue'
+                    : 'cursor-not-allowed opacity-25 border-gray-200 dark:border-gray-700'
+                }`
+                const content = (
+                  <>
+                    <div
+                      className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${
+                        module.status === 'coming_soon' ? 'from-gray-400 to-gray-500' : module.gradient
+                      }`}
+                    />
+                    <div className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div
+                          className={`text-4xl ${module.status === 'coming_soon' ? 'grayscale' : ''}`}
+                          aria-hidden="true"
+                        >
+                          {module.icon}
+                        </div>
+                        {module.status === 'coming_soon' && (
+                          <span className="px-2 py-1 text-xs font-semibold text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-full">
+                            Coming Soon
+                          </span>
+                        )}
+                        {isAvailable && (
+                          <span className="px-2 py-1 text-xs font-semibold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 rounded-full">
+                            Available
+                          </span>
+                        )}
                       </div>
-                      {module.status === 'coming_soon' && (
-                        <span className="px-2 py-1 text-xs font-semibold text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-full">
-                          Coming Soon
-                        </span>
-                      )}
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+                        {module.name}
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
+                        {module.description}
+                      </p>
                       {isAvailable && (
-                        <span className="px-2 py-1 text-xs font-semibold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 rounded-full">
-                          Available
+                        <span className="inline-flex items-center text-lasso-blue dark:text-lasso-blue font-medium text-sm group-hover:gap-2 transition-all duration-200">
+                          <span>Open</span>
+                          <span className="ml-1 group-hover:translate-x-1 transition-transform">→</span>
                         </span>
                       )}
                     </div>
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                      {module.name}
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
-                      {module.description}
-                    </p>
-                    {isAvailable && (
-                      <span className="inline-flex items-center text-lasso-blue dark:text-lasso-blue font-medium text-sm group-hover:gap-2 transition-all duration-200">
-                        <span>Open</span>
-                        <span className="ml-1 group-hover:translate-x-1 transition-transform">→</span>
-                      </span>
-                    )}
+                  </>
+                )
+                return isAvailable ? (
+                  <Link key={module.id} href={href} className={cardClasses}>
+                    {content}
+                  </Link>
+                ) : (
+                  <div key={module.id} className={cardClasses}>
+                    {content}
                   </div>
-                </>
-              )
-              return isAvailable ? (
-                <Link key={module.id} href={href} className={cardClasses}>
-                  {content}
-                </Link>
-              ) : (
-                <div key={module.id} className={cardClasses}>
-                  {content}
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
+            </div>{/* end right column flex */}
           </div>
         </main>
       </div>

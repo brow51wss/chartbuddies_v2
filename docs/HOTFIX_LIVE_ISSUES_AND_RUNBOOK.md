@@ -456,6 +456,34 @@ AWS Lambda runtimes automatically inject `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS
 
 ---
 
+## 13) AWS Infrastructure — VPC / Private Networking (PENDING REVIEW)
+
+**Date noted:** 2026-06-17
+
+**Context:**
+The EHR app (`app.lasso-app.com`) is hosted on AWS Amplify. The database is AWS RDS PostgreSQL (`lasso-efr-prod`, `us-east-2`). Both are in AWS, which means private VPC connectivity is achievable — but it requires explicit configuration.
+
+**Current suspected state:**
+- Amplify Lambda functions are likely NOT configured to run inside a VPC.
+- RDS is likely set to "Publicly accessible: Yes" so Amplify can reach it over the public internet.
+- Connection is SSL-encrypted (`sslmode=require`) but goes over the public internet.
+
+**What needs to be verified:**
+1. Go to **AWS Console → Lambda → Functions** → find the Amplify SSR function → check the Configuration tab → look for a VPC section. Is a VPC configured?
+2. Go to **AWS Console → RDS → lasso-efr-prod → Connectivity & security** → check "Publicly accessible" (should eventually be `No`).
+3. Check RDS security group inbound rules — is port 5432 open to `0.0.0.0/0` (anyone) or restricted?
+
+**What needs to be done (when ready):**
+- Configure Amplify Lambda functions to run inside the same VPC as RDS.
+- Set RDS "Publicly accessible" to `No`.
+- Update RDS security group to allow port 5432 only from the Lambda security group (not the open internet).
+- Fix `rejectUnauthorized: false` in `lib/rds.ts` — use the AWS RDS CA bundle instead of disabling cert verification.
+- Fix `NODE_TLS_REJECT_UNAUTHORIZED = '0'` in `lib/rds.ts` — this disables TLS cert verification globally for the entire Node.js process.
+
+**Priority:** Important for HIPAA compliance before onboarding real facilities at scale. Not a blocker for current demo/development phase.
+
+---
+
 ## 12) Session Notes
 
 - Billing/e-commerce work is intentionally paused until live stability is restored.

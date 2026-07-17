@@ -3362,30 +3362,38 @@ export default function ViewMARForm() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
-                  {showMissedDocAlerts && (
-                    <ul
-                      id="mar-missed-doc-panel"
-                      aria-label="Missed documentation entries"
-                      className="border-t border-red-200 dark:border-red-900/60 max-h-64 overflow-y-auto p-3 m-0 list-none grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3"
-                    >
-                      {missedMarDocumentation.map((item) => (
-                        <li key={`${item.medId}-${item.day}`} className="min-w-0">
-                          <button
-                            type="button"
-                            onClick={() => jumpToMissedMarCell(item.medId, item.day)}
-                            className="w-full h-full min-h-[4.25rem] text-left rounded-lg border border-red-200/90 dark:border-red-800/55 bg-white/90 dark:bg-red-950/45 px-3 py-2.5 shadow-sm hover:border-red-300 dark:hover:border-red-700 hover:bg-red-100/80 dark:hover:bg-red-950/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/80 dark:focus-visible:ring-red-500/60 transition-colors"
-                          >
-                            <div className="text-sm font-semibold text-red-950 dark:text-red-50 leading-snug">
-                              {item.dateLabel}
-                            </div>
-                            <div className="text-xs text-red-900/90 dark:text-red-200/80 mt-1.5 leading-snug">
-                              {item.rowLabel}
-                            </div>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateRows: showMissedDocAlerts ? '1fr' : '0fr',
+                      transition: 'grid-template-rows 300ms ease',
+                    }}
+                  >
+                    <div className="overflow-hidden">
+                      <ul
+                        id="mar-missed-doc-panel"
+                        aria-label="Missed documentation entries"
+                        className="border-t border-red-200 dark:border-red-900/60 max-h-64 overflow-y-auto p-3 m-0 list-none grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3"
+                      >
+                        {missedMarDocumentation.map((item) => (
+                          <li key={`${item.medId}-${item.day}`} className="min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => jumpToMissedMarCell(item.medId, item.day)}
+                              className="w-full h-full min-h-[4.25rem] text-left rounded-lg border border-red-200/90 dark:border-red-800/55 bg-white/90 dark:bg-red-950/45 px-3 py-2.5 shadow-sm hover:border-red-300 dark:hover:border-red-700 hover:bg-red-100/80 dark:hover:bg-red-950/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/80 dark:focus-visible:ring-red-500/60 transition-colors"
+                            >
+                              <div className="text-sm font-semibold text-red-950 dark:text-red-50 leading-snug">
+                                {item.dateLabel}
+                              </div>
+                              <div className="text-xs text-red-900/90 dark:text-red-200/80 mt-1.5 leading-snug">
+                                {item.rowLabel}
+                              </div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
                 </div>
               )}
 

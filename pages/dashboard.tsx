@@ -40,10 +40,12 @@ export default function Dashboard() {
   const [showAddPatientModal, setShowAddPatientModal] = useState(false)
   const [editingPatientId, setEditingPatientId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [openKebabId, setOpenKebabId] = useState<string | null>(null)
   const nameSortRef = useRef<HTMLTableCellElement>(null)
+  const kebabRef = useRef<HTMLDivElement>(null)
   const { isReadOnly } = useReadOnly()
 
-  // Close dropdown when clicking outside
+  // Close sort dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (nameSortRef.current && !nameSortRef.current.contains(event.target as Node)) {
@@ -57,6 +59,18 @@ export default function Dashboard() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showNameSortMenu])
+
+  // Close kebab menu when clicking outside
+  useEffect(() => {
+    if (!openKebabId) return
+    const handleClickOutside = (event: MouseEvent) => {
+      if (kebabRef.current && !kebabRef.current.contains(event.target as Node)) {
+        setOpenKebabId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [openKebabId])
 
   // Sort patients based on current sort settings
   const sortedPatients = [...patients].sort((a, b) => {
@@ -676,19 +690,86 @@ export default function Dashboard() {
                     ) : (
                     <div className="p-4 sm:p-6">
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {filteredSortedPatients.map((patient) => (
-                          <PatientSummaryCard
-                            key={patient.id}
-                            patient={patient}
-                            nameHeading="h3"
-                            showDateAdded={false}
-                            showDiagnosis={false}
-                            showSex
-                            showPhone
-                            className="transition-shadow hover:shadow-md"
-                            footer={renderPatientActions(patient)}
-                          />
-                        ))}
+                        {filteredSortedPatients.map((patient) => {
+                          const canManage = (userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin') && !isReadOnly
+                          const isKebabOpen = openKebabId === patient.id
+                          return (
+                            <div key={patient.id} className="relative">
+                              {/* Clickable card body */}
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => router.push(`/patients/${patient.id}`)}
+                                onKeyDown={(e) => e.key === 'Enter' && router.push(`/patients/${patient.id}`)}
+                                className="cursor-pointer"
+                              >
+                                <PatientSummaryCard
+                                  patient={patient}
+                                  nameHeading="h3"
+                                  showDob={false}
+                                  showDateAdded={false}
+                                  showDiagnosis={false}
+                                  className="aspect-square justify-center transition-all duration-200 hover:-translate-y-1 hover:shadow-md active:translate-y-0 active:shadow-sm"
+                                />
+                              </div>
+
+                              {/* Kebab menu */}
+                              {canManage && (
+                                <div ref={isKebabOpen ? kebabRef : undefined} className="absolute top-2 right-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setOpenKebabId(isKebabOpen ? null : patient.id)
+                                    }}
+                                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300 transition-colors"
+                                    title="More options"
+                                    aria-label="More options"
+                                  >
+                                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                                      <circle cx="12" cy="5" r="1.5" />
+                                      <circle cx="12" cy="12" r="1.5" />
+                                      <circle cx="12" cy="19" r="1.5" />
+                                    </svg>
+                                  </button>
+
+                                  {isKebabOpen && (
+                                    <div className="absolute right-0 mt-1 w-40 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800 z-20 overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setOpenKebabId(null)
+                                          openEditPatientModal(patient)
+                                        }}
+                                        className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                      >
+                                        <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setOpenKebabId(null)
+                                          handleDeletePatient(patient.id, patient.patient_name)
+                                        }}
+                                        className="flex w-full items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 transition-colors"
+                                      >
+                                        <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8l1 12a2 2 0 002 2h8a2 2 0 002-2l1-12" />
+                                        </svg>
+                                        Archive
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                     )}

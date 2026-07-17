@@ -24,6 +24,8 @@ type Props = {
   showDateAdded?: boolean
   /** Show the "Diagnosis" row. Defaults to true. */
   showDiagnosis?: boolean
+  /** Show the "DOB" row. Defaults to true. */
+  showDob?: boolean
   /** Show the "Sex" row. Defaults to false. */
   showSex?: boolean
   /** Show the "Phone" row. Defaults to false. */
@@ -42,6 +44,7 @@ export function PatientSummaryCard({
   nameHeading = 'h3',
   showDateAdded = true,
   showDiagnosis = true,
+  showDob = true,
   showSex = false,
   showPhone = false,
   footer,
@@ -56,8 +59,19 @@ export function PatientSummaryCard({
       : rawPhoto
     : PATIENT_SUMMARY_PHOTO_PLACEHOLDER
 
+  const nameParts = patient.patient_name.trim().split(/\s+/)
+  const firstName = nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : nameParts[0]
+  const lastName  = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
+
   const nameClass =
-    'mt-3 w-full text-center text-base font-semibold leading-snug text-gray-900 dark:text-white'
+    'mt-3 w-full text-center text-xl font-normal leading-snug text-gray-900 dark:text-white'
+
+  const nameContent = (
+    <>
+      <span className="block">{firstName}</span>
+      {lastName && <span className="block">{lastName}</span>}
+    </>
+  )
 
   const inner = (
     <>
@@ -65,26 +79,28 @@ export function PatientSummaryCard({
         <img
           src={photoSrc}
           alt={showPatientName ? '' : patient.patient_name}
-          className="h-16 w-16 shrink-0 rounded-full object-cover border border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-700"
+          className="h-[100px] w-[100px] shrink-0 rounded-full object-cover border border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-700"
         />
         {showPatientName &&
           (nameHeading === 'h2' ? (
-            <h2 className={nameClass}>{patient.patient_name}</h2>
+            <h2 className={nameClass}>{nameContent}</h2>
           ) : (
-            <h3 className={nameClass}>{patient.patient_name}</h3>
+            <h3 className={nameClass}>{nameContent}</h3>
           ))}
       </div>
-      <dl className={`w-full flex-1 divide-y divide-gray-100 dark:divide-gray-700 text-sm ${showPatientName ? 'mt-4' : 'mt-3'}`}>
-        <div className="flex items-center justify-between py-2">
-          <dt className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
-            {/* Calendar / DOB icon */}
-            <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            DOB
-          </dt>
-          <dd className="text-gray-800 dark:text-gray-200">{formatCalendarDate(patient.date_of_birth)}</dd>
-        </div>
+      <dl className={`w-full divide-y divide-gray-100 dark:divide-gray-700 text-sm ${footer != null ? 'flex-1' : ''} ${showPatientName ? 'mt-4' : 'mt-3'}`}>
+        {showDob && (
+          <div className="flex items-center justify-between py-2">
+            <dt className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+              {/* Calendar / DOB icon */}
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              DOB
+            </dt>
+            <dd className="text-gray-800 dark:text-gray-200">{formatCalendarDate(patient.date_of_birth)}</dd>
+          </div>
+        )}
         {showSex && (
           <div className="flex items-center justify-between py-2">
             <dt className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">

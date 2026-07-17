@@ -1,6 +1,6 @@
 # Lasso EHR - Brand Guide & Design System
 
-**Last Updated:** November 25, 2025  
+**Last Updated:** July 17, 2026  
 **Purpose:** This document serves as the design system and brand guide for maintaining visual and UX consistency across all Lasso EHR features and pages.
 
 ---
@@ -83,19 +83,27 @@ Each EHR module has its own color identity:
 
 ## Typography
 
+### Fonts
+- **Headings (h1–h6):** [Inter](https://fonts.google.com/specimen/Inter) — loaded via `next/font/google` (self-hosted, zero layout shift). Applied globally in `styles/globals.css`. All headings are **uppercase** by default. No per-component changes needed.
+  - To explicitly force Inter in a one-off component: `className="font-heading"`
+- **Body:** System UI stack (default Tailwind sans-serif)
+
 ### Headings
-- **H1 (Main Title):** 
+- **H1 (Main Title):**
+  - Font: Inter (automatic via global CSS)
   - Size: `text-3xl`
   - Weight: `font-bold`
   - Style: Primary Navy color `text-lasso-navy` or gradient `bg-gradient-to-r from-lasso-navy to-lasso-teal bg-clip-text text-transparent`
   - Example: "Lasso EHR"
 
 - **H2 (Section Titles):**
+  - Font: Inter (automatic)
   - Size: `text-2xl`
   - Weight: `font-bold`
   - Color: `text-gray-900 dark:text-white`
 
 - **H3 (Subsection Titles):**
+  - Font: Inter (automatic)
   - Size: `text-xl` or `text-lg`
   - Weight: `font-semibold` or `font-bold`
   - Color: `text-gray-800 dark:text-white`
@@ -144,6 +152,56 @@ Module cards are the primary navigation element for EHR modules.
 - Grid: `grid-cols-1 md:grid-cols-2 lg:grid-cols-3`
 - Gap: `gap-6`
 - Card padding: `p-6`
+
+### Data Cards (Patient / Entity Cards)
+Used for patient finder grids, entity lists, and any clickable record card — distinct from Module Cards.
+
+**Hover & Click effect (canonical):**
+```tsx
+className="transition-all duration-200 hover:-translate-y-1 hover:shadow-md active:translate-y-0 active:shadow-sm"
+```
+- Hover lifts the card 4px upward with a deeper shadow — gives the feel of "picking it up"
+- Active/click snaps it back instantly
+- **Always use `duration-200` for cards** — faster feels snappy, slower feels laggy
+
+**Structure:**
+```tsx
+<div className="relative">
+  {/* Clickable card body — navigates on click */}
+  <div
+    role="button"
+    tabIndex={0}
+    onClick={() => router.push(`/entity/${id}`)}
+    onKeyDown={(e) => e.key === 'Enter' && router.push(`/entity/${id}`)}
+    className="cursor-pointer"
+  >
+    <Card className="transition-all duration-200 hover:-translate-y-1 hover:shadow-md active:translate-y-0 active:shadow-sm" />
+  </div>
+
+  {/* Kebab menu — secondary actions only (Edit, Archive, Delete) */}
+  <div className="absolute top-2 right-2">
+    {/* ⋮ trigger button */}
+    <button className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300 transition-colors" />
+    {/* Dropdown */}
+    <div className="absolute right-0 mt-1 w-36 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800 z-20 overflow-hidden">
+      {/* Each item — py-3 ensures fat-finger safe tap targets on tablets */}
+      <button className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700 transition-colors" />
+      {/* Destructive item (Archive/Delete) */}
+      <button className="flex w-full items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 transition-colors" />
+    </div>
+  </div>
+</div>
+```
+
+**Rules:**
+- The card body is the primary action (click = open/navigate). Never put a visible "Open" link inside the card.
+- Secondary actions (Edit, Archive) live exclusively in the kebab menu (⋮), top-right corner.
+- Kebab menu is role-gated — only render it for users with write permission.
+- Use `e.stopPropagation()` on the kebab button and all dropdown items to prevent the card's `onClick` from firing.
+- Close the dropdown on outside click via a `mousedown` listener scoped to a `ref` on the open dropdown.
+- Show only face + name on patient/entity cards by default; all detail fields are behind the click.
+
+---
 
 ### Status Badges
 Small, rounded badges indicating module or feature status.
@@ -204,10 +262,10 @@ When no data is available, show helpful empty states.
 ## Animations & Transitions
 
 ### Hover Effects
-- **Scale:** `hover:scale-105` (module cards)
-- **Shadow:** `hover:shadow-xl` (from `shadow-md`)
-- **Border:** `hover:border-blue-300 dark:hover:border-blue-600`
-- **Duration:** `transition-all duration-300` or `duration-200`
+- **Module cards:** `hover:scale-105 hover:shadow-xl` with `transition-all duration-300`
+- **Data / patient cards (canonical):** `hover:-translate-y-1 hover:shadow-md active:translate-y-0 active:shadow-sm` with `transition-all duration-200`
+  - Lifts card 4px; snaps back on click. Do not use scale on data cards.
+- **Border highlight:** `hover:border-blue-300 dark:hover:border-blue-600` (optional accent on module cards only)
 
 ### Arrow Animations
 - **Text with arrow:** Arrow moves on hover

@@ -9,6 +9,10 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        // Use `font-heading` utility anywhere you need to explicitly force Inter
+        heading: ['var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
       // AppHeader is z-app-header so MAR sticky chrome stays beneath it.
       // All full-screen dialogs / scrims must use z-modal (above the header).
       zIndex: {

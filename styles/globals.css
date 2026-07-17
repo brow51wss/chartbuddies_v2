@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Inter for all headings — loaded via next/font (self-hosted, no layout shift) */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  text-transform: uppercase;
+}
+
 :root {
   color-scheme: light only;
   --foreground-rgb: 0, 0, 0;
