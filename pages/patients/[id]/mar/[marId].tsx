@@ -824,6 +824,7 @@ export default function ViewMARForm() {
     ids?: string[]
     /** Administration time for each row in group, same order as ids. */
     times?: string[]
+    parameter?: string | null
   } | null>(null)
   // Row hover state for add-between-rows feature
   const [rowHover, setRowHover] = useState<{ rowId: string; position: 'top' | 'bottom' } | null>(null)
@@ -1625,6 +1626,7 @@ export default function ViewMARForm() {
     frequency_display: string | null
     notes: string | null
     times: (string | null)[]
+    parameter?: string | null
   }) => {
     if (!marFormId) return
     if (!entry.ids.length) return
@@ -1644,6 +1646,7 @@ export default function ViewMARForm() {
       if (!entry.isVitals) {
         baseData.route = entry.route?.trim() || null
         baseData.notes = entry.notes?.trim() || null
+        baseData.parameter = entry.parameter?.trim() || null
       } else {
         baseData.notes = 'Vital Signs Entry'
         baseData.route = entry.route?.trim() || null
@@ -2133,6 +2136,7 @@ export default function ViewMARForm() {
     times?: string[] // Optional array of times for each frequency
     route: string | null
     frequencyDisplay: string | null
+    parameter?: string | null
   }, position?: { targetMedId: string; position: 'above' | 'below' } | null) => {
     if (!userProfile || !marForm || !marFormId) return
     
@@ -2211,6 +2215,7 @@ export default function ViewMARForm() {
           route: medData.route,
           frequency: frequency,
           frequency_display: medData.frequencyDisplay,
+          parameter: medData.parameter || null,
           display_order: displayOrder + i // Each frequency gets consecutive orders
         })
       }
@@ -3568,88 +3573,6 @@ export default function ViewMARForm() {
                                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
                                         {template.medication || '—'}
                                       </div>
-                                      <div className="text-xs text-gray-700 dark:text-gray-300">
-                                        {template.dosage?.trim() ? template.dosage : '—'}
-                                      </div>
-                                      <div
-                                        className={`text-xs text-gray-600 dark:text-gray-400 break-words ${!readOnly ? 'cursor-pointer hover:underline' : ''}`}
-                                        onClick={
-                                          !readOnly
-                                            ? (e) => {
-                                                e.stopPropagation()
-                                                handlePRNFieldEdit(template.id, 'reason', template.reason, 'chart')
-                                              }
-                                            : undefined
-                                        }
-                                      >
-                                        {!readOnly &&
-                                        editingPRNField?.recordId === template.id &&
-                                        editingPRNField?.field === 'reason' &&
-                                        editingPRNField.surface === 'chart' ? (
-                                          <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
-                                            <div className="font-medium text-gray-500 dark:text-gray-400 text-[10px] uppercase tracking-wide">
-                                              Reason
-                                            </div>
-                                            <input
-                                              type="text"
-                                              value={editingPRNValue}
-                                              onChange={(e) => setEditingPRNValue(e.target.value)}
-                                              onBlur={() => handlePRNFieldSave(template.id, 'reason')}
-                                              onKeyDown={(e) => {
-                                                if (e.key === 'Enter') handlePRNFieldSave(template.id, 'reason')
-                                                else if (e.key === 'Escape') handlePRNFieldCancel()
-                                              }}
-                                              autoFocus
-                                              placeholder="Reason / indication"
-                                              className="w-full px-2 py-1 border border-lasso-teal rounded text-xs dark:bg-gray-700 dark:text-white"
-                                            />
-                                          </div>
-                                        ) : (
-                                          <>
-                                            <div className="font-medium text-gray-500 dark:text-gray-400 text-[10px] uppercase tracking-wide mb-0.5">
-                                              Reason
-                                            </div>
-                                            <span>{template.reason || '—'}</span>
-                                          </>
-                                        )}
-                                      </div>
-                                      {!(
-                                        editingPRNField?.recordId === template.id &&
-                                        editingPRNField?.field === 'reason' &&
-                                        editingPRNField.surface === 'chart'
-                                      ) &&
-                                      (!readOnly || template.note?.trim()) ? (
-                                        <div className="mt-1 pt-1 border-t border-emerald-800/20 dark:border-emerald-400/25">
-                                          <div className="flex items-start justify-between gap-1">
-                                            <span className="font-medium text-gray-500 dark:text-gray-400 text-[10px] uppercase tracking-wide">
-                                              Notes
-                                            </span>
-                                            {canEditStructure ? (
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  setEditingPRNNote({ recordId: template.id, note: template.note })
-                                                  setShowPRNNoteModal(true)
-                                                }}
-                                                className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue shrink-0"
-                                                title={template.note ? 'Edit note' : 'Add note'}
-                                              >
-                                                {template.note ? '📝' : '+'} note
-                                              </button>
-                                            ) : null}
-                                          </div>
-                                          {template.note?.trim() ? (
-                                            <div className="text-[11px] text-gray-600 dark:text-gray-400 italic mt-0.5 break-words">
-                                              {template.note}
-                                            </div>
-                                          ) : canEditStructure ? (
-                                            <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
-                                              Optional — appears on Progress Notes as additional note
-                                            </div>
-                                          ) : null}
-                                        </div>
-                                      ) : null}
                                       {seg.records.some(
                                         (r) =>
                                           r.date &&
@@ -4225,6 +4148,7 @@ export default function ViewMARForm() {
                                             frequency_display: med.frequency_display,
                                             notes: med.notes,
                                             hour: med.hour ?? '',
+                                            parameter: med.parameter ?? null,
                                             ...(isMulti ? { ids, times } : {})
                                           })
                                           setInsertPosition(null)
@@ -4265,37 +4189,22 @@ export default function ViewMARForm() {
                                     </div>
                                     )}
                                   </div>
-                                  {/* Right column: medication name + details (vertically aligned) */}
+                                  {/* Right column: simplified — vitals shows label + notes, medication shows name only */}
                                   <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                                    <div className={`font-medium text-sm ${isVitalsEntry ? 'text-lasso-teal dark:text-lasso-blue' : 'text-gray-800 dark:text-white'}`}>
-                                      {isVitalsEntry ? '📊 VITALS' : med.medication_name}
-                                    </div>
-                                    <div className={`text-xs ${isVitalsEntry ? 'text-gray-600 dark:text-gray-400' : 'text-gray-600 dark:text-gray-400'}`}>
-                                      {med.dosage}
-                                    </div>
-                                    {!isVitalsEntry && med.route && (
-                                      <div className="text-xs text-gray-500 dark:text-gray-500 italic">
-                                        {med.route}
-                                      </div>
-                                    )}
-                                    {(med.frequency_display || (med.frequency && med.frequency > 1)) && (
-                                      <div className="text-xs text-gray-500 dark:text-gray-500">
-                                        {med.frequency_display || `${med.frequency} times per day`}
-                                      </div>
-                                    )}
-                                    {isVitalsEntry && med.route && (
-                                      <div className="text-xs text-gray-500 dark:text-gray-500 italic">
-                                        Default: {med.route}
-                                      </div>
-                                    )}
-                                    {med.notes && !isVitalsEntry && (
-                                      <div className="text-xs text-gray-500 dark:text-gray-500 italic">
-                                        {med.notes}
-                                      </div>
-                                    )}
-                                    {med.parameter && !isVitalsEntry && (
-                                      <div className="text-xs text-gray-600 dark:text-gray-400 italic pt-1 mt-0.5 border-t border-gray-200 dark:border-gray-600">
-                                        {med.parameter}
+                                    {isVitalsEntry ? (
+                                      <>
+                                        <div className="font-medium text-sm text-lasso-teal dark:text-lasso-blue">
+                                          📊 VITALS
+                                        </div>
+                                        {med.dosage && (
+                                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                                            {med.dosage}
+                                          </div>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <div className="font-medium text-sm text-gray-800 dark:text-white">
+                                        {med.medication_name}
                                       </div>
                                     )}
                                   </div>
@@ -5547,7 +5456,8 @@ export default function ViewMARForm() {
                       frequency: data.type === 'medication' ? md!.frequency : (vd!.frequency || 1),
                       frequency_display: data.type === 'medication' ? md!.frequencyDisplay : (vd!.frequencyDisplay || null),
                       notes: data.type === 'medication' ? md!.notes : 'Vital Signs Entry',
-                      times: timesArray
+                      times: timesArray,
+                      parameter: data.type === 'medication' ? md!.parameter : null
                     }
                     await updateMedicationEntry(updateData)
                     setShowAddMedModal(false)
@@ -6475,6 +6385,7 @@ function AddMedicationOrVitalsForm({
       times?: string[]
       route: string | null
       frequencyDisplay: string | null
+      parameter: string | null
     }
     vitalsData?: {
       notes: string
@@ -6506,6 +6417,7 @@ function AddMedicationOrVitalsForm({
     hour: string | null
     /** All administration times for this medication group (when frequency > 1). */
     times?: string[]
+    parameter?: string | null
   } | null
   isEditMode?: boolean
   dateMin?: string
@@ -6537,7 +6449,8 @@ function AddMedicationOrVitalsForm({
     frequency: isEditMode && editData && !editData.isVitals ? (editData.frequency || 1) : 1, // Number of times per day
     times: initialTimes as string[], // Array of times for each frequency; from editData when editing
     route: isEditMode && editData && !editData.isVitals ? (editData.route || '') : '', // Route of administration
-    frequencyDisplay: isEditMode && editData && !editData.isVitals ? (editData.frequency_display || '') : '' // Custom frequency display text
+    frequencyDisplay: isEditMode && editData && !editData.isVitals ? (editData.frequency_display || '') : '', // Custom frequency display text
+    parameter: isEditMode && editData && !editData.isVitals ? (editData.parameter || '') : ''
   })
   const initialVitalsTimes = (() => {
     if (!isEditMode || !editData || !editData.isVitals) return []
@@ -6636,7 +6549,8 @@ function AddMedicationOrVitalsForm({
           frequency: medicationData.frequency,
           times: medTimes,
           route: medicationData.route || null,
-          frequencyDisplay: medicationData.frequencyDisplay || null
+          frequencyDisplay: medicationData.frequencyDisplay || null,
+          parameter: medicationData.parameter || null
         } : undefined,
         vitalsData: entryType === 'vitals' ? {
           notes: vitalsData.notes,
@@ -6661,7 +6575,8 @@ function AddMedicationOrVitalsForm({
         frequency: 1,
         times: [],
         route: '',
-        frequencyDisplay: ''
+        frequencyDisplay: '',
+        parameter: ''
       })
       setVitalsData({
         notes: '',
@@ -6888,6 +6803,20 @@ function AddMedicationOrVitalsForm({
               rows={2}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Parameter (optional)
+            </label>
+            <textarea
+              value={medicationData.parameter}
+              onChange={(e) => setMedicationData({ ...medicationData, parameter: e.target.value })}
+              placeholder="e.g., Hold if systolic BP < 90 mmHg"
+              rows={2}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Clinical condition that must be met before administering this medication.</p>
           </div>
 
         </>

@@ -49,6 +49,37 @@
 
 - [x] **Show only face photo + name on patient cards** — strip out DOB, phone, diagnosis, etc. from the card.
 - [x] **All details (DOB, age, sex, physician, etc.) visible only after clicking** into the patient record.
+- [x] Cards are perfect squares (1:1 aspect ratio), photo centered.
+- [x] Card click = open patient. Kebab menu (⋮) = Edit / Archive (role-gated).
+- [x] Lift hover effect + snap-back on click.
+- [x] Patient name split into two lines (first names / last name), 1.25rem, uppercase.
+- [x] Photo thumbnail 100×100px.
+
+---
+
+## Patient Binder (Profile Page)
+
+- [x] Diagnosis moved above Activity Status in the right column.
+- [x] Profile card sticky at top 85px while scrolling through modules.
+- [x] Profile card is a perfect square (200×200px) with 25px internal padding.
+- [x] Module cards moved into the right column (below Activity Status).
+- [x] Smooth slide animation on Activity Status collapsible panel.
+
+---
+
+## MAR — UX Shipped Today
+
+- [x] Missed documentation items replaced with red dots (click scrolls to entry).
+- [x] Red dot hover shows MM/DD tooltip via portal (no overflow clipping).
+- [x] Smooth slide animation on Missed Documentation collapsible panel.
+
+---
+
+## Global Style
+
+- [x] Inter font applied to all h1–h6 globally via `next/font/google`.
+- [x] All headings uppercase globally.
+- [x] Brand guide (`BRAND_GUIDE.md`) updated with card patterns, kebab menu, font, and animation rules.
 
 ---
 
