@@ -38,6 +38,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'DELETE') {
+      // Delete linked progress notes first to avoid orphaned entries in Progress Notes
+      await rdsQuery(
+        'DELETE FROM progress_note_entries WHERE source_mar_prn_record_id = $1',
+        [prnRecordId],
+      )
       await rdsQuery('DELETE FROM mar_prn_records WHERE id = $1', [prnRecordId])
       return res.status(204).end()
     }

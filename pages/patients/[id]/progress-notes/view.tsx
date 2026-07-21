@@ -16,6 +16,7 @@ import {
   rdsListProgressNotes,
   rdsCreateProgressNote,
   rdsPatchProgressNote,
+  rdsDeleteProgressNote,
   rdsUpsertAdministration,
   rdsGetProgressNoteSummary,
   rdsGetLatestProgressNoteSummaryWeightUnit,
@@ -288,6 +289,9 @@ export default function ProgressNotesPage() {
   const [facilityName, setFacilityName] = useState<string>('')
   const [physicians, setPhysicians] = useState<string[]>([])
   const [entries, setEntries] = useState<ProgressNoteEntry[]>([])
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null)
+  const [showDeleteNoteModal, setShowDeleteNoteModal] = useState(false)
+  const [deletingNoteSaving, setDeletingNoteSaving] = useState(false)
   const [showEditPatientInfoModal, setShowEditPatientInfoModal] = useState(false)
   const [selectedPhysician, setSelectedPhysician] = useState<string>('')
   const [customPhysician, setCustomPhysician] = useState<string>('')
@@ -572,6 +576,23 @@ export default function ProgressNotesPage() {
       delete entrySaveTimeoutsRef.current[entryId]
       handleUpdateEntry(entryId, notes, noteDate)
     }, PAGE1_ENTRY_DEBOUNCE_MS)
+  }
+
+  const canDeleteNotes = userProfile?.role === 'superadmin' || userProfile?.role === 'head_nurse'
+
+  const handleDeleteNote = async () => {
+    if (!deletingNoteId) return
+    try {
+      setDeletingNoteSaving(true)
+      await rdsDeleteProgressNote(deletingNoteId)
+      setEntries(prev => prev.filter(e => e.id !== deletingNoteId))
+      setShowDeleteNoteModal(false)
+      setDeletingNoteId(null)
+    } catch (err: any) {
+      console.error('Error deleting progress note:', err)
+    } finally {
+      setDeletingNoteSaving(false)
+    }
   }
 
   const handleSignEntry = async (entryId: string) => {
@@ -1061,6 +1082,19 @@ export default function ProgressNotesPage() {
                         ) : !userProfile?.staff_signature ? (
                           <span className="text-amber-600 dark:text-amber-400 text-sm">Set signature in Profile first</span>
                         ) : null}
+                        {canDeleteNotes && (
+                          <button
+                            type="button"
+                            onClick={() => { setDeletingNoteId(entry.id); setShowDeleteNoteModal(true) }}
+                            className="mt-2 text-red-400 hover:text-red-600 dark:hover:text-red-400 transition-colors p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                            title="Delete entry"
+                            aria-label="Delete progress note entry"
+                          >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -1417,6 +1451,36 @@ export default function ProgressNotesPage() {
           </div>
           )}
         </main>
+
+        {/* Delete Progress Note Confirmation Modal */}
+        {showDeleteNoteModal && deletingNoteId && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-sm mx-4">
+              <h2 className="text-lg font-bold text-red-600 dark:text-red-400 mb-3">Delete Progress Note?</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                This will permanently remove this entry. This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowDeleteNoteModal(false); setDeletingNoteId(null) }}
+                  disabled={deletingNoteSaving}
+                  className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteNote}
+                  disabled={deletingNoteSaving}
+                  className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deletingNoteSaving ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <EditPatientInfoModal
           isOpen={showEditPatientInfoModal}

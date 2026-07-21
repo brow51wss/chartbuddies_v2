@@ -20,7 +20,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!hospitalId) return res.status(404).json({ error: 'MAR form not found' })
       if (!callerCanAccessHospital(caller, hospitalId)) return res.status(403).json({ error: 'Forbidden' })
       const { rows } = await rdsQuery(
-        'SELECT * FROM mar_prn_records WHERE mar_form_id = $1 ORDER BY date ASC, created_at ASC',
+        `SELECT * FROM mar_prn_records
+         WHERE mar_form_id = $1
+         ORDER BY date ASC, hour ASC NULLS LAST, created_at ASC`,
         [mar_form_id],
       )
       return res.status(200).json(rows)

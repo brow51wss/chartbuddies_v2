@@ -29,7 +29,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ),
         rdsQuery('SELECT * FROM mar_vital_signs WHERE mar_form_id = $1 ORDER BY day_number ASC', [formId]),
         rdsQuery('SELECT * FROM mar_prn_medications WHERE mar_form_id = $1 ORDER BY created_at ASC', [formId]),
-        rdsQuery('SELECT * FROM mar_prn_records WHERE mar_form_id = $1 ORDER BY date ASC, created_at ASC', [formId]),
+        rdsQuery(
+          `SELECT * FROM mar_prn_records
+           WHERE mar_form_id = $1
+           ORDER BY date ASC, hour ASC NULLS LAST, created_at ASC`,
+          [formId],
+        ),
       ])
 
       return res.status(200).json({

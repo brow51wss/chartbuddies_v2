@@ -304,6 +304,27 @@ function segmentSortableId(s: MarChartSegment): string {
   return s.kind === 'med' ? s.meds[0]!.id : marPrnChartSortableIdFromGroupKey(s.groupKey)
 }
 
+/** Convert a PRN hour value to minutes from midnight for client-side sort fallback.
+ *  Handles both "HH:MM:SS" (PostgreSQL TIME type via pg driver) and "H:MM AM/PM" display formats. */
+function prnHourToMinutes(hour: string | null | undefined): number {
+  if (!hour) return 99999
+  const s = hour.trim()
+  // PostgreSQL TIME via pg driver: "HH:MM:SS" or "HH:MM"
+  const hms = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
+  if (hms) return parseInt(hms[1], 10) * 60 + parseInt(hms[2], 10)
+  // Display format: "H:MM AM" / "H:MM PM"
+  const ampm = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+  if (ampm) {
+    let h = parseInt(ampm[1], 10)
+    const min = parseInt(ampm[2], 10)
+    const period = ampm[3].toUpperCase()
+    if (period === 'AM' && h === 12) h = 0
+    if (period === 'PM' && h !== 12) h += 12
+    return h * 60 + min
+  }
+  return 99999
+}
+
 function buildMarPrnGroupMap(prns: MARPRNRecord[]): Map<string, MARPRNRecord[]> {
   const m = new Map<string, MARPRNRecord[]>()
   for (const p of prns) {
@@ -312,7 +333,11 @@ function buildMarPrnGroupMap(prns: MARPRNRecord[]): Map<string, MARPRNRecord[]> 
     m.get(k)!.push(p)
   }
   Array.from(m.values()).forEach((arr) => {
-    arr.sort((a: MARPRNRecord, b: MARPRNRecord) => (a.entry_number ?? 0) - (b.entry_number ?? 0))
+    arr.sort((a: MARPRNRecord, b: MARPRNRecord) => {
+      const tDiff = prnHourToMinutes(a.hour) - prnHourToMinutes(b.hour)
+      if (tDiff !== 0) return tDiff
+      return (a.created_at || '').localeCompare(b.created_at || '')
+    })
   })
   return m
 }
@@ -884,6 +909,16 @@ export default function ViewMARForm() {
   const [showVitalSignsModal, setShowVitalSignsModal] = useState(false)
   const [editingCell, setEditingCell] = useState<{ medId: string; day: number } | null>(null)
   const [editingCellValue, setEditingCellValue] = useState<string>('') // Store the value being edited
+  const [editingCellNote, setEditingCellNote] = useState<string>('')   // Store the note being edited
+
+  // PRN day-cell modal — shows all administrations for one PRN row + one day, with add / edit / delete
+  const [prnDayCellModal, setPrnDayCellModal] = useState<{ template: MARPRNRecord; day: number } | null>(null)
+  const [prnDayCellEditingId, setPrnDayCellEditingId] = useState<string | null>(null)
+  const [prnDayCellForm, setPrnDayCellForm] = useState({ hour: '', initials: '', result: '', note: '' })
+  const [prnDayCellSaving, setPrnDayCellSaving] = useState(false)
+  const [prnDayCellDeleteConfirmId, setPrnDayCellDeleteConfirmId] = useState<string | null>(null)
+  // Separate state for the inline accordion edit form (independent of the top add form)
+  const [prnDayCellEditForm, setPrnDayCellEditForm] = useState({ hour: '', initials: '', result: '', note: '' })
   const [showMissedDocAlerts, setShowMissedDocAlerts] = useState(true)
   const [dotTooltip, setDotTooltip] = useState<{ x: number; y: number; label: string } | null>(null)
   /** Recompute missed-documentation when the scheduled “past due” window changes (e.g. crossing a row’s hour). */
@@ -942,7 +977,7 @@ export default function ViewMARForm() {
   const [insertPosition, setInsertPosition] = useState<{ targetMedId: string; position: 'above' | 'below' } | null>(null)
   // Delete confirmation state
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
-  const [deletingEntry, setDeletingEntry] = useState<{ id: string; name: string; dosage: string; isVitals: boolean; isPrn?: boolean } | null>(null)
+  const [deletingEntry, setDeletingEntry] = useState<{ id: string; name: string; dosage: string; isVitals: boolean; isPrn?: boolean; prnGroupKey?: string } | null>(null)
   const [showAdministrationNoteModal, setShowAdministrationNoteModal] = useState(false)
   const [editingAdministrationNote, setEditingAdministrationNote] = useState<{ medId: string; day: number; note: string | null } | null>(null)
   const [customLegends, setCustomLegends] = useState<Array<{ id: string; code: string; description: string }>>([])
@@ -1056,43 +1091,26 @@ export default function ViewMARForm() {
     }
   }, [router.isReady, router.query.marId])
 
-  // Handle browser back button and navigation
+  // Handle browser back/forward button — reload/close has no warning since MAR auto-saves
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (readOnly) return // No unsaved changes in read-only
-      if (!userProfile) return // Not authenticated — don't block navigation
-      e.preventDefault()
-      e.returnValue = '' // Chrome requires returnValue to be set
-      return '' // Some browsers require return value
-    }
-
-    // Handle browser back/forward button
     const handlePopState = (e: PopStateEvent) => {
-      if (readOnly) return // Allow leaving without confirmation in read-only
-      // If navigation is allowed (user confirmed), don't block
+      if (readOnly) return
       if (allowNavigationRef.current) {
-        allowNavigationRef.current = false // Reset after allowing navigation
+        allowNavigationRef.current = false
         return
       }
-      
       e.preventDefault()
       setShowLeaveConfirmModal(true)
-      // Push current state back to prevent navigation
       window.history.pushState(null, '', window.location.href)
     }
 
-    // Push a state to track navigation
     window.history.pushState(null, '', window.location.href)
-
-    // Listen for browser back/forward/refresh
-    window.addEventListener('beforeunload', handleBeforeUnload)
     window.addEventListener('popstate', handlePopState)
 
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
       window.removeEventListener('popstate', handlePopState)
     }
-  }, [readOnly, userProfile])
+  }, [readOnly])
 
   // Handle Next.js router navigation
   useEffect(() => {
@@ -1189,6 +1207,19 @@ export default function ViewMARForm() {
         } else if (showMedicationNotesModal) {
           setShowMedicationNotesModal(false)
           setEditingMedicationNotes(null)
+        } else if (prnDayCellModal) {
+          if (prnDayCellEditingId) {
+            // First Escape collapses the inline edit; second Escape closes the modal
+            setPrnDayCellEditingId(null)
+            setPrnDayCellEditForm({ hour: '', initials: '', result: '', note: '' })
+          } else {
+            setPrnDayCellModal(null)
+            setPrnDayCellForm({ hour: '', initials: '', result: '', note: '' })
+            setPrnDayCellDeleteConfirmId(null)
+          }
+        } else if (editingCell) {
+          setEditingCell(null)
+          setEditingCellValue('')
         } else if (showAdministrationNoteModal) {
           setShowAdministrationNoteModal(false)
           setEditingAdministrationNote(null)
@@ -1431,9 +1462,8 @@ export default function ViewMARForm() {
         }))
       }
 
-      // If DC (Discontinued) was selected, mark all future days as discontinued
+      // If DC (Discontinued) was selected, stamp all future days as discontinued
       if (initials === 'DC' && status === 'Given') {
-        // Mark all future days (day + 1 to 31) as discontinued
         const futureDays = []
         for (let futureDay = day + 1; futureDay <= 31; futureDay++) {
           futureDays.push({
@@ -1444,14 +1474,39 @@ export default function ViewMARForm() {
             administered_at: null
           })
         }
-
         if (futureDays.length > 0) {
           try {
             await Promise.all(futureDays.map(fd => rdsUpsertAdministration(fd)))
-            // Reload form to get fresh administration data
             await loadMARForm()
           } catch (dcErr) {
             console.error('Error marking future days as discontinued:', dcErr)
+          }
+        }
+      }
+
+      // If changing AWAY from DC, clear the cascade DC stamps on all subsequent days
+      const prevInitialsUpper = (existingAdmin?.initials || '').trim().toUpperCase()
+      const newInitialsUpper = initialsToSave.trim().toUpperCase()
+      if (prevInitialsUpper === 'DC' && newInitialsUpper !== 'DC') {
+        const clearDays = []
+        for (let futureDay = day + 1; futureDay <= 31; futureDay++) {
+          if ((administrations[medId]?.[futureDay]?.initials || '').trim().toUpperCase() === 'DC') {
+            clearDays.push(futureDay)
+          }
+        }
+        if (clearDays.length > 0) {
+          try {
+            await Promise.all(clearDays.map(fd => rdsUpsertAdministration({
+              mar_medication_id: medId,
+              day_number: fd,
+              status: 'Not Given',
+              initials: null,
+              notes: null,
+              administered_at: null,
+            })))
+            await loadMARForm()
+          } catch (clearErr) {
+            console.error('Error clearing discontinued cascade:', clearErr)
           }
         }
       }
@@ -1461,13 +1516,15 @@ export default function ViewMARForm() {
         if (legendLabel) {
           const med = medications.find((m) => m.id === medId)
           const timeLabel = med?.hour ? formatTimeDisplay(med.hour) : undefined
+          const isVitalsMed = med?.medication_name === 'VITALS' || med?.notes === 'Vital Signs Entry'
           await syncMARNoteToProgressNotes(
             marForm.patient_id,
             marForm.month_year,
             day,
             savedAdmin.notes,
             timeLabel,
-            legendLabel
+            legendLabel,
+            (!isVitalsMed && med?.medication_name) || undefined
           )
         }
       }
@@ -1511,6 +1568,7 @@ export default function ViewMARForm() {
       dosage: string | null
       reason: string
       result: string | null
+      note?: string | null
       startDate: string | null
     },
     options?: { refreshMode?: 'full' | 'prnOnly' },
@@ -1541,16 +1599,19 @@ export default function ViewMARForm() {
         dosage: record.dosage?.trim() || null,
         reason: record.reason,
         result: record.result,
+        note: record.note?.trim() || null,
         staff_signature: null,
         signed_by: null,
         entry_number: nextEntryNumber,
       })
 
-      if (inserted && marForm.patient_id && shouldSyncMarPrnRecordToProgressNotes(inserted as MARPRNRecord)) {
+      const insertedRecord = inserted?.prn_record as MARPRNRecord | undefined
+
+      if (insertedRecord && marForm.patient_id && shouldSyncMarPrnRecordToProgressNotes(insertedRecord)) {
         try {
           await upsertProgressNoteFromPRNRecordRds({
             patientId: marForm.patient_id,
-            record: inserted as MARPRNRecord,
+            record: insertedRecord,
             physicianName: marForm.physician_name ?? null,
             createdBy: userProfile.id,
           })
@@ -1562,8 +1623,8 @@ export default function ViewMARForm() {
         }
       }
 
-      if (refreshMode === 'prnOnly' && inserted) {
-        setPrnRecords((prev) => [...prev, inserted as MARPRNRecord])
+      if (refreshMode === 'prnOnly' && insertedRecord) {
+        setPrnRecords((prev) => [...prev, insertedRecord])
       } else {
         await loadMARForm()
       }
@@ -2075,7 +2136,8 @@ export default function ViewMARForm() {
     day: number,
     note: string | null,
     timeLabel?: string,
-    legendLabel?: string | null
+    legendLabel?: string | null,
+    medicationName?: string
   ) => {
     if (!userProfile?.id) throw new Error('User profile not loaded; cannot sync to Progress Notes.')
     const parsed = parseMARMonthYear(monthYear)
@@ -2085,11 +2147,20 @@ export default function ViewMARForm() {
     const safeDay = Math.min(Math.max(1, day), lastDay)
     const noteDate = `${y}-${String(m).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`
 
-    // Find existing progress note for this patient/date
+    // Find existing progress note for this patient/date.
+    // Skip PRN-linked notes (source_mar_prn_record_id set) so MAR medication notes
+    // never get merged into a PRN-specific entry — each should stay in its own row.
+    // note_date from PostgreSQL may come back as a full ISO timestamp ("2026-06-09T00:00:00.000Z"),
+    // so normalise to "YYYY-MM-DD" before comparing.
     const allNotes = await rdsListProgressNotes(patientId, true)
-    const existing = allNotes.find((n: any) => n.note_date === noteDate) ?? null
+    const existing = allNotes.find((n: any) =>
+      n.note_date
+        ? String(n.note_date).slice(0, 10) === noteDate && !n.source_mar_prn_record_id
+        : false
+    ) ?? null
 
     const prefixWithTime = timeLabel ? `(from MAR, ${timeLabel})` : '(from MAR)'
+    const medPart = medicationName?.trim() ? ` [${medicationName.trim()}]` : ''
 
     const removeLinesForTime = (text: string, label: string): string => {
       const prefix = `(from MAR, ${label})`
@@ -2100,8 +2171,8 @@ export default function ViewMARForm() {
 
     if (note?.trim()) {
       const marBlock = legendLabel
-        ? `${prefixWithTime} ${legendLabel}: ${note.trim()}`
-        : `${prefixWithTime} ${note.trim()}`
+        ? `${prefixWithTime}${medPart} ${legendLabel}: ${note.trim()}`
+        : `${prefixWithTime}${medPart} ${note.trim()}`
       if (existing) {
         let prev = (existing.notes || '').trim()
         if (timeLabel) prev = removeLinesForTime(prev, timeLabel)
@@ -2129,19 +2200,21 @@ export default function ViewMARForm() {
     }
   }
 
-  const updateAdministrationNote = async (medId: string, day: number, note: string | null) => {
+  const updateAdministrationNote = async (medId: string, day: number, note: string | null, initialsOverride?: string) => {
     if (!marFormId) return
     
     try {
       setSaving(true)
       
       const existingAdmin = administrations[medId]?.[day]
+      // Use the override when provided (avoids stale-state reads immediately after updateAdministration)
+      const initialsToUse = initialsOverride ?? existingAdmin?.initials ?? ''
       
       await rdsUpsertAdministration({
         mar_medication_id: medId,
         day_number: day,
         status: existingAdmin?.status ?? 'Given',
-        initials: existingAdmin?.initials ?? 'R',
+        initials: initialsToUse,
         notes: note?.trim() || null,
         updated_at: new Date().toISOString(),
         ...(existingAdmin ? { id: existingAdmin.id } : {}),
@@ -2150,8 +2223,9 @@ export default function ViewMARForm() {
       if (marForm?.patient_id && marForm?.month_year) {
         const med = medications.find((m) => m.id === medId)
         const timeLabel = med?.hour ? formatTimeDisplay(med.hour) : undefined
-        const legendLabel = getMARLegendProgressNoteLabel(existingAdmin?.initials || 'R')
-        await syncMARNoteToProgressNotes(marForm.patient_id, marForm.month_year, day, note ?? null, timeLabel, legendLabel)
+        const legendLabel = getMARLegendProgressNoteLabel(initialsToUse)
+        const isVitalsMed = med?.medication_name === 'VITALS' || med?.notes === 'Vital Signs Entry'
+        await syncMARNoteToProgressNotes(marForm.patient_id, marForm.month_year, day, note ?? null, timeLabel, legendLabel, (!isVitalsMed && med?.medication_name) || undefined)
       }
 
       await loadMARForm()
@@ -2571,13 +2645,47 @@ export default function ViewMARForm() {
       setError('')
 
       if (deletingEntry?.isPrn) {
-        await rdsDeletePrnMedication(medId)
-        setPrnMedicationList((prev) => prev.filter((p) => p.id !== medId))
+        // Delete every mar_prn_record in this group (all administrations for this PRN row)
+        const groupKey = deletingEntry.prnGroupKey
+        const recordsToDelete = groupKey
+          ? prnRecords.filter((r) => getMarPrnRecordGroupKey(r) === groupKey)
+          : prnRecords.filter((r) => r.id === medId)
+        await Promise.all(recordsToDelete.map((r) => rdsDeletePrnRecord(r.id)))
+        setPrnRecords((prev) => prev.filter((r) => !recordsToDelete.some((d) => d.id === r.id)))
       } else {
+        // Before deleting, scrub any MAR-generated lines for this medication from ALL progress notes
+        const med = medications.find((m) => m.id === medId)
+        if (med && marForm?.patient_id) {
+          const timeLabel = med.hour ? formatTimeDisplay(med.hour as string) : undefined
+          const isVitalsMed = med.medication_name === 'VITALS' || med.notes === 'Vital Signs Entry'
+          const medName = (!isVitalsMed && med.medication_name) ? med.medication_name.trim() : undefined
+          // Matches the exact prefix that syncMARNoteToProgressNotes writes per line
+          const linePrefix = timeLabel
+            ? `(from MAR, ${timeLabel})${medName ? ` [${medName}]` : ''}`
+            : `(from MAR)${medName ? ` [${medName}]` : ''}`
+          try {
+            const allProgressNotes = await rdsListProgressNotes(marForm.patient_id, true)
+            // Only process notes that actually contain this medication's prefix
+            const affected = allProgressNotes.filter((n: any) => n.notes?.includes(linePrefix))
+            await Promise.all(affected.map(async (n: any) => {
+              const cleaned = (n.notes as string)
+                .split('\n')
+                .filter((line: string) => !line.trim().startsWith(linePrefix))
+                .join('\n')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim()
+              if (cleaned !== (n.notes as string).trim()) {
+                await rdsPatchProgressNote(n.id, { notes: cleaned, updated_at: new Date().toISOString() })
+              }
+            }))
+          } catch (cleanErr) {
+            console.error('Progress note cleanup failed during medication delete:', cleanErr)
+          }
+        }
+
         // Delete the medication entry (CASCADE on RDS will remove administrations)
         await rdsDeleteMarMedication(medId)
         // Optimistically remove from local state immediately so the row disappears
-        // even if the subsequent reload has a slight delay
         setMedications((prev) => prev.filter((m) => m.id !== medId))
         setAdministrations((prev) => {
           const next = { ...prev }
@@ -3784,6 +3892,7 @@ export default function ViewMARForm() {
                                                 dosage: template.dosage || '',
                                                 isVitals: false,
                                                 isPrn: true,
+                                                prnGroupKey: seg.groupKey,
                                               })
                                               setShowDeleteConfirmModal(true)
                                             }}
@@ -3875,9 +3984,9 @@ export default function ViewMARForm() {
                                   const recsForDay = seg.records
                                     .filter((r) => getPrnAdminDayInMonth(r.date) === day)
                                     .sort((a, b) => {
-                                      const enA = a.entry_number ?? 0
-                                      const enB = b.entry_number ?? 0
-                                      if (enA !== enB) return enA - enB
+                                      const tA = prnHourToMinutes(a.hour)
+                                      const tB = prnHourToMinutes(b.hour)
+                                      if (tA !== tB) return tA - tB
                                       return (a.created_at || '').localeCompare(b.created_at || '')
                                     })
                                   const canUseDayCell = isValidCalendarDayInMarMonth(day)
@@ -3888,297 +3997,73 @@ export default function ViewMARForm() {
                                       className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs align-top bg-[#eef8f1] dark:bg-[#14532d]/20 ${dayCellHighlight} ${!canUseDayCell ? 'opacity-40' : ''}`}
                                     >
                                       {canUseDayCell ? (
-                                        <div className="flex flex-col gap-1.5 items-stretch text-center min-w-0">
-                                          {recsForDay.map((prn) => {
-                                            const prnHasTime = !!prn.hour
-                                            const prnHasResult = !!prn.result?.trim()
-                                            const prnHasInitials = !!prn.initials?.trim()
-                                            const prnInitialsHelper =
-                                              prnHasTime && prnHasResult && !prnHasInitials ? 'Set initials' : ''
-                                            const showPrnResultInitialsRows = readOnly || prnHasTime
-                                            // SCG can only edit chart PRN records they created (or new ones with no initials)
-                                            const _prnCUserRaw = (userProfile?.staff_initials || '').trim()
-                                            const _prnCUserText = (userProfile?.staff_initials_text || '').trim().toUpperCase()
-                                            const _prnCCellIsText = prn.initials ? !prn.initials.startsWith('s3:') && !prn.initials.startsWith('data:') : true
-                                            const prnChartIsOwn = !isSCG || !prn.initials ||
-                                              (_prnCUserRaw && prn.initials === _prnCUserRaw) ||
-                                              (_prnCCellIsText && _prnCUserText && prn.initials.trim().toUpperCase() === _prnCUserText)
-                                            const prnChartReadOnly = readOnly || !prnChartIsOwn
-                                            return (
-                                              <div
-                                                key={prn.id}
-                                                className="flex flex-col gap-1 items-stretch rounded border border-emerald-800/20 dark:border-emerald-400/25 px-0.5 py-1 bg-white/40 dark:bg-black/15"
-                                              >
-                                          <div
-                                            className={
-                                              prnChartReadOnly ? '' : 'cursor-pointer rounded px-0.5 py-0.5 hover:bg-white/60 dark:hover:bg-black/25'
-                                            }
-                                            onClick={
-                                              !prnChartReadOnly
-                                                ? (e) => {
-                                                    e.stopPropagation()
-                                                    handlePRNFieldEdit(prn.id, 'hour', prn.hour, 'chart')
-                                                  }
-                                                : undefined
-                                            }
-                                            title="Time administered"
-                                          >
-                                            {!prnChartReadOnly &&
-                                            editingPRNField?.recordId === prn.id &&
-                                            editingPRNField?.field === 'hour' &&
-                                            editingPRNField.surface === 'chart' ? (
-                                              <div
-                                                onClick={(e) => e.stopPropagation()}
-                                                className="relative z-0 flex w-full flex-col items-start gap-1"
-                                              >
-                                                <TimeInput
-                                                  value={editingPRNValue}
-                                                  onChange={async (newTime) => {
-                                                    setEditingPRNValue(newTime)
-                                                    const valueToSave = newTime.trim() || null
-                                                    const ok = await updatePRNRecord(prn.id, 'hour', valueToSave)
-                                                    if (ok) {
-                                                      setPrnRecords((prev) =>
-                                                        prev.map((r) =>
-                                                          r.id === prn.id ? { ...r, hour: valueToSave } as MARPRNRecord : r,
-                                                        ),
-                                                      )
-                                                    }
-                                                    setEditingPRNField(null)
-                                                    setEditingPRNValue('')
-                                                  }}
-                                                  compact
-                                                  plain
-                                                  className="w-full justify-start"
-                                                  whiteAmPmBox
-                                                  splitAmPm
-                                                />
-                                                <button
-                                                  type="button"
-                                                  onClick={() => handlePRNFieldCancel()}
-                                                  className="text-[10px] text-gray-500 hover:text-gray-700"
-                                                >
-                                                  Cancel
-                                                </button>
+                                        <div className="flex flex-col gap-1 items-stretch text-center min-w-0">
+                                          {/* Compact read-only chips — click any to open the log modal */}
+                                          {recsForDay.map((prn) => (
+                                            <button
+                                              key={prn.id}
+                                              type="button"
+                                              disabled={readOnly}
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                if (readOnly) return
+                                                // Open modal and pre-expand this record's inline edit
+                                                setPrnDayCellEditingId(prn.id)
+                                                setPrnDayCellEditForm({
+                                                  hour: prn.hour || '',
+                                                  initials: prn.initials || '',
+                                                  result: prn.result || '',
+                                                  note: prn.note || '',
+                                                })
+                                                setPrnDayCellForm({ hour: '', initials: '', result: '', note: '' })
+                                                setPrnDayCellDeleteConfirmId(null)
+                                                setPrnDayCellModal({ template, day })
+                                              }}
+                                              className="w-full text-left rounded border border-emerald-800/25 dark:border-emerald-400/30 px-1 py-0.5 bg-white/50 dark:bg-black/20 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 disabled:pointer-events-none transition-colors"
+                                            >
+                                              <div className="font-semibold text-[10px] text-gray-900 dark:text-gray-100 leading-tight">
+                                                {prn.hour ? formatTimeDisplay(prn.hour) : <span className="text-gray-400 italic">No time</span>}
                                               </div>
-                                            ) : (
-                                              <div className="font-semibold text-gray-900 dark:text-gray-100 leading-tight">
-                                                {prn.hour ? formatTimeDisplay(prn.hour) : prnChartReadOnly ? '—' : 'Set time'}
-                                              </div>
-                                            )}
-                                          </div>
-                                          {showPrnResultInitialsRows ? (
-                                          <>
-                                          <div
-                                            className={`text-[11px] leading-snug break-words border-t border-emerald-800/15 dark:border-emerald-400/20 pt-1 ${
-                                              prnChartReadOnly || !prnHasTime
-                                                ? ''
-                                                : 'cursor-pointer hover:bg-white/60 dark:hover:bg-black/25 rounded px-0.5'
-                                            }`}
-                                            onClick={
-                                              prnChartReadOnly || !prnHasTime
-                                                ? undefined
-                                                : (e) => {
-                                                    e.stopPropagation()
-                                                    handlePRNFieldEdit(prn.id, 'result', prn.result, 'chart')
-                                                  }
-                                            }
-                                            title={prnChartReadOnly ? '' : 'Result'}
-                                          >
-                                            {!prnChartReadOnly &&
-                                            prnHasTime &&
-                                            editingPRNField?.recordId === prn.id &&
-                                            editingPRNField?.field === 'result' &&
-                                            editingPRNField.surface === 'chart' ? (
-                                              <div onClick={(e) => e.stopPropagation()} className="w-full">
-                                                <input
-                                                  type="text"
-                                                  value={editingPRNValue}
-                                                  onChange={(e) => setEditingPRNValue(e.target.value)}
-                                                  onBlur={() => handlePRNFieldSave(prn.id, 'result')}
-                                                  onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') handlePRNFieldSave(prn.id, 'result')
-                                                    else if (e.key === 'Escape') handlePRNFieldCancel()
-                                                  }}
-                                                  autoFocus
-                                                  placeholder="Result"
-                                                  className="w-full px-1 py-0.5 border border-lasso-teal rounded text-[11px] dark:bg-gray-700 dark:text-white"
-                                                />
-                                              </div>
-                                            ) : prn.result?.trim() ? (
-                                              <span className="text-gray-800 dark:text-gray-100">{prn.result}</span>
-                                            ) : !prnChartReadOnly && prnHasTime ? (
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  handlePRNFieldEdit(prn.id, 'result', prn.result, 'chart')
-                                                }}
-                                                className="text-[10px] font-medium text-lasso-teal border border-lasso-teal rounded px-1 py-0.5 hover:bg-lasso-teal/10"
-                                              >
-                                                Add result
-                                              </button>
-                                            ) : (
-                                              <span>—</span>
-                                            )}
-                                          </div>
-                                          <div
-                                            className={`text-[11px] leading-tight border-t border-emerald-800/15 dark:border-emerald-400/20 pt-1 ${
-                                              prnChartReadOnly || !prnHasTime || !prnHasResult
-                                                ? ''
-                                                : 'cursor-pointer hover:bg-white/60 dark:hover:bg-black/25 rounded px-0.5'
-                                            } ${!prnHasTime || !prnHasResult ? 'opacity-60' : ''}`}
-                                            onClick={
-                                              prnChartReadOnly || !prnHasTime || !prnHasResult
-                                                ? undefined
-                                                : (e) => {
-                                                    e.stopPropagation()
-                                                    if (!prn.initials) {
-                                                      let userInitials: string | null = null
-                                                      const si = userProfile?.staff_initials
-                                                      if (
-                                                        si &&
-                                                        typeof si === 'string' &&
-                                                        !si.startsWith('data:image') && !si.startsWith('s3:') &&
-                                                        si.trim().length > 0
-                                                      ) {
-                                                        userInitials = si.trim().toUpperCase()
-                                                      }
-                                                      if (!userInitials && userProfile?.full_name) {
-                                                        const names = userProfile.full_name.trim().split(/\s+/)
-                                                        if (names.length >= 2) {
-                                                          userInitials = (names[0][0] + names[names.length - 1][0]).toUpperCase()
-                                                        } else if (names.length === 1 && names[0].length > 0) {
-                                                          userInitials = names[0][0].toUpperCase()
-                                                        }
-                                                      }
-                                                      const safeInitials = userInitials ? userInitials.slice(0, 10) : null
-                                                      if (safeInitials) {
-                                                        setPrnRecords((prev) =>
-                                                          prev.map((r) =>
-                                                            r.id === prn.id ? { ...r, initials: safeInitials } : r,
-                                                          ),
-                                                        )
-                                                        updatePRNRecord(prn.id, 'initials', safeInitials).then((ok) => {
-                                                          if (!ok) {
-                                                            setPrnRecords((prev) =>
-                                                              prev.map((r) =>
-                                                                r.id === prn.id ? { ...r, initials: prn.initials } : r,
-                                                              ),
-                                                            )
-                                                          }
-                                                        })
-                                                        return
-                                                      }
-                                                    }
-                                                    handlePRNFieldEdit(prn.id, 'initials', prn.initials, 'chart')
-                                                  }
-                                            }
-                                            title={prnChartReadOnly ? '' : prnInitialsHelper}
-                                          >
-                                            {!prnChartReadOnly &&
-                                            editingPRNField?.recordId === prn.id &&
-                                            editingPRNField?.field === 'initials' &&
-                                            editingPRNField.surface === 'chart' ? (
-                                              <div onClick={(e) => e.stopPropagation()} className="w-full">
-                                                <input
-                                                  type="text"
-                                                  value={editingPRNValue}
-                                                  onChange={(e) => setEditingPRNValue(e.target.value.toUpperCase())}
-                                                  onBlur={() => handlePRNFieldSave(prn.id, 'initials')}
-                                                  onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') handlePRNFieldSave(prn.id, 'initials')
-                                                    else if (e.key === 'Escape') handlePRNFieldCancel()
-                                                  }}
-                                                  autoFocus
-                                                  placeholder="Initials"
-                                                  maxLength={4}
-                                                  className="w-full px-1 py-0.5 border border-lasso-teal rounded text-[11px] dark:bg-gray-700 dark:text-white text-center"
-                                                />
-                                              </div>
-                                            ) : prn.initials ? (
-                                              <InitialsOrSignatureDisplay
-                                                value={prn.initials}
-                                                variant="initials"
-                                                userProfile={userProfile}
-                                                facilityProfiles={facilityProfiles}
-                                              />
-                                            ) : !prnChartReadOnly && prnHasTime && prnHasResult && (userProfile?.staff_initials || userProfile?.full_name) ? (
-                                              <button
-                                                type="button"
-                                                onClick={async (e) => {
-                                                  e.stopPropagation()
-                                                  let userInitials: string | null = null
-                                                  const si = userProfile?.staff_initials
-                                                  if (
-                                                    si &&
-                                                    typeof si === 'string' &&
-                                                    !si.startsWith('data:image') && !si.startsWith('s3:') &&
-                                                    si.trim().length > 0
-                                                  ) {
-                                                    userInitials = si.trim().toUpperCase()
-                                                  }
-                                                  if (!userInitials && userProfile?.full_name) {
-                                                    const names = userProfile.full_name.trim().split(/\s+/)
-                                                    if (names.length >= 2) {
-                                                      userInitials = (names[0][0] + names[names.length - 1][0]).toUpperCase()
-                                                    } else if (names.length === 1 && names[0].length > 0) {
-                                                      userInitials = names[0][0].toUpperCase()
-                                                    }
-                                                  }
-                                                  const safeInitials = userInitials ? userInitials.slice(0, 10) : null
-                                                  if (safeInitials) {
-                                                    setPrnRecords((prev) =>
-                                                      prev.map((r) => (r.id === prn.id ? { ...r, initials: safeInitials } : r)),
-                                                    )
-                                                    const ok = await updatePRNRecord(prn.id, 'initials', safeInitials)
-                                                    if (!ok) {
-                                                      setPrnRecords((prev) =>
-                                                        prev.map((r) => (r.id === prn.id ? { ...r, initials: prn.initials } : r)),
-                                                      )
-                                                    }
-                                                  }
-                                                }}
-                                                className="text-[10px] font-medium text-lasso-teal border border-lasso-teal rounded px-1 py-0.5 hover:bg-lasso-teal/10"
-                                              >
-                                                Initial
-                                              </button>
-                                            ) : !prnChartReadOnly && prnInitialsHelper ? (
-                                              <span className="text-[10px] text-amber-700 dark:text-amber-300">{prnInitialsHelper}</span>
-                                            ) : (
-                                              <span className="text-gray-400">—</span>
-                                            )}
-                                          </div>
-                                          </>
-                                          ) : null}
-                                          {!prnChartReadOnly && (
+                                              {prn.initials && (
+                                                <div className="text-[10px] text-gray-600 dark:text-gray-300 truncate">
+                                                  <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
+                                                </div>
+                                              )}
+                                              {prn.result?.trim() && (
+                                                <div className="text-[9px] text-gray-500 dark:text-gray-400 truncate">{prn.result}</div>
+                                              )}
+                                            </button>
+                                          ))}
+                                          {/* + Log button opens the modal for a new entry */}
+                                          {!readOnly && (
                                             <button
                                               type="button"
                                               onClick={(e) => {
                                                 e.stopPropagation()
-                                                setPrnRecordDeleteTarget(prn)
+                                                // Derive user's initials for the default form value
+                                                let ui = ''
+                                                const si = userProfile?.staff_initials
+                                                if (si && !si.startsWith('data:image') && !si.startsWith('s3:') && si.trim()) {
+                                                  ui = si.trim().toUpperCase()
+                                                } else if (userProfile?.full_name) {
+                                                  const parts = userProfile.full_name.trim().split(/\s+/)
+                                                  if (parts.length >= 2) ui = (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+                                                  else if (parts.length === 1) ui = parts[0][0].toUpperCase()
+                                                }
+                                                setPrnDayCellEditingId(null)
+                                                setPrnDayCellForm({ hour: '', initials: ui, result: '', note: '' })
+                                                setPrnDayCellDeleteConfirmId(null)
+                                                setPrnDayCellModal({ template, day })
                                               }}
-                                              className="text-[10px] font-medium text-red-700 dark:text-red-400 border border-red-300/70 dark:border-red-800/80 rounded px-1 py-0.5 mt-0.5 hover:bg-red-50/90 dark:hover:bg-red-950/40"
+                                              className="text-[10px] font-medium text-emerald-800 dark:text-emerald-200 border border-emerald-700/40 dark:border-emerald-500/50 rounded px-1 py-0.5 hover:bg-white/70 dark:hover:bg-black/30 transition-colors"
                                             >
-                                              Delete
+                                              + Log
                                             </button>
                                           )}
-                                              </div>
-                                            )
-                                          })}
-                                          {!readOnly ? (
-                                            <button
-                                              type="button"
-                                              disabled={saving}
-                                              onClick={(e) => {
-                                                e.stopPropagation()
-                                                addPrnAdministrationInChartDayCell(template, day)
-                                              }}
-                                              className="text-[10px] font-medium text-emerald-800 dark:text-emerald-200 border border-emerald-700/40 dark:border-emerald-500/50 rounded px-1 py-0.5 hover:bg-white/70 dark:hover:bg-black/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                              + Add
-                                            </button>
-                                          ) : null}
+                                          {/* Read-only: show dash if nothing logged */}
+                                          {readOnly && recsForDay.length === 0 && (
+                                            <span className="text-gray-400 dark:text-gray-500 select-none">—</span>
+                                          )}
                                         </div>
                                       ) : (
                                         <span className="text-gray-400 dark:text-gray-500 select-none">—</span>
@@ -4522,97 +4407,6 @@ export default function ViewMARForm() {
                                         <div className="min-h-[24px] flex items-center justify-center">
                                           {/* Empty - red line is shown via the absolute positioned div above */}
                                         </div>
-                                      ) : isEditing && (editingCell?.medId === med.id && editingCell?.day === day) ? (
-                                        isVitalsEntry ? (
-                                        <input
-                                          type="text"
-                                          autoFocus
-                                            value={editingCellValue}
-                                            onChange={(e) => setEditingCellValue(e.target.value)}
-                                          onBlur={async (e) => {
-                                              const enteredValue = e.target.value.trim()
-                                              if (enteredValue) {
-                                                await updateAdministration(med.id, day, 'Given', enteredValue)
-                                            }
-                                            setEditingCell(null)
-                                              setEditingCellValue('')
-                                          }}
-                                          onKeyDown={async (e) => {
-                                            if (e.key === 'Enter') {
-                                                const enteredValue = editingCellValue.trim()
-                                                if (enteredValue) {
-                                                  await updateAdministration(med.id, day, 'Given', enteredValue)
-                                              }
-                                              setEditingCell(null)
-                                                setEditingCellValue('')
-                                            } else if (e.key === 'Escape') {
-                                              setEditingCell(null)
-                                                setEditingCellValue('')
-                                            }
-                                          }}
-                                            placeholder="Enter value"
-                                            className="w-full text-center text-xs font-bold border-2 border-lasso-blue rounded px-1 py-1 dark:bg-gray-700 dark:text-white"
-                                          onClick={(e) => e.stopPropagation()}
-                                        />
-                                      ) : (
-                                          (() => {
-                                            const getUserInitials = (): { value: string; label: string } | null => {
-                                              if (userProfile?.staff_initials) {
-                                                if (userProfile.staff_initials.startsWith('data:image') || userProfile.staff_initials.startsWith('s3:')) {
-                                                  return { value: userProfile.staff_initials, label: 'Your Initials' }
-                                                }
-                                                return { value: userProfile.staff_initials.toUpperCase(), label: `${userProfile.staff_initials.toUpperCase()} (${userProfile?.full_name || 'Your Initials'})` }
-                                              }
-                                              if (userProfile?.full_name) {
-                                                const names = userProfile.full_name.trim().split(/\s+/)
-                                                if (names.length >= 2) {
-                                                  const val = (names[0][0] + names[names.length - 1][0]).toUpperCase()
-                                                  return { value: val, label: `${val} (${userProfile.full_name})` }
-                                                } else if (names.length === 1) {
-                                                  const val = names[0][0].toUpperCase()
-                                                  return { value: val, label: val }
-                                                }
-                                              }
-                                              return null
-                                            }
-                                            const userInitials = getUserInitials()
-                                            
-                                            return (
-                                              <select
-                                                autoFocus
-                                                value={initials || ''}
-                                                onChange={async (e) => {
-                                                  const selectedValue = e.target.value
-                                                  if (selectedValue) {
-                                                    await updateAdministration(med.id, day, 'Given', selectedValue)
-                                                  }
-                                                  setEditingCell(null)
-                                                }}
-                                                onBlur={() => setEditingCell(null)}
-                                                onKeyDown={(e) => {
-                                                  if (e.key === 'Escape') {
-                                                    setEditingCell(null)
-                                                  }
-                                                }}
-                                                className="w-full text-center text-xs font-bold border-2 border-lasso-blue rounded px-1 py-1 dark:bg-gray-700 dark:text-white cursor-pointer"
-                                                onClick={(e) => e.stopPropagation()}
-                                              >
-                                                <option value="">Select...</option>
-                                                {userInitials && (
-                                                  <option value={userInitials.value}>{userInitials.label}</option>
-                                                )}
-                                                <option value="DC">DC (Discontinued)</option>
-                                                <option value="W">W (Withheld)</option>
-                                                <option value="R">R (Refused)</option>
-                                                {customLegends.map(legend => (
-                                                  <option key={legend.id} value={legend.code}>
-                                                    {legend.code} ({legend.description})
-                                                  </option>
-                                                ))}
-                                              </select>
-                                            )
-                                          })()
-                                        )
                                       ) : (
                                         <div className="flex flex-col gap-1 w-full">
                                           <div
@@ -4630,164 +4424,36 @@ export default function ViewMARForm() {
                                               }
                                               setEditingCell({ medId: med.id, day })
                                               setEditingCellValue(initials || (isVitalsEntry ? (group.meds.find(m => m.route)?.route || '') : ''))
+                                              setEditingCellNote(notes || '')
                                             } : undefined}
                                           className={`min-h-[24px] flex items-center justify-center gap-1 ${
                                               isEditing && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
                                             }`}
                                           >
                                             {isDC && !isDiscontinued && (
-                                              hasParameter && !readOnly && scgCanEditCell ? (
-                                                <div className="flex flex-col items-center justify-center gap-1 w-full">
-                                                  <div className="flex items-center justify-center gap-1">
-                                                    <div className="text-red-600 dark:text-red-400 font-bold text-xs">
-                                                      DC
-                                                    </div>
-                                                    <button
-                                                      onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setEditingAdministrationNote({ medId: med.id, day, note: notes })
-                                                        setShowAdministrationNoteModal(true)
-                                                      }}
-                                                      className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap relative z-0"
-                                                      title={notes ? 'Edit note' : 'Add note'}
-                                                    >
-                                                      {notes ? '📝' : '+'} note
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              ) : (
-                                                <div className="text-red-600 dark:text-red-400 font-bold text-xs">
-                                                  DC
-                                                </div>
-                                              )
+                                              <div className="text-red-600 dark:text-red-400 font-bold text-xs">DC</div>
                                             )}
                                             {isRefused && !isDC && (
-                                              (readOnly || !scgCanEditCell) ? (
-                                                <div className="font-bold text-red-600 dark:text-red-400">R</div>
-                                              ) : (
-                                              <div className="flex flex-col items-center justify-center gap-1 w-full">
-                                                <div className="flex items-center justify-center gap-1">
-                                                  <div className="font-bold text-red-600 dark:text-red-400">
-                                                    R
-                                                  </div>
-                                                  <button
-                                                    onClick={(e) => {
-                                                      e.stopPropagation()
-                                                      setEditingAdministrationNote({ medId: med.id, day, note: notes })
-                                                      setShowAdministrationNoteModal(true)
-                                                    }}
-                                                    className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap relative z-0"
-                                                    title={notes ? 'Edit note' : 'Add note'}
-                                                  >
-                                                    {notes ? '📝' : '+'} note
-                                                  </button>
-                                                </div>
-                                              </div>
-                                              )
+                                              <div className="font-bold text-red-600 dark:text-red-400">R</div>
                                             )}
                                             {isWithheld && !isDC && (
-                                              (readOnly || !scgCanEditCell) ? (
-                                                <div className="font-bold text-orange-600 dark:text-orange-400">W</div>
-                                              ) : (
-                                              <div className="flex flex-col items-center justify-center gap-1 w-full">
-                                                <div className="flex items-center justify-center gap-1">
-                                                  <div className="font-bold text-orange-600 dark:text-orange-400">
-                                                    W
-                                                  </div>
-                                                  <button
-                                                    onClick={(e) => {
-                                                      e.stopPropagation()
-                                                      setEditingAdministrationNote({ medId: med.id, day, note: notes })
-                                                      setShowAdministrationNoteModal(true)
-                                                    }}
-                                                    className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap relative z-0"
-                                                    title={notes ? 'Edit note' : 'Add note'}
-                                                  >
-                                                    {notes ? '📝' : '+'} note
-                                                  </button>
-                                                </div>
-                                              </div>
-                                              )
+                                              <div className="font-bold text-orange-600 dark:text-orange-400">W</div>
                                             )}
                                             {isGiven && !isDC && !isRefused && !isWithheld && (
-                                              hasParameter && initials && !readOnly && scgCanEditCell ? (
-                                                <div className="flex flex-col items-center justify-center gap-1 w-full">
-                                                  <div className="flex items-center justify-center gap-1">
-                                                    <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
-                                                      <InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
-                                                    </div>
-                                                    <button
-                                                      onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setEditingAdministrationNote({ medId: med.id, day, note: notes })
-                                                        setShowAdministrationNoteModal(true)
-                                                      }}
-                                                      className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap relative z-0"
-                                                      title={notes ? 'Edit note' : 'Add note'}
-                                                    >
-                                                      {notes ? '📝' : '+'} note
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              ) : (
-                                                <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
-                                                  <InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
-                                                </div>
-                                              )
-                                          )}
+                                              <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
+                                                <InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
+                                              </div>
+                                            )}
                                             {isNotGiven && initials && !isDC && !isRefused && !isWithheld && (
-                                              hasParameter && !readOnly && scgCanEditCell ? (
-                                                <div className="flex flex-col items-center justify-center gap-1 w-full">
-                                                  <div className="flex items-center justify-center gap-1">
-                                                    <div className="text-red-600 dark:text-red-400 font-bold">
-                                                      ○<InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
-                                                    </div>
-                                                    <button
-                                                      onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setEditingAdministrationNote({ medId: med.id, day, note: notes })
-                                                        setShowAdministrationNoteModal(true)
-                                                      }}
-                                                      className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap relative z-0"
-                                                      title={notes ? 'Edit note' : 'Add note'}
-                                                    >
-                                                      {notes ? '📝' : '+'} note
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              ) : (
-                                                <div className="text-red-600 dark:text-red-400 font-bold">
-                                                  ○<InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
-                                                </div>
-                                              )
-                                          )}
+                                              <div className="text-red-600 dark:text-red-400 font-bold">
+                                                ○<InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
+                                              </div>
+                                            )}
                                           {isPRN && (
-                                              hasParameter && !readOnly && scgCanEditCell ? (
-                                                <div className="flex flex-col items-center justify-center gap-1 w-full">
-                                                  <div className="flex items-center justify-center gap-1">
-                                                    <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
-                                                      PRN
-                                                    </div>
-                                                    <button
-                                                      onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setEditingAdministrationNote({ medId: med.id, day, note: notes })
-                                                        setShowAdministrationNoteModal(true)
-                                                      }}
-                                                      className="text-[10px] px-1.5 py-0.5 bg-lasso-teal text-white rounded hover:bg-lasso-blue transition-colors flex items-center gap-0.5 whitespace-nowrap relative z-0"
-                                                      title={notes ? 'Edit note' : 'Add note'}
-                                                    >
-                                                      {notes ? '📝' : '+'} note
-                                                    </button>
-                                                  </div>
-                                                  {initials && <div className="text-xs text-lasso-blue"><InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} /></div>}
-                                                </div>
-                                              ) : (
-                                                <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
-                                                  PRN
-                                                  {initials && <div className="text-xs"><InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} /></div>}
-                                                </div>
-                                              )
+                                            <div className="text-lasso-blue dark:text-lasso-blue font-bold text-xs">
+                                              PRN
+                                              {initials && <div className="text-xs"><InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} /></div>}
+                                            </div>
                                           )}
                                             {isNotGiven && !initials && !isDC && isEditing && (
                                             <div className="text-gray-400 cursor-text">—</div>
@@ -6271,64 +5937,529 @@ export default function ViewMARForm() {
         </div>
       )}
 
-      {/* Administration Note Modal (for R - Refused and W - Withheld) */}
-      {showAdministrationNoteModal && editingAdministrationNote && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal"
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Add/Edit Note</h2>
-              <button
-                onClick={() => {
-                  setShowAdministrationNoteModal(false)
-                  setEditingAdministrationNote(null)
-                }}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl"
-                aria-label="Close"
-              >
-                ×
-              </button>
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Administration Note
-              </label>
-              <textarea
-                value={editingAdministrationNote.note || ''}
-                onChange={(e) => setEditingAdministrationNote({ ...editingAdministrationNote, note: e.target.value })}
-                placeholder="Enter notes about the medication administration..."
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                autoFocus
-              />
-            </div>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => {
-                  setShowAdministrationNoteModal(false)
-                  setEditingAdministrationNote(null)
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  if (editingAdministrationNote) {
-                    await updateAdministrationNote(editingAdministrationNote.medId, editingAdministrationNote.day, editingAdministrationNote.note?.trim() || null)
-                    setShowAdministrationNoteModal(false)
-                    setEditingAdministrationNote(null)
-                  }
-                }}
-                className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal"
-              >
-                Save Note
-              </button>
+      {/* PRN Day Log Modal — lists all administrations for one PRN row + one day, with add / edit / delete */}
+      {prnDayCellModal && (() => {
+        const { template, day } = prnDayCellModal
+        const isoDate = isoDateForMarDayNumber(day)
+        const groupKey = getMarPrnRecordGroupKey(template)
+        const dayIso = isoDateForMarDayNumber(day)
+        const dayRecords = prnRecords
+          .filter((r) => getMarPrnRecordGroupKey(r) === groupKey && !!r.date && String(r.date).slice(0, 10) === dayIso)
+          .sort((a, b) => {
+            const tA = prnHourToMinutes(a.hour)
+            const tB = prnHourToMinutes(b.hour)
+            if (tA !== tB) return tA - tB
+            return (a.created_at || '').localeCompare(b.created_at || '')
+          })
+
+        const closePrnModal = () => {
+          setPrnDayCellModal(null)
+          setPrnDayCellEditingId(null)
+          setPrnDayCellForm({ hour: '', initials: '', result: '', note: '' })
+          setPrnDayCellEditForm({ hour: '', initials: '', result: '', note: '' })
+          setPrnDayCellDeleteConfirmId(null)
+        }
+
+        const openInlineEdit = (prn: MARPRNRecord) => {
+          // Toggle: clicking Edit on an already-open row collapses it
+          if (prnDayCellEditingId === prn.id) {
+            setPrnDayCellEditingId(null)
+            setPrnDayCellEditForm({ hour: '', initials: '', result: '', note: '' })
+          } else {
+            setPrnDayCellEditingId(prn.id)
+            setPrnDayCellEditForm({ hour: prn.hour || '', initials: prn.initials || '', result: prn.result || '', note: prn.note || '' })
+          }
+          setPrnDayCellDeleteConfirmId(null)
+        }
+
+        const cancelInlineEdit = () => {
+          setPrnDayCellEditingId(null)
+          setPrnDayCellEditForm({ hour: '', initials: '', result: '', note: '' })
+          setPrnDayCellDeleteConfirmId(null)
+        }
+
+        // Add a new PRN — uses the top form
+        const handleAdd = async () => {
+          if (!isoDate || !prnDayCellForm.hour.trim()) return
+          setPrnDayCellSaving(true)
+          try {
+            await addPRNRecord(
+              {
+                date: isoDate,
+                hour: prnDayCellForm.hour.trim() || null,
+                initials: prnDayCellForm.initials.trim() || null,
+                medication: template.medication,
+                dosage: template.dosage,
+                reason: template.reason,
+                result: prnDayCellForm.result.trim() || null,
+                note: prnDayCellForm.note.trim() || null,
+                startDate: template.start_date,
+              },
+              { refreshMode: 'full' },
+            )
+            closePrnModal()
+          } finally {
+            setPrnDayCellSaving(false)
+          }
+        }
+
+        // Save edits to an existing PRN — uses the inline edit form
+        const handleSaveEdit = async () => {
+          if (!prnDayCellEditingId || !prnDayCellEditForm.hour.trim()) return
+          setPrnDayCellSaving(true)
+          try {
+            const ok = await updatePRNRecordBatch(prnDayCellEditingId, {
+              hour: prnDayCellEditForm.hour.trim() || null,
+              initials: prnDayCellEditForm.initials.trim() || null,
+              result: prnDayCellEditForm.result.trim() || null,
+              note: prnDayCellEditForm.note.trim() || null,
+            })
+            if (ok) {
+              await loadMARForm()
+              cancelInlineEdit()
+            }
+          } finally {
+            setPrnDayCellSaving(false)
+          }
+        }
+
+        const handleDeleteRecord = async (prn: MARPRNRecord) => {
+          setPrnDayCellSaving(true)
+          try {
+            await deletePRNRecordById(prn)
+            setPrnDayCellDeleteConfirmId(null)
+            if (prnDayCellEditingId === prn.id) cancelInlineEdit()
+            if (dayRecords.length <= 1) closePrnModal()
+          } finally {
+            setPrnDayCellSaving(false)
+          }
+        }
+
+        const addFormHasHour = !!prnDayCellForm.hour.trim()
+        const editFormHasHour = !!prnDayCellEditForm.hour.trim()
+
+        return (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal"
+            onClick={closePrnModal}
+          >
+            <div
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 flex flex-col max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900 dark:text-white">{template.medication}</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    PRN Log · Day {day}{isoDate ? ` (${formatCalendarDate(isoDate, 'en-US', { month: 'short', day: 'numeric' })})` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closePrnModal}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none"
+                  aria-label="Close"
+                >×</button>
+              </div>
+
+              {/* Scrollable body */}
+              <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+
+                {/* Top form — always "Log Administration" (add only) */}
+                {!readOnly && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                      Log Administration
+                    </p>
+                    <div className="space-y-3 rounded-lg border border-gray-200 dark:border-gray-600 px-4 py-3 bg-gray-50 dark:bg-gray-700/40">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Time administered</label>
+                        <TimeInput
+                          value={prnDayCellForm.hour}
+                          onChange={(v) => setPrnDayCellForm((f) => ({ ...f, hour: v }))}
+                          compact
+                          splitAmPm
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Initials</label>
+                        <input
+                          type="text"
+                          value={prnDayCellForm.initials}
+                          onChange={(e) => setPrnDayCellForm((f) => ({ ...f, initials: e.target.value.toUpperCase() }))}
+                          maxLength={6}
+                          placeholder="e.g. MS"
+                          className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Result / Response <span className="text-gray-400 font-normal">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={prnDayCellForm.result}
+                          onChange={(e) => setPrnDayCellForm((f) => ({ ...f, result: e.target.value }))}
+                          placeholder="e.g. Pain reduced from 7/10 to 3/10"
+                          className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Notes <span className="text-gray-400 font-normal">(optional)</span>
+                        </label>
+                        <textarea
+                          value={prnDayCellForm.note}
+                          onChange={(e) => setPrnDayCellForm((f) => ({ ...f, note: e.target.value }))}
+                          placeholder="Any additional observations…"
+                          rows={2}
+                          className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-lasso-teal resize-none"
+                        />
+                      </div>
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={handleAdd}
+                          disabled={prnDayCellSaving || !addFormHasHour}
+                          className="px-3 py-1.5 text-sm text-white bg-lasso-teal rounded-lg hover:brightness-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={!addFormHasHour ? 'Time is required' : undefined}
+                        >
+                          {prnDayCellSaving ? 'Saving…' : 'Log Administration'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Logged today list — each row has an accordion edit section */}
+                {dayRecords.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                      Logged today ({dayRecords.length})
+                    </p>
+                    <div className="space-y-2">
+                      {dayRecords.map((prn) => {
+                        const isConfirmingDelete = prnDayCellDeleteConfirmId === prn.id
+                        const isEditingThis = prnDayCellEditingId === prn.id
+                        return (
+                          <div
+                            key={prn.id}
+                            className="rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 overflow-hidden"
+                          >
+                            {/* Row summary + Edit / Delete */}
+                            <div className="flex items-start justify-between gap-2 px-3 py-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {prn.hour ? formatTimeDisplay(prn.hour) : <span className="text-gray-400 italic text-xs">No time set</span>}
+                                  {prn.initials && (
+                                    <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                                      · <InitialsOrSignatureDisplay value={prn.initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
+                                    </span>
+                                  )}
+                                </div>
+                                {prn.result?.trim() && (
+                                  <div className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">{prn.result}</div>
+                                )}
+                                {prn.note?.trim() && (
+                                  <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 italic">{prn.note}</div>
+                                )}
+                              </div>
+                              {!readOnly && (
+                                <div className="flex gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => openInlineEdit(prn)}
+                                    className={`text-xs px-1.5 py-0.5 rounded transition-colors ${
+                                      isEditingThis
+                                        ? 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                        : 'text-lasso-teal hover:text-lasso-teal/70 hover:bg-lasso-teal/10'
+                                    }`}
+                                  >
+                                    {isEditingThis ? 'Collapse' : 'Edit'}
+                                  </button>
+                                  {isConfirmingDelete ? (
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteRecord(prn)}
+                                        disabled={prnDayCellSaving}
+                                        className="text-xs text-white bg-red-500 hover:bg-red-600 px-1.5 py-0.5 rounded disabled:opacity-50"
+                                      >
+                                        Confirm
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPrnDayCellDeleteConfirmId(null)}
+                                        className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 px-1 py-0.5 rounded"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPrnDayCellDeleteConfirmId(prn.id)}
+                                      className="text-xs text-red-400 hover:text-red-600 px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                    >
+                                      Delete
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Inline accordion edit form — always rendered, animated via max-height + opacity */}
+                            <div
+                              className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                                isEditingThis
+                                  ? 'max-h-[560px] opacity-100'
+                                  : 'max-h-0 opacity-0'
+                              }`}
+                            >
+                              <div className="border-t border-gray-200 dark:border-gray-600 px-3 py-3 space-y-3 bg-white dark:bg-gray-800">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Time administered</label>
+                                  <TimeInput
+                                    value={prnDayCellEditForm.hour}
+                                    onChange={(v) => setPrnDayCellEditForm((f) => ({ ...f, hour: v }))}
+                                    compact
+                                    splitAmPm
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Initials</label>
+                                  <input
+                                    type="text"
+                                    value={prnDayCellEditForm.initials}
+                                    onChange={(e) => setPrnDayCellEditForm((f) => ({ ...f, initials: e.target.value.toUpperCase() }))}
+                                    maxLength={6}
+                                    placeholder="e.g. MS"
+                                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Result / Response <span className="text-gray-400 font-normal">(optional)</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={prnDayCellEditForm.result}
+                                    onChange={(e) => setPrnDayCellEditForm((f) => ({ ...f, result: e.target.value }))}
+                                    placeholder="e.g. Pain reduced from 7/10 to 3/10"
+                                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Notes <span className="text-gray-400 font-normal">(optional)</span>
+                                  </label>
+                                  <textarea
+                                    value={prnDayCellEditForm.note}
+                                    onChange={(e) => setPrnDayCellEditForm((f) => ({ ...f, note: e.target.value }))}
+                                    placeholder="Any additional observations…"
+                                    rows={2}
+                                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-lasso-teal resize-none"
+                                  />
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={cancelInlineEdit}
+                                    className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleSaveEdit}
+                                    disabled={prnDayCellSaving || !editFormHasHour}
+                                    className="px-3 py-1.5 text-sm text-white bg-lasso-teal rounded-lg hover:brightness-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    title={!editFormHasHour ? 'Time is required' : undefined}
+                                  >
+                                    {prnDayCellSaving ? 'Saving…' : 'Save Changes'}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Empty state (read-only) */}
+                {dayRecords.length === 0 && readOnly && (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">No administrations logged for this day.</p>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex justify-end px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 shrink-0">
+                <button
+                  type="button"
+                  onClick={closePrnModal}
+                  className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
+
+      {/* Cell Entry Modal — replaces the inline input for Vitals and Medication day cells */}
+      {isEditing && editingCell && (() => {
+        const editingMed = medications.find(m => m.id === editingCell.medId)
+        if (!editingMed) return null
+        const editingIsVitals = editingMed.medication_name === 'VITALS' || editingMed.notes === 'Vital Signs Entry'
+        const displayName = editingIsVitals ? '📊 VITALS' : editingMed.medication_name
+        const displayTime = editingMed.hour ? formatTimeDisplay(editingMed.hour) : null
+
+        const getUserInitials = (): { value: string; label: string } | null => {
+          if (userProfile?.staff_initials) {
+            if (userProfile.staff_initials.startsWith('data:image') || userProfile.staff_initials.startsWith('s3:')) {
+              return { value: userProfile.staff_initials, label: 'Your Initials' }
+            }
+            return { value: userProfile.staff_initials.toUpperCase(), label: `${userProfile.staff_initials.toUpperCase()} (${userProfile?.full_name || 'Your Initials'})` }
+          }
+          if (userProfile?.full_name) {
+            const names = userProfile.full_name.trim().split(/\s+/)
+            if (names.length >= 2) {
+              const val = (names[0][0] + names[names.length - 1][0]).toUpperCase()
+              return { value: val, label: `${val} (${userProfile.full_name})` }
+            } else if (names.length === 1) {
+              const val = names[0][0].toUpperCase()
+              return { value: val, label: val }
+            }
+          }
+          return null
+        }
+        const userInitials = getUserInitials()
+
+        const closeModal = () => { setEditingCell(null); setEditingCellValue(''); setEditingCellNote('') }
+        const submitEntry = async () => {
+          const value = editingCellValue.trim()
+          if (!value) return
+          await updateAdministration(editingCell.medId, editingCell.day, 'Given', value)
+          await updateAdministrationNote(editingCell.medId, editingCell.day, editingCellNote.trim() || null, value)
+          closeModal()
+        }
+
+        return (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal"
+            onClick={closeModal}
+          >
+            <div
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900 dark:text-white">{displayName}</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Day {editingCell.day}{displayTime ? ` · ${displayTime}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="px-5 py-4">
+                {editingIsVitals ? (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Enter value
+                    </label>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editingCellValue}
+                      onChange={e => setEditingCellValue(e.target.value)}
+                      onKeyDown={async e => {
+                        if (e.key === 'Enter') await submitEntry()
+                        else if (e.key === 'Escape') closeModal()
+                      }}
+                      placeholder="e.g. initials or reading"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Select entry
+                    </label>
+                    <select
+                      autoFocus
+                      value={editingCellValue}
+                      onChange={e => setEditingCellValue(e.target.value)}
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-lasso-teal cursor-pointer"
+                    >
+                      <option value="">Select...</option>
+                      {userInitials && (
+                        <option value={userInitials.value}>{userInitials.label}</option>
+                      )}
+                      <option value="DC">DC (Discontinued)</option>
+                      <option value="W">W (Withheld)</option>
+                      <option value="R">R (Refused)</option>
+                      {customLegends.map(legend => (
+                        <option key={legend.id} value={legend.code}>
+                          {legend.code} ({legend.description})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Notes — always shown */}
+                <div className="mt-4">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Notes <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <textarea
+                    value={editingCellNote}
+                    onChange={e => setEditingCellNote(e.target.value)}
+                    placeholder="Add any notes about this entry…"
+                    rows={3}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-lasso-teal resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitEntry}
+                  disabled={!editingCellValue.trim() || saving}
+                  className="px-4 py-2 text-sm text-white bg-lasso-teal rounded-lg hover:brightness-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
 
       {/* Custom Legend Modal */}
       {showCustomLegendModal && editingCustomLegend && (

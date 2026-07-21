@@ -10,7 +10,15 @@
  * is enforced at the application layer instead of the database layer.
  */
 
-import { Pool, PoolClient, QueryResult } from 'pg'
+import { Pool, PoolClient, QueryResult, types } from 'pg'
+
+// By default the pg driver converts PostgreSQL DATE (OID 1082) columns into
+// JavaScript Date objects at LOCAL midnight. In timezones east of UTC this
+// causes the date to shift one day backwards when JSON-serialised (e.g. UTC+8
+// midnight → previous day 16:00 UTC). Returning DATE as a plain 'YYYY-MM-DD'
+// string avoids that timezone conversion entirely; calendarDate helpers already
+// expect this format.
+types.setTypeParser(1082, (val: string) => val)
 import { createClient } from '@supabase/supabase-js'
 import getConfig from 'next/config'
 
