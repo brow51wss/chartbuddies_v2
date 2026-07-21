@@ -221,6 +221,7 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
+  verticalListSortingStrategy,
   type SortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -582,14 +583,131 @@ function useDragHandle() {
   return context
 }
 
-// Drag handle button component that uses context
-function DragHandleButton({ medId, readOnly, reorderLocked }: { medId: string; readOnly?: boolean; reorderLocked?: boolean }) {
+// Sortable item used inside the Reorder Modal
+function SortableReorderItem({
+  id, seg, idx, total, onMoveUp, onMoveDown,
+}: {
+  id: string
+  seg: MedGroupSeg | PrnChartSeg
+  idx: number
+  total: number
+  onMoveUp: () => void
+  onMoveDown: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style = { transform: CSS.Transform.toString(transform), transition }
+
+  const isPrn = seg.kind === 'prn'
+  const isVitals = !isPrn && (seg.meds[0].medication_name === 'VITALS' || seg.meds[0].notes === 'Vital Signs Entry')
+  const label = isPrn
+    ? (seg.template.medication || '—')
+    : isVitals
+      ? (seg.meds[0].dosage || '—')
+      : (seg.meds[0].medication_name || '—')
+  const badge = isPrn ? 'PRN' : isVitals ? 'VITALS' : 'MED'
+  const badgeClass = isPrn
+    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+    : isVitals
+      ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300'
+      : 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300'
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-shadow ${
+        isDragging
+          ? 'bg-white dark:bg-gray-700 border-lasso-teal shadow-lg opacity-80 z-50'
+          : 'bg-gray-50 dark:bg-gray-700/60 border-transparent'
+      }`}
+    >
+      {/* Drag handle grip */}
+      <div
+        {...listeners}
+        {...attributes}
+        className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 shrink-0 touch-none"
+        aria-label="Drag to reorder"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="8" cy="6" r="1.3" /><circle cx="16" cy="6" r="1.3" />
+          <circle cx="8" cy="12" r="1.3" /><circle cx="16" cy="12" r="1.3" />
+          <circle cx="8" cy="18" r="1.3" /><circle cx="16" cy="18" r="1.3" />
+        </svg>
+      </div>
+      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 uppercase tracking-wide ${badgeClass}`}>
+        {badge}
+      </span>
+      <p className="flex-1 text-sm font-medium text-gray-800 dark:text-white truncate">{label}</p>
+      {/* Up / Down fallback buttons */}
+      <div className="flex flex-col gap-0.5 shrink-0">
+        <button
+          type="button"
+          disabled={idx === 0}
+          onClick={onMoveUp}
+          className="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-25 disabled:cursor-not-allowed transition-colors text-gray-500 dark:text-gray-400"
+          aria-label="Move up"
+        >
+          <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          disabled={idx === total - 1}
+          onClick={onMoveDown}
+          className="flex h-6 w-6 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-25 disabled:cursor-not-allowed transition-colors text-gray-500 dark:text-gray-400"
+          aria-label="Move down"
+        >
+          <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Drag handle button component that uses context.
+// When `onOpen` is provided the button opens the reorder modal instead of acting as a drag activator.
+function DragHandleButton({ medId, readOnly, reorderLocked, onOpen }: {
+  medId: string
+  readOnly?: boolean
+  reorderLocked?: boolean
+  onOpen?: () => void
+}) {
   const dragContext = useDragHandle()
   if (readOnly || reorderLocked) return null
+
+  const ReorderIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 dark:text-gray-500" viewBox="0 0 24 24" fill="currentColor">
+      {/* Left column */}
+      <circle cx="8.5" cy="6"  r="1.75" />
+      <circle cx="8.5" cy="12" r="1.75" />
+      <circle cx="8.5" cy="18" r="1.75" />
+      {/* Right column */}
+      <circle cx="15.5" cy="6"  r="1.75" />
+      <circle cx="15.5" cy="12" r="1.75" />
+      <circle cx="15.5" cy="18" r="1.75" />
+    </svg>
+  )
+
+  if (onOpen) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onOpen() }}
+        className="cursor-pointer p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-all touch-none"
+        title="Reorder rows"
+        aria-label="Open reorder panel"
+      >
+        <ReorderIcon />
+      </button>
+    )
+  }
+
+  // Fallback: legacy in-table drag handle
   if (!dragContext) return null
-  
   const { listeners, attributes, setActivatorNodeRef, isDragging } = dragContext
-  
   return (
     <div
       ref={setActivatorNodeRef}
@@ -599,15 +717,7 @@ function DragHandleButton({ medId, readOnly, reorderLocked }: { medId: string; r
       title="Drag to reorder"
       aria-label="Drag to reorder row"
     >
-      {/* 6-dot grip icon - standard drag handle pattern */}
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#000000] dark:text-white" viewBox="0 0 24 24" fill="currentColor">
-        <circle cx="9" cy="6" r="1.5" />
-        <circle cx="15" cy="6" r="1.5" />
-        <circle cx="9" cy="12" r="1.5" />
-        <circle cx="15" cy="12" r="1.5" />
-        <circle cx="9" cy="18" r="1.5" />
-        <circle cx="15" cy="18" r="1.5" />
-      </svg>
+      <ReorderIcon />
     </div>
   )
 }
@@ -832,12 +942,16 @@ export default function ViewMARForm() {
   const [insertPosition, setInsertPosition] = useState<{ targetMedId: string; position: 'above' | 'below' } | null>(null)
   // Delete confirmation state
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
-  const [deletingEntry, setDeletingEntry] = useState<{ id: string; name: string; dosage: string; isVitals: boolean } | null>(null)
+  const [deletingEntry, setDeletingEntry] = useState<{ id: string; name: string; dosage: string; isVitals: boolean; isPrn?: boolean } | null>(null)
   const [showAdministrationNoteModal, setShowAdministrationNoteModal] = useState(false)
   const [editingAdministrationNote, setEditingAdministrationNote] = useState<{ medId: string; day: number; note: string | null } | null>(null)
   const [customLegends, setCustomLegends] = useState<Array<{ id: string; code: string; description: string }>>([])
   const [showCustomLegendModal, setShowCustomLegendModal] = useState(false)
   const [editingCustomLegend, setEditingCustomLegend] = useState<{ id: string | null; code: string; description: string } | null>(null)
+  const [openMedKebabId, setOpenMedKebabId] = useState<string | null>(null)
+  const medKebabRef = useRef<HTMLDivElement>(null)
+  const [showReorderModal, setShowReorderModal] = useState(false)
+  const [reorderLocalSegs, setReorderLocalSegs] = useState<MarChartSegment[]>([])
   const allowNavigationRef = useRef(false)
   const marTableScrollRef = useRef<HTMLDivElement>(null)
   const marHeaderScrollRef = useRef<HTMLDivElement>(null)
@@ -848,6 +962,52 @@ export default function ViewMARForm() {
   const closeMarEditPatientInfoModal = useCallback(() => {
     setShowEditPatientInfoModal(false)
   }, [])
+
+  // Close med kebab when clicking outside
+  useEffect(() => {
+    if (!openMedKebabId) return
+    const handleClickOutside = (event: MouseEvent) => {
+      if (medKebabRef.current && !medKebabRef.current.contains(event.target as Node)) {
+        setOpenMedKebabId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [openMedKebabId])
+
+  const openReorderModal = useCallback(() => {
+    setReorderLocalSegs([...marChartSegmentsForTable])
+    setShowReorderModal(true)
+  }, [marChartSegmentsForTable])
+
+  const saveReorderModal = async () => {
+    if (!marFormId) return
+    const segs = reorderLocalSegs
+    const newOrderJson = segmentsToChartOrder(segs)
+    const newMedsFlat = flattenMedsFromChartSegments(segs)
+
+    setMedications(newMedsFlat)
+    setMarForm((prev) => prev ? { ...prev, mar_chart_row_order: newOrderJson } : null)
+    setShowReorderModal(false)
+
+    try {
+      setSaving(true)
+      await rdsPatchMarForm(marFormId, { mar_chart_row_order: newOrderJson })
+      const updates = newMedsFlat.map((med, index) => ({ id: med.id, display_order: (index + 1) * 10 }))
+      for (const update of updates) {
+        await rdsPatchMarMedication(update.id, { display_order: update.display_order })
+      }
+      setMessage('Row order saved!')
+      setTimeout(() => setMessage(''), 2000)
+    } catch (err: any) {
+      console.error('Error saving row order:', err)
+      setError('Failed to save row order')
+      setTimeout(() => setError(''), 3000)
+      await loadMARForm()
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const openMarEditPatientModal = () => {
     setShowEditPatientInfoModal(true)
@@ -2402,25 +2562,29 @@ export default function ViewMARForm() {
     }
   }
 
-  // Delete medication or vitals entry
+  // Delete medication, vitals, or PRN entry
   const deleteMedicationEntry = async (medId: string) => {
     if (!userProfile || !marFormId) return
     
     try {
       setSaving(true)
       setError('')
-      
-      // Delete the medication entry (CASCADE on RDS will remove administrations)
-      await rdsDeleteMarMedication(medId)
 
-      // Optimistically remove from local state immediately so the row disappears
-      // even if the subsequent reload has a slight delay
-      setMedications((prev) => prev.filter((m) => m.id !== medId))
-      setAdministrations((prev) => {
-        const next = { ...prev }
-        delete next[medId]
-        return next
-      })
+      if (deletingEntry?.isPrn) {
+        await rdsDeletePrnMedication(medId)
+        setPrnMedicationList((prev) => prev.filter((p) => p.id !== medId))
+      } else {
+        // Delete the medication entry (CASCADE on RDS will remove administrations)
+        await rdsDeleteMarMedication(medId)
+        // Optimistically remove from local state immediately so the row disappears
+        // even if the subsequent reload has a slight delay
+        setMedications((prev) => prev.filter((m) => m.id !== medId))
+        setAdministrations((prev) => {
+          const next = { ...prev }
+          delete next[medId]
+          return next
+        })
+      }
 
       // Reload the form to sync full server state
       await loadMARForm()
@@ -2793,7 +2957,7 @@ export default function ViewMARForm() {
 
   const days = MAR_GRID_DAY_NUMBERS
   const MAR_COL = { med: 200, startStop: 120, hour: 150, day: MAR_DAY_COL_WIDTH_PX } as const
-  const hourColWidth = readOnly ? 90 : MAR_COL.hour
+  const hourColWidth = 90
 
   /** Key so print view remounts when MAR data changes and shows current state in print preview. */
   const printDataKey = [
@@ -3561,14 +3725,14 @@ export default function ViewMARForm() {
                                 className={`${segIndex > 0 ? 'border-t border-emerald-800/15 dark:border-emerald-400/20' : ''}`}
                               >
                                 <td
-                                  className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top ${prnChartStickyMed} ${prnChartBg}`}
+                                  className={`relative border border-gray-300 dark:border-gray-600 px-3 py-2 align-top ${prnChartStickyMed} ${prnChartBg}`}
                                   style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}
                                 >
                                   <div className="flex gap-2">
                                     <div className="flex flex-col items-start gap-1 shrink-0">
-                                      <DragHandleButton medId={template.id} readOnly={readOnly} reorderLocked={marRowReorderLocked} />
+                                      <DragHandleButton medId={template.id} readOnly={readOnly} reorderLocked={marRowReorderLocked} onOpen={!readOnly && canEditStructure ? openReorderModal : undefined} />
                                     </div>
-                                    <div className="flex flex-col gap-0.5 min-w-0 flex-1 pl-1" aria-label={`PRN chart row: ${template.medication}`}>
+                                    <div className="flex flex-col gap-0.5 min-w-0 flex-1 pl-1 pr-6" aria-label={`PRN chart row: ${template.medication}`}>
                                       <div className="font-medium text-sm text-emerald-900 dark:text-emerald-100">💊 PRN</div>
                                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
                                         {template.medication || '—'}
@@ -3586,6 +3750,54 @@ export default function ViewMARForm() {
                                       ) : null}
                                     </div>
                                   </div>
+                                  {/* 3-dot kebab menu */}
+                                  {canEditStructure && (
+                                    <div
+                                      ref={openMedKebabId === template.id ? medKebabRef : undefined}
+                                      className="absolute top-1.5 right-1.5 z-30"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setOpenMedKebabId(openMedKebabId === template.id ? null : template.id)
+                                        }}
+                                        className="flex h-6 w-6 items-center justify-center rounded border border-gray-300 dark:border-gray-500 text-gray-400 hover:bg-white hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300 transition-colors bg-white/70 dark:bg-gray-800/70"
+                                        aria-label="More options"
+                                      >
+                                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                          <circle cx="12" cy="5" r="1.5" />
+                                          <circle cx="12" cy="12" r="1.5" />
+                                          <circle cx="12" cy="19" r="1.5" />
+                                        </svg>
+                                      </button>
+                                      {openMedKebabId === template.id && (
+                                        <div className="absolute right-0 mt-1 w-36 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800 z-50 overflow-hidden">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              setOpenMedKebabId(null)
+                                              setDeletingEntry({
+                                                id: template.id,
+                                                name: template.medication || '—',
+                                                dosage: template.dosage || '',
+                                                isVitals: false,
+                                                isPrn: true,
+                                              })
+                                              setShowDeleteConfirmModal(true)
+                                            }}
+                                            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                                          >
+                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                            Delete
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </td>
                                 <td
                                   className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs ${prnChartStickyStart} ${prnChartBg}`}
@@ -3626,7 +3838,7 @@ export default function ViewMARForm() {
                                   ) : adminDaysInMonth.length > 1 ? (
                                     <div className="w-full leading-tight px-0.5 py-0.5 text-center">
                                       <div className="font-medium text-emerald-900/80 dark:text-emerald-100/90 text-xs mb-1">
-                                        Days
+                                        Days Given
                                       </div>
                                       <div className="flex flex-wrap items-baseline justify-center gap-x-0 gap-y-0.5 text-[10px] font-normal text-gray-500 dark:text-gray-400">
                                         {adminDaysInMonth.map((d, i) => (
@@ -3638,7 +3850,7 @@ export default function ViewMARForm() {
                                                 e.stopPropagation()
                                                 scrollMarTableToDayColumn(d)
                                               }}
-                                              className="rounded px-1 py-0.5 text-emerald-900/90 dark:text-emerald-100/90 hover:bg-white/70 dark:hover:bg-black/20 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors cursor-pointer underline-offset-2 hover:underline"
+                                              className="rounded border border-emerald-700/40 dark:border-emerald-400/40 px-1 py-0.5 text-emerald-900/90 dark:text-emerald-100/90 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 hover:border-emerald-700 dark:hover:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors cursor-pointer"
                                               title={`Scroll chart so day ${d} sits after the Hour column`}
                                               aria-label={`Scroll to day ${d} column`}
                                             >
@@ -4096,108 +4308,51 @@ export default function ViewMARForm() {
                                     </div>
                                   </div>
                                 )}
-                                <div className="flex gap-2 group/medcell">
-                                  {/* Left column: drag handle + action icons (vertically stacked, aligned) */}
-                                  <div className="flex flex-col items-start gap-1 shrink-0">
-                                    <DragHandleButton medId={med.id} readOnly={!canEditStructure} reorderLocked={marRowReorderLocked} />
-                                    {canEditStructure && (
-                                    <div className="flex flex-col items-start gap-1">
-                                      {/* Add parameter - first (always showing) */}
-                                      {!isVitalsEntry && med.medication_name && (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            setEditingMedicationParameter({ medicationId: med.id, parameter: med.parameter })
-                                            setShowMedicationParameterModal(true)
-                                          }}
-                                          className="w-6 h-6 min-w-6 min-h-6 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-all cursor-pointer text-[#000000] dark:text-white flex items-center justify-center group/param relative"
-                                        >
-                                          {med.parameter ? (
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                                            </svg>
-                                          ) : (
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                                            </svg>
-                                          )}
-<span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/param:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                                          {med.parameter ? 'Edit parameter' : 'Add parameter'}
-                                        </span>
-                                        </button>
-                                      )}
-                                      {/* Edit medication - second */}
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          const isMulti = group && group.rowSpan > 1
-                                          const sortedMeds = isMulti
-                                            ? [...group.meds].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
-                                            : [med]
-                                          const ids = sortedMeds.map(m => m.id)
-                                          const times = sortedMeds.map(m => (m.hour != null && m.hour !== '') ? m.hour : '')
-                                          setEditingEntry({
-                                            id: med.id,
-                                            isVitals: isVitalsEntry,
-                                            medication_name: med.medication_name,
-                                            dosage: med.dosage,
-                                            route: med.route,
-                                            start_date: med.start_date?.slice(0, 10) ?? '',
-                                            stop_date: med.stop_date?.slice(0, 10) ?? null,
-                                            frequency: med.frequency ?? (isMulti ? sortedMeds.length : 1),
-                                            frequency_display: med.frequency_display,
-                                            notes: med.notes,
-                                            hour: med.hour ?? '',
-                                            parameter: med.parameter ?? null,
-                                            ...(isMulti ? { ids, times } : {})
-                                          })
-                                          setInsertPosition(null)
-                                          setShowAddMedModal(true)
-                                        }}
-                                        className="opacity-0 group-hover/medcell:opacity-100 w-6 h-6 min-w-6 min-h-6 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-all flex items-center justify-center cursor-pointer text-[#000000] dark:text-white group/edit relative"
-                                        aria-label="Edit entry"
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                          <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                        </svg>
-                                        <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/edit:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                                          Edit {isVitalsEntry ? 'vitals' : 'medication'}
-                                        </span>
-                                      </button>
-                                      {/* Delete button */}
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          setDeletingEntry({
-                                            id: med.id,
-                                            name: med.medication_name,
-                                            dosage: med.dosage,
-                                            isVitals: isVitalsEntry
-                                          })
-                                          setShowDeleteConfirmModal(true)
-                                        }}
-                                        className="opacity-0 group-hover/medcell:opacity-100 w-6 h-6 min-w-6 min-h-6 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-all flex items-center justify-center cursor-pointer text-[#000000] dark:text-white group/delete relative"
-                                        aria-label="Delete entry"
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                        <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/delete:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                                          Delete {isVitalsEntry ? 'vitals' : 'medication'}
-                                        </span>
-                                      </button>
-                                    </div>
-                                    )}
+                                <div className="flex gap-2">
+                                  {/* Drag handle */}
+                                  <div className="flex flex-col items-start shrink-0 pt-0.5">
+                                    <DragHandleButton medId={med.id} readOnly={!canEditStructure} reorderLocked={marRowReorderLocked} onOpen={canEditStructure ? openReorderModal : undefined} />
                                   </div>
-                                  {/* Right column: simplified — vitals shows label + notes, medication shows name only */}
-                                  <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                                  {/* Clickable content area → opens edit modal */}
+                                  <div
+                                    className={`flex flex-col gap-0.5 min-w-0 flex-1 pr-6 ${canEditStructure ? 'cursor-pointer' : ''}`}
+                                    onClick={canEditStructure ? (e) => {
+                                      e.stopPropagation()
+                                      const isMulti = group && group.rowSpan > 1
+                                      const sortedMeds = isMulti
+                                        ? [...group.meds].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+                                        : [med]
+                                      const ids = sortedMeds.map(m => m.id)
+                                      const times = sortedMeds.map(m => (m.hour != null && m.hour !== '') ? m.hour : '')
+                                      setEditingEntry({
+                                        id: med.id,
+                                        isVitals: isVitalsEntry,
+                                        medication_name: med.medication_name,
+                                        dosage: med.dosage,
+                                        route: med.route,
+                                        start_date: med.start_date?.slice(0, 10) ?? '',
+                                        stop_date: med.stop_date?.slice(0, 10) ?? null,
+                                        frequency: med.frequency ?? (isMulti ? sortedMeds.length : 1),
+                                        frequency_display: med.frequency_display,
+                                        notes: med.notes,
+                                        hour: med.hour ?? '',
+                                        parameter: med.parameter ?? null,
+                                        ...(isMulti ? { ids, times } : {})
+                                      })
+                                      setInsertPosition(null)
+                                      setShowAddMedModal(true)
+                                    } : undefined}
+                                  >
                                     {isVitalsEntry ? (
                                       <>
                                         <div className="font-medium text-sm text-lasso-teal dark:text-lasso-blue">
                                           📊 VITALS
                                         </div>
                                         {med.dosage && (
-                                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                                          <div
+                                            className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2"
+                                            title={med.dosage}
+                                          >
                                             {med.dosage}
                                           </div>
                                         )}
@@ -4208,6 +4363,53 @@ export default function ViewMARForm() {
                                       </div>
                                     )}
                                   </div>
+                                  {/* 3-dot kebab menu */}
+                                  {canEditStructure && (
+                                    <div
+                                      ref={openMedKebabId === med.id ? medKebabRef : undefined}
+                                      className="absolute top-1.5 right-1.5 z-30"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setOpenMedKebabId(openMedKebabId === med.id ? null : med.id)
+                                        }}
+                                        className="flex h-6 w-6 items-center justify-center rounded border border-gray-300 dark:border-gray-500 text-gray-400 hover:bg-white hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300 transition-colors bg-white/70 dark:bg-gray-800/70"
+                                        aria-label="More options"
+                                      >
+                                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                          <circle cx="12" cy="5" r="1.5" />
+                                          <circle cx="12" cy="12" r="1.5" />
+                                          <circle cx="12" cy="19" r="1.5" />
+                                        </svg>
+                                      </button>
+                                      {openMedKebabId === med.id && (
+                                        <div className="absolute right-0 mt-1 w-36 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800 z-50 overflow-hidden">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              setOpenMedKebabId(null)
+                                              setDeletingEntry({
+                                                id: med.id,
+                                                name: med.medication_name,
+                                                dosage: med.dosage,
+                                                isVitals: isVitalsEntry
+                                              })
+                                              setShowDeleteConfirmModal(true)
+                                            }}
+                                            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 transition-colors"
+                                          >
+                                            <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                            Delete
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                             </td>
                             )}
@@ -4232,30 +4434,7 @@ export default function ViewMARForm() {
                                 ? 'bg-[#ecdcfa] dark:bg-[#3d2254] hover:brightness-90' 
                                 : 'bg-[#d7f0f7] dark:bg-[#1a4a52] hover:brightness-90'
                             } border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]`} style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth }}>
-                              {readOnly ? (
-                                <span className="text-gray-800 dark:text-white">{med.hour ? formatTimeDisplay(med.hour) : '—'}</span>
-                              ) : (
-                                <EditableHourField
-                                  medication={med}
-                                  onUpdate={async (newHour) => {
-                                    try {
-                                      setSaving(true)
-                                      await rdsPatchMarMedication(med.id, { hour: newHour })
-                                      setMedications(prev => prev.map(m =>
-                                        m.id === med.id ? { ...m, hour: newHour } : m
-                                      ))
-                                      setMessage(`${isVitalsEntry ? 'Vitals' : 'Medication'} time updated successfully`)
-                                      setTimeout(() => setMessage(''), 2000)
-                                    } catch (err) {
-                                      console.error('Error updating hour:', err)
-                                      setError(`Failed to update ${isVitalsEntry ? 'vitals' : 'medication'} time`)
-                                      setTimeout(() => setError(''), 3000)
-                                    } finally {
-                                      setSaving(false)
-                                    }
-                                  }}
-                                />
-                              )}
+                              <span className="text-gray-800 dark:text-white text-sm">{med.hour ? formatTimeDisplay(med.hour) : '—'}</span>
                             </td>
                             {days.map(day => {
                               const admin = medAdmin[day]
@@ -6258,6 +6437,82 @@ export default function ViewMARForm() {
         </div>
       )}
 
+      {/* Reorder Modal */}
+      {showReorderModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-auto max-h-[80vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-bold text-gray-800 dark:text-white">Reorder Rows</h2>
+              <button
+                type="button"
+                onClick={() => setShowReorderModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            {/* List — drag-and-drop + up/down buttons */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {reorderLocalSegs.length === 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">No rows to reorder.</p>
+              )}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(event) => {
+                  const { active, over } = event
+                  if (!over || active.id === over.id) return
+                  const oldIdx = reorderLocalSegs.findIndex((s) => segmentSortableId(s) === String(active.id))
+                  const newIdx = reorderLocalSegs.findIndex((s) => segmentSortableId(s) === String(over.id))
+                  if (oldIdx !== -1 && newIdx !== -1) {
+                    setReorderLocalSegs(arrayMove(reorderLocalSegs, oldIdx, newIdx))
+                  }
+                }}
+              >
+                <SortableContext
+                  items={reorderLocalSegs.map((s) => segmentSortableId(s))}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-2">
+                    {reorderLocalSegs.map((seg, idx) => (
+                      <SortableReorderItem
+                        key={segmentSortableId(seg)}
+                        id={segmentSortableId(seg)}
+                        seg={seg}
+                        idx={idx}
+                        total={reorderLocalSegs.length}
+                        onMoveUp={() => setReorderLocalSegs((prev) => arrayMove(prev, idx, idx - 1))}
+                        onMoveDown={() => setReorderLocalSegs((prev) => arrayMove(prev, idx, idx + 1))}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            </div>
+            {/* Footer */}
+            <div className="flex justify-end gap-3 px-5 py-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setShowReorderModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveReorderModal}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-lasso-teal rounded-lg hover:brightness-90 disabled:opacity-50 transition-colors"
+              >
+                {saving ? 'Saving…' : 'Apply Order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Entry Confirmation Modal */}
       {showDeleteConfirmModal && deletingEntry && (
         <div 
@@ -6266,7 +6521,7 @@ export default function ViewMARForm() {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-red-600 dark:text-red-400">
-                Delete {deletingEntry.isVitals ? 'Vital Signs Entry' : 'Medication'}?
+                Delete {deletingEntry.isPrn ? 'PRN Medication' : deletingEntry.isVitals ? 'Vital Signs Entry' : 'Medication'}?
               </h2>
               <button
                 onClick={() => {
@@ -6282,7 +6537,7 @@ export default function ViewMARForm() {
             <div className="mb-6">
               <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg mb-4">
                 <p className="font-medium text-gray-800 dark:text-white">
-                  {deletingEntry.isVitals ? '📊 VITALS' : deletingEntry.name}
+                  {deletingEntry.isPrn ? `💊 PRN — ${deletingEntry.name}` : deletingEntry.isVitals ? '📊 VITALS' : deletingEntry.name}
                 </p>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   {deletingEntry.dosage}

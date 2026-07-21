@@ -53,10 +53,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const sets: string[] = []
       const params: any[] = []
       let idx = 1
+      // JSON/JSONB columns must be serialized to a string before passing to pg,
+      // otherwise the pg driver treats a JS array as a PostgreSQL array literal.
+      const jsonbFields = new Set(['mar_chart_row_order'])
       for (const key of allowed) {
         if (key in body) {
           sets.push(`${key} = $${idx++}`)
-          params.push(body[key])
+          const val = body[key]
+          params.push(jsonbFields.has(key) && val !== null && typeof val !== 'string'
+            ? JSON.stringify(val)
+            : val)
         }
       }
       if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' })
