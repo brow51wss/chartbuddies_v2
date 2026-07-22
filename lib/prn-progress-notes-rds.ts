@@ -26,7 +26,6 @@ function marPrnHasDocumentedHour(record: MARPRNRecord): boolean {
 
 export function shouldSyncMarPrnRecordToProgressNotes(record: MARPRNRecord): boolean {
   if (!marPrnHasDocumentedHour(record)) return false
-  if (!(record.result && String(record.result).trim())) return false
   if (!(record.initials && String(record.initials).trim())) return false
   return true
 }
