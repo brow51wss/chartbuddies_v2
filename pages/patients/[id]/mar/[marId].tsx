@@ -500,7 +500,10 @@ function MarMedicationGroupDragPreview({ meds }: { meds: MARMedication[] }) {
 function MarPrnChartRowDragPreview({ template, recordCount }: { template: MARPRNRecord; recordCount: number }) {
   return (
     <div className="bg-white dark:bg-gray-800 border-2 border-emerald-600 rounded-lg shadow-2xl p-3 min-w-[280px] max-w-md cursor-grabbing">
-      <div className="font-semibold text-sm text-emerald-900 dark:text-emerald-100">💊 PRN</div>
+      <div className="font-semibold text-sm text-emerald-900 dark:text-emerald-100 flex items-center gap-1">
+        <svg className="h-4 w-4 shrink-0 text-orange-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L22 12L12 22L2 12Z"/></svg>
+        PRN
+      </div>
       <div className="text-sm text-gray-900 dark:text-white mt-1 font-medium">{template.medication}</div>
       {template.dosage && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{template.dosage}</div>}
       {template.reason && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 line-clamp-2">{template.reason}</div>}
@@ -772,7 +775,7 @@ const MAR_GRID_DAY_NUMBERS: readonly number[] = Array.from({ length: 31 }, (_, i
  * Wider columns so roughly **three** day columns are visible at once on a typical laptop viewport
  * (was 100px → ~8 days visible). Must match `MAR_COL.day` and scroll math: `(day - 1) * this value`.
  */
-const MAR_DAY_COL_WIDTH_PX = 240
+const MAR_DAY_COL_WIDTH_PX = 100
 
 export default function ViewMARForm() {
   const router = useRouter()
@@ -3491,15 +3494,15 @@ export default function ViewMARForm() {
                         setEditingEntry(null) // Clear editing entry to ensure add mode
                         setShowAddMedModal(true)
                       }}
-                      className="px-4 py-2 bg-lasso-teal text-white rounded-md hover:brightness-90 text-sm font-medium"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-lasso-blue text-lasso-blue bg-transparent hover:border-lasso-teal hover:text-lasso-teal transition-colors text-sm font-medium"
                     >
-                      + Medication
+                      💊 Medication
                     </button>
                     <button
                       onClick={() => setShowVitalSignsModal(true)}
-                      className="px-4 py-2 bg-purple-700 text-white rounded-md hover:brightness-90 text-sm font-medium"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-lasso-blue text-lasso-blue bg-transparent hover:border-lasso-teal hover:text-lasso-teal transition-colors text-sm font-medium"
                     >
-                      + Vital Signs
+                      📊 Vital Signs
                     </button>
                     <button
                       type="button"
@@ -3508,8 +3511,9 @@ export default function ViewMARForm() {
                         setPrnListEditTarget(null)
                         setShowManagePRNListModal(true)
                       }}
-                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-lasso-blue text-lasso-blue bg-transparent hover:border-lasso-teal hover:text-lasso-teal transition-colors text-sm font-medium"
                     >
+                      <svg className="h-4 w-4 shrink-0 text-orange-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L22 12L12 22L2 12Z"/></svg>
                       Manage PRN
                     </button>
                   </>
@@ -3663,74 +3667,43 @@ export default function ViewMARForm() {
               </div>
 
               {missedMarDocumentation.length > 0 && (
-                <div className="mb-4 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/35 overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setShowMissedDocAlerts((v) => !v)}
-                    className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-red-100/90 dark:hover:bg-red-950/50 transition-colors"
-                    aria-expanded={showMissedDocAlerts}
-                    aria-controls="mar-missed-doc-panel"
-                  >
-                    <div>
-                      <span className="text-sm font-semibold text-red-900 dark:text-red-100">
-                        Missed documentation ({missedMarDocumentation.length})
-                      </span>
-                    </div>
-                    <svg
-                      className={`w-5 h-5 shrink-0 text-red-700 dark:text-red-300 transition-transform ${
-                        showMissedDocAlerts ? 'rotate-180' : ''
-                      }`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
+                <div className="mb-4 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/35 px-4 pt-3 pb-3">
+                  <div className="text-sm font-semibold text-red-900 dark:text-red-100 mb-2">
+                    Missed documentation ({missedMarDocumentation.length})
+                  </div>
                   <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateRows: showMissedDocAlerts ? '1fr' : '0fr',
-                      transition: 'grid-template-rows 300ms ease',
-                    }}
+                    id="mar-missed-doc-panel"
+                    aria-label="Missed documentation entries"
+                    className="max-h-40 overflow-y-auto flex flex-wrap gap-2"
                   >
-                    <div className="overflow-hidden">
-                      <div
-                        id="mar-missed-doc-panel"
-                        aria-label="Missed documentation entries"
-                        className="border-t border-red-200 dark:border-red-900/60 max-h-40 overflow-y-auto px-4 py-3 flex flex-wrap gap-2"
-                      >
-                        {missedMarDocumentation.map((item) => {
-                          const d = new Date(item.dateLabel)
-                          const mmdd = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
-                          return (
-                            <button
-                              key={`${item.medId}-${item.day}`}
-                              type="button"
-                              onClick={() => jumpToMissedMarCell(item.medId, item.day)}
-                              aria-label={`${item.dateLabel} · ${item.rowLabel}`}
-                              onMouseEnter={(e) => {
-                                const rect = e.currentTarget.getBoundingClientRect()
-                                setDotTooltip({ x: rect.left + rect.width / 2, y: rect.top, label: mmdd })
-                              }}
-                              onMouseLeave={() => setDotTooltip(null)}
-                              className="h-3 w-3 shrink-0 rounded-full bg-red-500 hover:bg-red-600 hover:scale-125 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-                            />
-                          )
-                        })}
-                      </div>
-                    </div>
+                    {missedMarDocumentation.map((item) => {
+                      const d = new Date(item.dateLabel)
+                      const mmdd = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+                      return (
+                        <button
+                          key={`${item.medId}-${item.day}`}
+                          type="button"
+                          onClick={() => jumpToMissedMarCell(item.medId, item.day)}
+                          aria-label={`${item.dateLabel} · ${item.rowLabel}`}
+                          onMouseEnter={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            setDotTooltip({ x: rect.left + rect.width / 2, y: rect.top, label: mmdd })
+                          }}
+                          onMouseLeave={() => setDotTooltip(null)}
+                          className="h-3 w-3 shrink-0 rounded-full bg-red-500 hover:bg-red-600 hover:scale-125 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                        />
+                      )
+                    })}
                   </div>
                 </div>
               )}
 
               {/* Medication Administration Table - sticky header OUTSIDE overflow so it sticks to viewport; body has overflow-x for horizontal scroll */}
-              <div className="relative overflow-visible">
+              <div className="relative overflow-visible rounded-xl [clip-path:inset(0_0_0_0_round_0.75rem)] border border-gray-200 dark:border-gray-700">
                 {/* Sticky header: no overflow on sticky div so it sticks to viewport; inner div handles horizontal scroll sync */}
                 <div className="sticky top-[0px] z-[99999] bg-white dark:bg-gray-800 overflow-visible" style={{ marginBottom: -1 }}>
                   <div ref={marHeaderScrollRef} className="overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    <table className="min-w-full border border-gray-300 dark:border-gray-600 border-b-0" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
+                    <table className="min-w-full" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
                     <colgroup>
                       <col style={{ width: MAR_COL.med, minWidth: MAR_COL.med }} />
                       <col style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop }} />
@@ -3739,19 +3712,19 @@ export default function ViewMARForm() {
                     </colgroup>
                     <thead>
                       <tr className="bg-gray-100 dark:bg-gray-700">
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 sticky left-0 z-[99999] bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}>
-                          Medication
+                        <th className="pl-10 pr-3 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300 sticky left-0 z-[99999] bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700" style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}>
+                          MEDICATION
                         </th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky z-[99998] bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop, maxWidth: MAR_COL.startStop, left: MAR_COL.med }}>
-                          Start/Stop Date
+                        <th className="px-3 py-2 text-center text-xs font-bold text-gray-700 dark:text-gray-300 sticky z-[99998] bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700" style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop, maxWidth: MAR_COL.startStop, left: MAR_COL.med }}>
+                          START/STOP
                         </th>
-                        <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300 sticky z-[99997] bg-gray-100 dark:bg-gray-700 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#f3f4f6] dark:shadow-[4px_0_0_0_#374151]" style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth, left: MAR_COL.med + MAR_COL.startStop }}>
-                          Hour
+                        <th className="px-3 py-2 text-center text-xs font-bold text-gray-700 dark:text-gray-300 sticky z-[99997] bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700" style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth, left: MAR_COL.med + MAR_COL.startStop }}>
+                          HOUR
                         </th>
                         {days.map(day => (
                           <th
                             key={day}
-                            className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs font-medium ${
+                            className={`px-1 py-2 text-center text-xs font-bold border-b border-gray-200 dark:border-gray-700 ${
                               day === todayDayInViewedMar
                                 ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100'
                                 : 'text-gray-700 dark:text-gray-300'
@@ -3767,7 +3740,7 @@ export default function ViewMARForm() {
                   </div>
                 </div>
                 <div ref={marTableScrollRef} className="overflow-x-auto overflow-y-visible bg-white dark:bg-gray-800 pb-8">
-                <table className="min-w-full border border-gray-300 dark:border-gray-600" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
+                <table className="min-w-full " style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed' }}>
                   <colgroup>
                     <col style={{ width: MAR_COL.med, minWidth: MAR_COL.med }} />
                     <col style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop }} />
@@ -3800,7 +3773,7 @@ export default function ViewMARForm() {
                     <>
                     {marChartSegmentsForTable.length === 0 ? (
                       <tr>
-                        <td colSpan={3 + days.length} className="border border-gray-300 dark:border-gray-600 px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={3 + days.length} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                           {!marTableCategoryVisible.routine_meds &&
                           !marTableCategoryVisible.vitals &&
                           !marTableCategoryVisible.prn
@@ -3844,11 +3817,10 @@ export default function ViewMARForm() {
                             ),
                           ).sort((a, b) => a - b)
                           const prnChartStickyMed =
-                            'sticky left-0 z-10 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]'
+                            'sticky left-0 z-10'
                           const prnChartStickyStart =
-                            'sticky z-10 border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]'
-                          const prnChartBg =
-                            'bg-[#d8f0e0] dark:bg-[#14532d] hover:brightness-[0.97] dark:hover:brightness-110'
+                            'sticky z-10'
+                          const prnChartBg = 'bg-gray-100 dark:bg-gray-800'
                           const startLabel = template.start_date
                             ? formatCalendarDate(template.start_date, 'en-US', {
                                 month: 'short',
@@ -3877,10 +3849,10 @@ export default function ViewMARForm() {
                               <SortableTableRow
                                 id={prnSortableId}
                                 sortableDisabled={marRowReorderLocked}
-                                className={`${segIndex > 0 ? 'border-t border-emerald-800/15 dark:border-emerald-400/20' : ''}`}
+                                className={`${segIndex > 0 ? '' : ''}`}
                               >
                                 <td
-                                  className={`relative border border-gray-300 dark:border-gray-600 px-3 py-2 align-top ${prnChartStickyMed} ${prnChartBg}`}
+                                  className={`relative px-3 py-2 align-top ${prnChartStickyMed} ${prnChartBg}`}
                                   style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}
                                 >
                                   <div className="flex gap-2">
@@ -3888,8 +3860,8 @@ export default function ViewMARForm() {
                                       <DragHandleButton medId={template.id} readOnly={readOnly} reorderLocked={marRowReorderLocked} onOpen={!readOnly && canEditStructure ? openReorderModal : undefined} />
                                     </div>
                                     <div className="flex flex-col gap-0.5 min-w-0 flex-1 pl-1 pr-6" aria-label={`PRN chart row: ${template.medication}`}>
-                                      <div className="font-medium text-sm text-emerald-900 dark:text-emerald-100">💊 PRN</div>
-                                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide w-fit bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 shrink-0">PRN</span>
+                                      <div className="text-xs font-medium text-gray-900 dark:text-gray-100 break-words">
                                         {template.medication || '—'}
                                       </div>
                                       {seg.records.some(
@@ -3898,7 +3870,7 @@ export default function ViewMARForm() {
                                           marForm?.month_year &&
                                           !isPrnDateInMarMonth(r.date, marForm.month_year),
                                       ) ? (
-                                        <div className="text-[10px] text-amber-800 dark:text-amber-200 mt-1 leading-snug">
+                                        <div className="text-xs text-amber-800 dark:text-amber-200 mt-1 leading-snug">
                                           Some administrations have a date outside this MAR month — adjust in the PRN table below so they
                                           line up with a day column.
                                         </div>
@@ -3943,7 +3915,7 @@ export default function ViewMARForm() {
                                               })
                                               setShowDeleteConfirmModal(true)
                                             }}
-                                            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                                            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
                                           >
                                             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                               <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -3956,7 +3928,7 @@ export default function ViewMARForm() {
                                   )}
                                 </td>
                                 <td
-                                  className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs ${prnChartStickyStart} ${prnChartBg}`}
+                                  className={`px-3 py-2 align-top text-center text-xs ${prnChartStickyStart} ${prnChartBg}`}
                                   style={{
                                     width: MAR_COL.startStop,
                                     minWidth: MAR_COL.startStop,
@@ -3967,7 +3939,7 @@ export default function ViewMARForm() {
                                   {startLabel}
                                 </td>
                                 <td
-                                  className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs ${prnChartStickyStart} ${prnChartBg}`}
+                                  className={`px-3 py-2 align-top text-center text-xs ${prnChartStickyStart} ${prnChartBg}`}
                                   style={{
                                     width: hourColWidth,
                                     minWidth: hourColWidth,
@@ -4021,38 +3993,47 @@ export default function ViewMARForm() {
                                   return (
                                     <td
                                       key={`prn-chart-${seg.groupKey}-d${day}`}
-                                      style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day }}
-                                      className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs align-top bg-[#eef8f1] dark:bg-[#14532d]/20 ${dayCellHighlight} ${!canUseDayCell ? 'opacity-40' : ''}`}
+                                      style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day, height: MAR_COL.day }}
+                                      className={`text-center text-xs relative bg-[#eef8f1] dark:bg-[#14532d]/20 ${dayCellHighlight} ${!canUseDayCell ? 'opacity-40' : ''}`}
                                     >
                                       {canUseDayCell ? (
-                                        <div className="flex flex-col gap-1 items-center text-center min-w-0 relative">
+                                        <div
+                                          className={`absolute inset-0 flex flex-col gap-1 items-center justify-center text-center min-w-0 ${!readOnly ? 'cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors' : ''}`}
+                                          onClick={!readOnly ? (e) => {
+                                            e.stopPropagation()
+                                            // Pre-populate initials for new entry when cell is empty
+                                            let ui = ''
+                                            if (recsForDay.length === 0) {
+                                              const si = userProfile?.staff_initials
+                                              if (si && !si.startsWith('data:image') && !si.startsWith('s3:') && si.trim()) {
+                                                ui = si.trim().toUpperCase()
+                                              } else if (userProfile?.full_name) {
+                                                const parts = userProfile.full_name.trim().split(/\s+/)
+                                                if (parts.length >= 2) ui = (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+                                                else if (parts.length === 1) ui = parts[0][0].toUpperCase()
+                                              }
+                                            }
+                                            setPrnDayCellEditingId(null)
+                                            setPrnDayCellForm({ hour: '', initials: ui, result: '', note: '' })
+                                            setPrnDayCellDeleteConfirmId(null)
+                                            setPrnDayCellModal({ template, day })
+                                          } : undefined}
+                                        >
                                           {/* Green checkmark + count badge + red dot + stacked avatars when entries exist */}
                                           {recsForDay.length > 0 && (
                                             <>
-                                              <button
-                                                type="button"
-                                                disabled={readOnly}
-                                                onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  if (readOnly) return
-                                                  setPrnDayCellEditingId(null)
-                                                  setPrnDayCellForm({ hour: '', initials: '', result: '', note: '' })
-                                                  setPrnDayCellDeleteConfirmId(null)
-                                                  setPrnDayCellModal({ template, day })
-                                                }}
-                                                className="relative flex items-center justify-center gap-1 w-full py-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 disabled:pointer-events-none transition-colors"
-                                              >
-                                                {/* Red dot if any entry has notes or result */}
-                                                {recsForDay.some((r) => r.note?.trim() || r.result?.trim()) && (
-                                                  <span className="absolute top-0 right-1 h-2 w-2 rounded-full bg-red-500 pointer-events-none" />
-                                                )}
+                                              {/* Red dot if any entry has notes or result */}
+                                              {recsForDay.some((r) => r.note?.trim() || r.result?.trim()) && (
+                                                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500 pointer-events-none" />
+                                              )}
+                                              <div className="flex items-center justify-center gap-1">
                                                 <svg className="h-5 w-5 text-green-500 dark:text-green-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                                                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                                 </svg>
                                                 {recsForDay.length > 1 && (
-                                                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">×{recsForDay.length}</span>
+                                                  <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">×{recsForDay.length}</span>
                                                 )}
-                                              </button>
+                                              </div>
                                               {/* Stacked avatars for unique users who logged this PRN */}
                                               {(() => {
                                                 const uniqueUsers = Array.from(new Set(recsForDay.map(r => r.initials).filter((v): v is string => !!v && !['DC','R','W','H'].includes(v.trim().toUpperCase()))))
@@ -4065,41 +4046,16 @@ export default function ViewMARForm() {
                                                       </div>
                                                     ))}
                                                     {uniqueUsers.length > 3 && (
-                                                      <span className="text-[8px] text-gray-500 ml-0.5">+{uniqueUsers.length - 3}</span>
+                                                      <span className="text-xs text-gray-500 ml-0.5">+{uniqueUsers.length - 3}</span>
                                                     )}
                                                   </div>
                                                 )
                                               })()}
                                             </>
                                           )}
-                                          {/* Empty cell — clickable dash to log first entry */}
+                                          {/* Empty cell — dash */}
                                           {recsForDay.length === 0 && (
-                                            !readOnly ? (
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  let ui = ''
-                                                  const si = userProfile?.staff_initials
-                                                  if (si && !si.startsWith('data:image') && !si.startsWith('s3:') && si.trim()) {
-                                                    ui = si.trim().toUpperCase()
-                                                  } else if (userProfile?.full_name) {
-                                                    const parts = userProfile.full_name.trim().split(/\s+/)
-                                                    if (parts.length >= 2) ui = (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-                                                    else if (parts.length === 1) ui = parts[0][0].toUpperCase()
-                                                  }
-                                                  setPrnDayCellEditingId(null)
-                                                  setPrnDayCellForm({ hour: '', initials: ui, result: '', note: '' })
-                                                  setPrnDayCellDeleteConfirmId(null)
-                                                  setPrnDayCellModal({ template, day })
-                                                }}
-                                                className="text-gray-400 dark:text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer transition-colors select-none w-full"
-                                              >
-                                                —
-                                              </button>
-                                            ) : (
-                                              <span className="text-gray-400 dark:text-gray-500 select-none">—</span>
-                                            )
+                                            <span className={`select-none ${!readOnly ? 'text-gray-400 dark:text-gray-500' : 'text-gray-400 dark:text-gray-500'}`}>—</span>
                                           )}
                                         </div>
                                       ) : (
@@ -4160,11 +4116,7 @@ export default function ViewMARForm() {
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
                                 data-medication-cell
-                                className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top sticky left-0 ${
-                                  isVitalsEntry 
-                                    ? 'bg-[#ecdcfa] dark:bg-[#3d2254] hover:brightness-90' 
-                                    : 'bg-[#d7f0f7] dark:bg-[#1a4a52] hover:brightness-90'
-                                } border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155] relative overflow-visible z-10`}
+                                className={`px-3 py-2 align-top sticky left-0 relative overflow-visible z-10 bg-gray-100 dark:bg-gray-800`}
                                 style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}
                               >
                                 <div className="flex gap-2">
@@ -4204,9 +4156,7 @@ export default function ViewMARForm() {
                                   >
                                     {isVitalsEntry ? (
                                       <>
-                                        <div className="font-medium text-sm text-lasso-teal dark:text-lasso-blue">
-                                          📊 VITALS
-                                        </div>
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide w-fit bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 shrink-0">VITALS</span>
                                         {med.dosage && (
                                           <div
                                             className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2"
@@ -4217,9 +4167,17 @@ export default function ViewMARForm() {
                                         )}
                                       </>
                                     ) : (
-                                      <div className="font-medium text-sm text-gray-800 dark:text-white">
-                                        {med.medication_name}
-                                      </div>
+                                      <>
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide w-fit bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 shrink-0">MED</span>
+                                        <div className="text-xs font-medium text-gray-900 dark:text-gray-100 break-words">
+                                          {med.medication_name}
+                                        </div>
+                                        {(med.dosage || med.route) && (
+                                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                            {[med.dosage, med.route].filter(Boolean).join(' · ')}
+                                          </div>
+                                        )}
+                                      </>
                                     )}
                                   </div>
                                   {/* 3-dot kebab menu */}
@@ -4259,7 +4217,7 @@ export default function ViewMARForm() {
                                               })
                                               setShowDeleteConfirmModal(true)
                                             }}
-                                            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 transition-colors"
+                                            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-xs text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 transition-colors"
                                           >
                                             <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -4276,11 +4234,7 @@ export default function ViewMARForm() {
                             {shouldMerge && !isFirstRow ? null : (
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
-                                className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[200px] z-10 ${
-                                  isVitalsEntry 
-                                    ? 'bg-[#ecdcfa] dark:bg-[#3d2254] hover:brightness-90' 
-                                    : 'bg-[#d7f0f7] dark:bg-[#1a4a52] hover:brightness-90'
-                                } border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]`}
+                                className="px-3 py-2 align-top text-center text-xs sticky left-[200px] z-10 bg-gray-100 dark:bg-gray-800"
                                 style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop, maxWidth: MAR_COL.startStop }}
                               >
                               <div>Start: {formatCalendarDate(med.start_date, 'en-US', { month: 'short', day: 'numeric' })}</div>
@@ -4289,12 +4243,8 @@ export default function ViewMARForm() {
                               )}
                             </td>
                             )}
-                            <td className={`border border-gray-300 dark:border-gray-600 px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 ${
-                              isVitalsEntry 
-                                ? 'bg-[#ecdcfa] dark:bg-[#3d2254] hover:brightness-90' 
-                                : 'bg-[#d7f0f7] dark:bg-[#1a4a52] hover:brightness-90'
-                            } border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155]`} style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth }}>
-                              <span className="text-gray-800 dark:text-white text-sm">{med.hour ? formatTimeDisplay(med.hour) : '—'}</span>
+                            <td className="px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 bg-gray-100 dark:bg-gray-800" style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth }}>
+                              <span className="text-gray-800 dark:text-white text-xs">{med.hour ? formatTimeDisplay(med.hour) : '—'}</span>
                             </td>
                             {days.map(day => {
                               const admin = medAdmin[day]
@@ -4357,8 +4307,8 @@ export default function ViewMARForm() {
                                 <td
                                   key={day}
                                   data-mar-cell={`${med.id}|${day}`}
-                                  style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day }}
-                                  className={`border border-gray-300 dark:border-gray-600 px-1 py-2 text-center text-xs relative ${cellBgClass} ${
+                                  style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day, height: MAR_COL.day }}
+                                  className={`text-center text-xs relative ${cellBgClass} ${
                                     isEditing && isMedActive && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
                                   } ${isDiscontinued ? 'cursor-not-allowed' : ''}`}
                                   onDoubleClick={isEditing && isMedActive && !isVitalsEntry && !isDiscontinued && !isSCG ? () => {
@@ -4390,8 +4340,7 @@ export default function ViewMARForm() {
                                           {/* Empty - red line is shown via the absolute positioned div above */}
                                         </div>
                                       ) : (
-                                        <div className="flex flex-col gap-1 w-full">
-                                          <div
+                                        <div
                                             onClick={isEditing && !isDiscontinued ? () => {
                                               // SCG cannot overwrite an existing entry recorded by a different user.
                                               // An entry is considered "own" if the raw stored value matches the user's
@@ -4412,7 +4361,7 @@ export default function ViewMARForm() {
                                               setEditingCellValue(selectionVal)
                                               setEditingCellNote(notes || '')
                                             } : undefined}
-                                          className={`min-h-[24px] flex items-center justify-center gap-1 ${
+                                          className={`absolute inset-0 flex flex-col items-center justify-center gap-1 ${
                                               isEditing && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
                                             }`}
                                           >
@@ -4471,7 +4420,6 @@ export default function ViewMARForm() {
                                             <div className="text-gray-400">—</div>
                                             )}
                                           </div>
-                                        </div>
                                       )}
                                     </>
                                   ) : (
@@ -6408,7 +6356,10 @@ export default function ViewMARForm() {
           const resolvedValue = value === '__GIVEN__' ? (autoInitials || 'G') : value
           const entryStatus = statusCodes[resolvedValue] ?? 'Given'
           const entryInitials = statusCodes[resolvedValue]
-            ? (autoInitials || resolvedValue)
+            // For DC/R/W: use the nurse's initials; never fall back to the status code itself
+            // (the status code disables the avatar since it looks like old-format data).
+            // Use '?' when the profile has no initials configured — it still renders an avatar circle.
+            ? (autoInitials || '?')
             : resolvedValue
           await updateAdministration(editingCell.medId, editingCell.day, entryStatus, entryInitials)
           await updateAdministrationNote(editingCell.medId, editingCell.day, editingCellNote.trim() || null, entryInitials, entryStatus)
@@ -6822,7 +6773,12 @@ export default function ViewMARForm() {
             <div className="mb-6">
               <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg mb-4">
                 <p className="font-medium text-gray-800 dark:text-white">
-                  {deletingEntry.isPrn ? `💊 PRN — ${deletingEntry.name}` : deletingEntry.isVitals ? '📊 VITALS' : deletingEntry.name}
+                  {deletingEntry.isPrn ? (
+                    <span className="flex items-center gap-1">
+                      <svg className="h-4 w-4 shrink-0 text-orange-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L22 12L12 22L2 12Z"/></svg>
+                      {`PRN — ${deletingEntry.name}`}
+                    </span>
+                  ) : deletingEntry.isVitals ? '📊 VITALS' : deletingEntry.name}
                 </p>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   {deletingEntry.dosage}
