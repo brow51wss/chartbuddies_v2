@@ -159,6 +159,23 @@ function InitialsOrSignatureDisplay({
   return <span className={`lasso-signature-mark lasso-signature-mark--plain lasso-signature-mark--${variant}`}>{value}</span>
 }
 
+/** Small circular avatar for MAR table cells. Renders a colored circle (text) or tiny image (s3/data). */
+function MARCellAvatar({ value, size = 'sm' }: { value: string; size?: 'xs' | 'sm' }) {
+  const isImage = value.startsWith('s3:') || value.startsWith('data:image')
+  const szClass = size === 'xs' ? 'h-4 w-4 text-[8px]' : 'h-5 w-5 text-[9px]'
+  const avatarBgs = ['bg-teal-500','bg-blue-500','bg-violet-500','bg-emerald-500','bg-rose-500','bg-amber-500','bg-indigo-500','bg-cyan-500']
+  const bgClass = avatarBgs[(value.charCodeAt(0) + (value.charCodeAt(1) || 0)) % avatarBgs.length]
+  if (isImage) {
+    const src = value.startsWith('s3:') ? `/api/signature-image?key=${encodeURIComponent(value.slice(3))}` : value
+    return <img src={src} alt="avatar" className={`${szClass} rounded-full object-cover border border-white dark:border-gray-600 shrink-0`} />
+  }
+  return (
+    <span className={`inline-flex items-center justify-center ${szClass} rounded-full ${bgClass} text-white font-bold shrink-0 select-none`}>
+      {value.trim().toUpperCase().slice(0, 2)}
+    </span>
+  )
+}
+
 /** Current user's initials for matching PRN rows (when signed_by is null). Prefer profile text, else derive from name. */
 function currentUserInitialsForMatch(userProfile: UserProfile | null): string {
   if (!userProfile) return ''
@@ -1463,15 +1480,18 @@ export default function ViewMARForm() {
         }))
       }
 
-      // If DC (Discontinued) was selected, stamp all future days as discontinued
-      if (initials === 'DC' && status === 'Given') {
+      // If DC (Discontinued) was selected, stamp all future days as discontinued.
+      // Support both old format (status='Given', initials='DC') and new format (status='DC').
+      const isDCEntry = status === 'DC' || (status === 'Given' && initials.trim().toUpperCase() === 'DC')
+      if (isDCEntry) {
         const futureDays = []
         for (let futureDay = day + 1; futureDay <= 31; futureDay++) {
           futureDays.push({
             mar_medication_id: medId,
             day_number: futureDay,
-            status: 'Given',
-            initials: 'DC',
+            // Preserve the format used by the calling side for backward compat
+            status: status === 'DC' ? 'DC' : 'Given',
+            initials: status === 'DC' ? initialsToSave : 'DC',
             administered_at: null
           })
         }
@@ -1485,13 +1505,17 @@ export default function ViewMARForm() {
         }
       }
 
-      // If changing AWAY from DC, clear the cascade DC stamps on all subsequent days
+      // If changing AWAY from DC, clear the cascade DC stamps on all subsequent days.
+      // Handles both old format (initials='DC') and new format (status='DC').
       const prevInitialsUpper = (existingAdmin?.initials || '').trim().toUpperCase()
       const newInitialsUpper = initialsToSave.trim().toUpperCase()
-      if (prevInitialsUpper === 'DC' && newInitialsUpper !== 'DC') {
+      const prevIsDC = existingAdmin?.status === 'DC' || prevInitialsUpper === 'DC'
+      const newIsDC = status === 'DC' || newInitialsUpper === 'DC'
+      if (prevIsDC && !newIsDC) {
         const clearDays = []
         for (let futureDay = day + 1; futureDay <= 31; futureDay++) {
-          if ((administrations[medId]?.[futureDay]?.initials || '').trim().toUpperCase() === 'DC') {
+          const futureAdmin = administrations[medId]?.[futureDay]
+          if (futureAdmin?.status === 'DC' || (futureAdmin?.initials || '').trim().toUpperCase() === 'DC') {
             clearDays.push(futureDay)
           }
         }
@@ -2086,15 +2110,17 @@ export default function ViewMARForm() {
     const isNotGiven = status === 'Not Given'
     const isGiven = status === 'Given'
     const isPRN = status === 'PRN'
-    const isDC = initialsForLogic === 'DC'
-    const isRefused = initialsForLogic === 'R'
-    const isWithheld = initialsForLogic === 'W' || initialsForLogic === 'H'
+    // Support both old format (status='Given', initials='DC'/'R'/'W') and new format (status='DC'/'Refused'/'Withheld')
+    const isDC = status === 'DC' || initialsForLogic === 'DC'
+    const isRefused = status === 'Refused' || initialsForLogic === 'R'
+    const isWithheld = status === 'Withheld' || initialsForLogic === 'W' || initialsForLogic === 'H'
     let isDiscontinued = false
     if (!isVitalsEntry) {
       for (let checkDay = 1; checkDay < day; checkDay++) {
         const checkAdmin = medAdmin[checkDay]
         const checkRaw = checkAdmin?.initials ?? ''
-        if (!checkRaw.startsWith('data:image') && !checkRaw.startsWith('s3:') && checkRaw.trim().toUpperCase() === 'DC') {
+        const checkIsDC = checkAdmin?.status === 'DC' || (!checkRaw.startsWith('data:image') && !checkRaw.startsWith('s3:') && checkRaw.trim().toUpperCase() === 'DC')
+        if (checkIsDC) {
           isDiscontinued = true
           break
         }
@@ -2206,20 +2232,21 @@ export default function ViewMARForm() {
     }
   }
 
-  const updateAdministrationNote = async (medId: string, day: number, note: string | null, initialsOverride?: string) => {
+  const updateAdministrationNote = async (medId: string, day: number, note: string | null, initialsOverride?: string, statusOverride?: string) => {
     if (!marFormId) return
     
     try {
       setSaving(true)
       
       const existingAdmin = administrations[medId]?.[day]
-      // Use the override when provided (avoids stale-state reads immediately after updateAdministration)
+      // Use overrides when provided — avoids stale React-state reads immediately after updateAdministration
       const initialsToUse = initialsOverride ?? existingAdmin?.initials ?? ''
+      const statusToUse = statusOverride ?? existingAdmin?.status ?? 'Given'
       
       await rdsUpsertAdministration({
         mar_medication_id: medId,
         day_number: day,
-        status: existingAdmin?.status ?? 'Given',
+        status: statusToUse,
         initials: initialsToUse,
         notes: note?.trim() || null,
         updated_at: new Date().toISOString(),
@@ -3999,32 +4026,51 @@ export default function ViewMARForm() {
                                     >
                                       {canUseDayCell ? (
                                         <div className="flex flex-col gap-1 items-center text-center min-w-0 relative">
-                                          {/* Green checkmark + count badge + red dot when entries exist */}
+                                          {/* Green checkmark + count badge + red dot + stacked avatars when entries exist */}
                                           {recsForDay.length > 0 && (
-                                            <button
-                                              type="button"
-                                              disabled={readOnly}
-                                              onClick={(e) => {
-                                                e.stopPropagation()
-                                                if (readOnly) return
-                                                setPrnDayCellEditingId(null)
-                                                setPrnDayCellForm({ hour: '', initials: '', result: '', note: '' })
-                                                setPrnDayCellDeleteConfirmId(null)
-                                                setPrnDayCellModal({ template, day })
-                                              }}
-                                              className="relative flex items-center justify-center gap-1 w-full py-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 disabled:pointer-events-none transition-colors"
-                                            >
-                                              {/* Red dot if any entry has notes or result */}
-                                              {recsForDay.some((r) => r.note?.trim() || r.result?.trim()) && (
-                                                <span className="absolute top-0 right-1 h-2 w-2 rounded-full bg-red-500 pointer-events-none" />
-                                              )}
-                                              <svg className="h-5 w-5 text-green-500 dark:text-green-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                              </svg>
-                                              {recsForDay.length > 1 && (
-                                                <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">×{recsForDay.length}</span>
-                                              )}
-                                            </button>
+                                            <>
+                                              <button
+                                                type="button"
+                                                disabled={readOnly}
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  if (readOnly) return
+                                                  setPrnDayCellEditingId(null)
+                                                  setPrnDayCellForm({ hour: '', initials: '', result: '', note: '' })
+                                                  setPrnDayCellDeleteConfirmId(null)
+                                                  setPrnDayCellModal({ template, day })
+                                                }}
+                                                className="relative flex items-center justify-center gap-1 w-full py-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 disabled:pointer-events-none transition-colors"
+                                              >
+                                                {/* Red dot if any entry has notes or result */}
+                                                {recsForDay.some((r) => r.note?.trim() || r.result?.trim()) && (
+                                                  <span className="absolute top-0 right-1 h-2 w-2 rounded-full bg-red-500 pointer-events-none" />
+                                                )}
+                                                <svg className="h-5 w-5 text-green-500 dark:text-green-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                {recsForDay.length > 1 && (
+                                                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">×{recsForDay.length}</span>
+                                                )}
+                                              </button>
+                                              {/* Stacked avatars for unique users who logged this PRN */}
+                                              {(() => {
+                                                const uniqueUsers = Array.from(new Set(recsForDay.map(r => r.initials).filter((v): v is string => !!v && !['DC','R','W','H'].includes(v.trim().toUpperCase()))))
+                                                if (uniqueUsers.length === 0) return null
+                                                return (
+                                                  <div className="flex items-center justify-center mt-0.5">
+                                                    {uniqueUsers.slice(0, 3).map((iv, idx) => (
+                                                      <div key={idx} className={idx > 0 ? '-ml-1' : ''} style={{ zIndex: uniqueUsers.length - idx }}>
+                                                        <MARCellAvatar value={iv} size="xs" />
+                                                      </div>
+                                                    ))}
+                                                    {uniqueUsers.length > 3 && (
+                                                      <span className="text-[8px] text-gray-500 ml-0.5">+{uniqueUsers.length - 3}</span>
+                                                    )}
+                                                  </div>
+                                                )
+                                              })()}
+                                            </>
                                           )}
                                           {/* Empty cell — clickable dash to log first entry */}
                                           {recsForDay.length === 0 && (
@@ -4109,33 +4155,6 @@ export default function ViewMARForm() {
                             className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${
                               draggingGroupMedIdSet.has(med.id) ? 'opacity-0 pointer-events-none' : ''
                             }`}
-                            onMouseMove={(e) => {
-                              // Use medication cell rect when hovered (spans multiple rows) so Add below triggers only near actual bottom; else use row rect
-                              const medCell = (e.target as HTMLElement).closest?.('[data-medication-cell]') as HTMLElement | null
-                              const rect = medCell?.getBoundingClientRect() ?? e.currentTarget.getBoundingClientRect()
-                              const mouseY = e.clientY - rect.top
-                              const height = rect.height
-                              const edgeZone = 8 // pixels from edge to trigger (same as Add above - must be near actual top/bottom of the box)
-                              
-                              if (mouseY >= 0 && mouseY < edgeZone) {
-                                if (rowHover?.rowId !== med.id || rowHover?.position !== 'top') {
-                                  setRowHover({ rowId: med.id, position: 'top' })
-                                }
-                              } else if (mouseY > height - edgeZone && mouseY <= height) {
-                                if (rowHover?.rowId !== med.id || rowHover?.position !== 'bottom') {
-                                  setRowHover({ rowId: med.id, position: 'bottom' })
-                                }
-                              } else {
-                                if (rowHover?.rowId === med.id) {
-                                  setRowHover(null)
-                                }
-                              }
-                            }}
-                            onMouseLeave={() => {
-                              if (rowHover?.rowId === med.id) {
-                                setRowHover(null)
-                              }
-                            }}
                           >
                             {shouldMerge && !isFirstRow ? null : (
                               <td 
@@ -4145,45 +4164,9 @@ export default function ViewMARForm() {
                                   isVitalsEntry 
                                     ? 'bg-[#ecdcfa] dark:bg-[#3d2254] hover:brightness-90' 
                                     : 'bg-[#d7f0f7] dark:bg-[#1a4a52] hover:brightness-90'
-                                } border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155] relative overflow-visible ${rowHover?.rowId === med.id ? 'z-20' : 'z-10'}`}
+                                } border-r-2 border-gray-400 dark:border-gray-500 shadow-[4px_0_0_0_#cbd5e1] dark:shadow-[4px_0_0_0_#334155] relative overflow-visible z-10`}
                                 style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}
                               >
-                                {/* Add Row Indicator - Top: for first row keep pill inside cell so it's not clipped by scroll container */}
-                                {canEditStructure && rowHover?.rowId === med.id && rowHover?.position === 'top' && (
-                                  <div 
-                                    className={`absolute left-0 right-0 min-h-[2rem] z-50 flex items-center cursor-pointer hover:bg-lasso-teal/20 transition-colors ${isFirstTableRow ? 'top-0' : '-top-7 pt-5 bg-transparent'}`}
-                                    style={{ width: '5000px' }}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setInsertPosition({ targetMedId: med.id, position: 'above' })
-                                      setEditingEntry(null) // Clear editing entry to ensure add mode
-                                      setShowAddMedModal(true)
-                                    }}
-                                    onMouseEnter={() => setRowHover({ rowId: med.id, position: 'top' })}
-                                  >
-                                    <div className="ml-4 bg-lasso-teal text-white text-xs px-3 py-1 rounded-full shadow-lg flex items-center gap-1 whitespace-nowrap font-medium">
-                                      <span className="text-sm font-bold">+</span> Add above
-                                    </div>
-                                  </div>
-                                )}
-                                {/* Add Row Indicator - Bottom */}
-                                {canEditStructure && rowHover?.rowId === med.id && rowHover?.position === 'bottom' && (
-                                  <div 
-                                    className="absolute left-0 right-0 -bottom-1 min-h-[2rem] py-1 bg-lasso-teal z-50 flex items-center cursor-pointer hover:bg-lasso-blue transition-colors"
-                                    style={{ width: '5000px' }}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setInsertPosition({ targetMedId: med.id, position: 'below' })
-                                      setEditingEntry(null) // Clear editing entry to ensure add mode
-                                      setShowAddMedModal(true)
-                                    }}
-                                    onMouseEnter={() => setRowHover({ rowId: med.id, position: 'bottom' })}
-                                  >
-                                    <div className="ml-4 bg-lasso-teal text-white text-xs px-3 py-0.5 rounded-full shadow-lg flex items-center gap-1 whitespace-nowrap font-medium">
-                                      <span className="text-sm font-bold">+</span> Add below
-                                    </div>
-                                  </div>
-                                )}
                                 <div className="flex gap-2">
                                   {/* Drag handle */}
                                   <div className="flex flex-col items-start shrink-0 pt-0.5">
@@ -4323,9 +4306,16 @@ export default function ViewMARForm() {
                               const isNotGiven = status === 'Not Given'
                               const isGiven = status === 'Given'
                               const isPRN = status === 'PRN'
-                              const isDC = initialsForLogic === 'DC'
-                              const isRefused = initialsForLogic === 'R'
-                              const isWithheld = initialsForLogic === 'W' || initialsForLogic === 'H'
+                              // Support both old format (status='Given', initials='DC'/'R'/'W')
+                              // and new format (status='DC'/'Refused'/'Withheld', initials=user)
+                              const isDC = status === 'DC' || initialsForLogic === 'DC'
+                              const isRefused = status === 'Refused' || initialsForLogic === 'R'
+                              const isWithheld = status === 'Withheld' || initialsForLogic === 'W' || initialsForLogic === 'H'
+                              // avatarInitials: actual user's identity for the avatar circle.
+                              // Old format stores a raw status code in initials → no avatar available.
+                              // New format stores the user's initials in initials → show avatar.
+                              const isRawStatusCode = ['DC', 'R', 'W', 'H'].includes(initialsForLogic)
+                              const avatarInitials = !isRawStatusCode && rawInitials ? rawInitials : null
                               const hasParameter = group.meds.some(m => !!m.parameter)
                               // SCG can only add/edit notes on their own entries.
                               // Uses same dual-match logic as the cell onClick guard.
@@ -4415,37 +4405,53 @@ export default function ViewMARForm() {
                                                 if (!isOwnExact && !isOwnText) return
                                               }
                                               setEditingCell({ medId: med.id, day })
-                                              setEditingCellValue(initials || (isVitalsEntry ? (group.meds.find(m => m.route)?.route || '') : ''))
+                                              // New-format entries store the user's initials in `initials`
+                                              // and the status type in `status` — restore button selection from status.
+                                              const selectionVal = isDC ? 'DC' : isRefused ? 'R' : isWithheld ? 'W'
+                                                : (initials || (isVitalsEntry ? (group.meds.find(m => m.route)?.route || '') : ''))
+                                              setEditingCellValue(selectionVal)
                                               setEditingCellNote(notes || '')
                                             } : undefined}
                                           className={`min-h-[24px] flex items-center justify-center gap-1 ${
                                               isEditing && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
                                             }`}
                                           >
+                                            {/* DC — red stop-sign octagon */}
                                             {isDC && !isDiscontinued && (
-                                              <div className="text-red-600 dark:text-red-400 font-bold text-xs">DC</div>
+                                              <svg className="h-5 w-5 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M8.6 2h6.8L21 8.6v6.8L15.4 21H8.6L3 15.4V8.6L8.6 2z" />
+                                                <path fill="white" d="M9.5 9.5l5 5M14.5 9.5l-5 5" stroke="white" strokeWidth="1.75" strokeLinecap="round" />
+                                              </svg>
                                             )}
+                                            {/* Refused — red raised hand */}
                                             {isRefused && !isDC && (
-                                              <div className="font-bold text-red-600 dark:text-red-400">R</div>
+                                              <svg className="h-5 w-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M10 4V12M10 4a2 2 0 00-4 0v8M10 4a2 2 0 014 0v4m0 0V6a2 2 0 014 0v6M14 8v4m0 0v-4m0 4v2m0 0a6 6 0 01-6 6H7a6 6 0 01-6-6v-2a2 2 0 014 0" />
+                                              </svg>
                                             )}
+                                            {/* Withheld — orange pause bars */}
                                             {isWithheld && !isDC && (
-                                              <div className="font-bold text-orange-600 dark:text-orange-400">W</div>
+                                              <svg className="h-5 w-5 text-orange-500 dark:text-orange-400" fill="currentColor" viewBox="0 0 24 24">
+                                                <rect x="6" y="4" width="4" height="16" rx="1.5" />
+                                                <rect x="14" y="4" width="4" height="16" rx="1.5" />
+                                              </svg>
                                             )}
-                                            {isVitalsEntry && isGiven && !isDC && notes && (
+                                            {/* Red dot: any cell (vitals or medication) that has notes */}
+                                            {notes && (
                                               <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500 pointer-events-none" />
                                             )}
                                             {isGiven && !isDC && !isRefused && !isWithheld && (
-                                              isVitalsEntry ? (
-                                                <div className="flex items-center justify-center">
-                                                  <svg className="h-5 w-5 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                  </svg>
-                                                </div>
-                                              ) : (
-                                                <div className={`font-bold text-gray-800 dark:text-white ${isEditing ? 'cursor-text' : ''}`}>
-                                                  <InitialsOrSignatureDisplay value={initials} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
-                                                </div>
-                                              )
+                                              <div className="flex flex-col items-center gap-0.5">
+                                                <svg className="h-5 w-5 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                {avatarInitials && <MARCellAvatar value={avatarInitials} size="xs" />}
+                                              </div>
+                                            )}
+                                            {(isDC || isRefused || isWithheld) && avatarInitials && (
+                                              <div className="mt-0.5 flex items-center justify-center">
+                                                <MARCellAvatar value={avatarInitials} size="xs" />
+                                              </div>
                                             )}
                                             {isNotGiven && initials && !isDC && !isRefused && !isWithheld && (
                                               <div className="text-red-600 dark:text-red-400 font-bold">
@@ -4465,26 +4471,6 @@ export default function ViewMARForm() {
                                             <div className="text-gray-400">—</div>
                                             )}
                                           </div>
-                                          {isRefused && notes && (
-                                            <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600 px-1">
-                                              {notes}
-                                            </div>
-                                          )}
-                                          {isWithheld && notes && (
-                                            <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600 px-1">
-                                              {notes}
-                                            </div>
-                                          )}
-                                          {!isVitalsEntry && hasParameter && !isRefused && !isWithheld && !isDC && notes && (
-                                            <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600 px-1">
-                                              {notes}
-                                            </div>
-                                          )}
-                                          {hasParameter && isDC && !isDiscontinued && notes && (
-                                            <div className="text-xs text-gray-600 dark:text-gray-400 italic mt-1 pt-1 border-t border-gray-200 dark:border-gray-600 px-1">
-                                              {notes}
-                                            </div>
-                                          )}
                                         </div>
                                       )}
                                     </>
@@ -6413,10 +6399,22 @@ export default function ViewMARForm() {
         const submitEntry = async () => {
           const value = editingCellValue.trim()
           if (!value) return
-          await updateAdministration(editingCell.medId, editingCell.day, 'Given', value)
-          await updateAdministrationNote(editingCell.medId, editingCell.day, editingCellNote.trim() || null, value)
+          // DC / Refused / Withheld: store the proper status in the status column
+          // and save the user's actual initials in the initials column (new format).
+          // "Given" (including the __GIVEN__ fallback when no profile initials exist) passes through as Given.
+          const autoInitials = userInitials?.value || userProfile?.staff_initials || ''
+          const statusCodes: Record<string, string> = { DC: 'DC', R: 'Refused', W: 'Withheld' }
+          // __GIVEN__ is the sentinel used when the nurse has no staff_initials configured yet
+          const resolvedValue = value === '__GIVEN__' ? (autoInitials || 'G') : value
+          const entryStatus = statusCodes[resolvedValue] ?? 'Given'
+          const entryInitials = statusCodes[resolvedValue]
+            ? (autoInitials || resolvedValue)
+            : resolvedValue
+          await updateAdministration(editingCell.medId, editingCell.day, entryStatus, entryInitials)
+          await updateAdministrationNote(editingCell.medId, editingCell.day, editingCellNote.trim() || null, entryInitials, entryStatus)
           closeModal()
         }
+
 
         return (
           <div
@@ -6467,28 +6465,114 @@ export default function ViewMARForm() {
                   </div>
                 ) : (
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Select entry
                     </label>
-                    <select
-                      autoFocus
-                      value={editingCellValue}
-                      onChange={e => setEditingCellValue(e.target.value)}
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-lasso-teal cursor-pointer"
-                    >
-                      <option value="">Select...</option>
-                      {userInitials && (
-                        <option value={userInitials.value}>{userInitials.label}</option>
-                      )}
-                      <option value="DC">DC (Discontinued)</option>
-                      <option value="W">W (Withheld)</option>
-                      <option value="R">R (Refused)</option>
-                      {customLegends.map(legend => (
-                        <option key={legend.id} value={legend.code}>
-                          {legend.code} ({legend.description})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Given — always visible; clicking it stores the nurse's auto-resolved initials */}
+                      {(() => {
+                        const givenVal = userInitials?.value || userProfile?.staff_initials || '__GIVEN__'
+                        const isSelected = editingCellValue === givenVal || editingCellValue === '__GIVEN__'
+                        return (
+                          <button
+                            key="initials"
+                            type="button"
+                            onClick={() => setEditingCellValue(isSelected ? '' : givenVal)}
+                            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left ${
+                              isSelected
+                                ? 'border-lasso-teal bg-lasso-teal/10 text-lasso-teal dark:border-lasso-teal dark:bg-lasso-teal/20'
+                                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            <svg className="h-4 w-4 shrink-0 text-green-500" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="truncate">Given</span>
+                          </button>
+                        )
+                      })()}
+                      {/* DC */}
+                      {(() => {
+                        const isSelected = editingCellValue === 'DC'
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setEditingCellValue(isSelected ? '' : 'DC')}
+                            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left ${
+                              isSelected
+                                ? 'border-red-500 bg-red-50 text-red-600 dark:border-red-400 dark:bg-red-900/20 dark:text-red-400'
+                                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            <svg className="h-4 w-4 shrink-0 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8.6 2h6.8L21 8.6v6.8L15.4 21H8.6L3 15.4V8.6L8.6 2z" />
+                              <path stroke="white" strokeWidth="1.75" strokeLinecap="round" d="M9.5 9.5l5 5M14.5 9.5l-5 5" />
+                            </svg>
+                            <span>DC</span>
+                          </button>
+                        )
+                      })()}
+                      {/* Withheld */}
+                      {(() => {
+                        const isSelected = editingCellValue === 'W'
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setEditingCellValue(isSelected ? '' : 'W')}
+                            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left ${
+                              isSelected
+                                ? 'border-orange-500 bg-orange-50 text-orange-600 dark:border-orange-400 dark:bg-orange-900/20 dark:text-orange-400'
+                                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            <svg className="h-4 w-4 shrink-0 text-orange-500" fill="currentColor" viewBox="0 0 24 24">
+                              <rect x="6" y="4" width="4" height="16" rx="1.5" />
+                              <rect x="14" y="4" width="4" height="16" rx="1.5" />
+                            </svg>
+                            <span>Withheld</span>
+                          </button>
+                        )
+                      })()}
+                      {/* Refused */}
+                      {(() => {
+                        const isSelected = editingCellValue === 'R'
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setEditingCellValue(isSelected ? '' : 'R')}
+                            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left ${
+                              isSelected
+                                ? 'border-red-500 bg-red-50 text-red-600 dark:border-red-400 dark:bg-red-900/20 dark:text-red-400'
+                                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            <svg className="h-4 w-4 shrink-0 text-red-500" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M10 4V12M10 4a2 2 0 00-4 0v8M10 4a2 2 0 014 0v4m0 0V6a2 2 0 014 0v6M14 8v4m0 0v-4m0 4v2m0 0a6 6 0 01-6 6H7a6 6 0 01-6-6v-2a2 2 0 014 0" />
+                            </svg>
+                            <span>Refused</span>
+                          </button>
+                        )
+                      })()}
+                      {/* Custom legends */}
+                      {customLegends.map(legend => {
+                        const isSelected = editingCellValue === legend.code
+                        return (
+                          <button
+                            key={legend.id}
+                            type="button"
+                            onClick={() => setEditingCellValue(isSelected ? '' : legend.code)}
+                            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left ${
+                              isSelected
+                                ? 'border-lasso-teal bg-lasso-teal/10 text-lasso-teal dark:border-lasso-teal dark:bg-lasso-teal/20'
+                                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            <span className="font-bold text-xs w-4 text-center shrink-0">{legend.code}</span>
+                            <span className="truncate">{legend.description}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
 

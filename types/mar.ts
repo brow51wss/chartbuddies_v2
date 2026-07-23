@@ -50,7 +50,7 @@ export interface MARAdministration {
   id: string
   mar_medication_id: string
   day_number: number // 1-31
-  status: 'Given' | 'Not Given' | 'PRN'
+  status: 'Given' | 'Not Given' | 'PRN' | 'DC' | 'Refused' | 'Withheld'
   initials: string | null
   notes: string | null
   administered_at: string | null

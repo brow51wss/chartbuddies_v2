@@ -81,14 +81,16 @@ export function getMarDiscontinuedBeforeSlotInfo(
   const groupKey = marMedicationDiscontinueGroupKey(med)
   const currentTime = marSlotTimeMs(formYear, formMonth1Based, day, med.hour, 23)
 
-  for (const groupMed of groupMeds) {
+    for (const groupMed of groupMeds) {
     if (marMedicationDiscontinueGroupKey(groupMed) !== groupKey) continue
     const medAdmin = administrations[groupMed.id] || {}
 
     for (let checkDay = 1; checkDay <= day; checkDay++) {
       const checkAdmin = medAdmin[checkDay]
       const checkRaw = checkAdmin?.initials ?? ''
-      if (checkRaw.startsWith('data:image') || checkRaw.trim().toUpperCase() !== 'DC') continue
+      // Support both old format (initials='DC') and new format (status='DC')
+      const checkIsDC = checkAdmin?.status === 'DC' || (!checkRaw.startsWith('data:image') && checkRaw.trim().toUpperCase() === 'DC')
+      if (!checkIsDC) continue
 
       const dcTime = marSlotTimeMs(formYear, formMonth1Based, checkDay, groupMed.hour, 0)
       if (dcTime < currentTime) return { isDiscontinued: true, dcDay: checkDay }
