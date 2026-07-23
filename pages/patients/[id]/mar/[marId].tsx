@@ -160,18 +160,43 @@ function InitialsOrSignatureDisplay({
 }
 
 /** Small circular avatar for MAR table cells. Renders a colored circle (text) or tiny image (s3/data). */
-function MARCellAvatar({ value, size = 'sm' }: { value: string; size?: 'xs' | 'sm' }) {
+function MARCellAvatar({
+  value,
+  size = 'sm',
+  userProfile,
+  facilityProfiles,
+}: {
+  value: string
+  size?: 'xs' | 'sm'
+  userProfile?: UserProfile | null
+  facilityProfiles?: UserProfile[]
+}) {
   const isImage = value.startsWith('s3:') || value.startsWith('data:image')
+
+  // Resolve image signatures → text initials by finding the matching profile
+  let displayText = value.trim().toUpperCase().slice(0, 2)
+  if (isImage) {
+    const allProfiles = [userProfile, ...(facilityProfiles ?? [])].filter((p): p is UserProfile => !!p)
+    const match = allProfiles.find((p) => p.staff_initials === value)
+    if (match?.staff_initials_text) {
+      displayText = match.staff_initials_text.trim().toUpperCase().slice(0, 2)
+    } else if (match?.full_name) {
+      const parts = match.full_name.trim().split(/\s+/)
+      displayText = parts.length >= 2
+        ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+        : parts[0].slice(0, 2).toUpperCase()
+    } else {
+      displayText = '?'
+    }
+  }
+
   const szClass = size === 'xs' ? 'h-4 w-4 text-[8px]' : 'h-5 w-5 text-[9px]'
   const avatarBgs = ['bg-teal-500','bg-blue-500','bg-violet-500','bg-emerald-500','bg-rose-500','bg-amber-500','bg-indigo-500','bg-cyan-500']
   const bgClass = avatarBgs[(value.charCodeAt(0) + (value.charCodeAt(1) || 0)) % avatarBgs.length]
-  if (isImage) {
-    const src = value.startsWith('s3:') ? `/api/signature-image?key=${encodeURIComponent(value.slice(3))}` : value
-    return <img src={src} alt="avatar" className={`${szClass} rounded-full object-cover border border-white dark:border-gray-600 shrink-0`} />
-  }
+
   return (
     <span className={`inline-flex items-center justify-center ${szClass} rounded-full ${bgClass} text-white font-bold shrink-0 select-none`}>
-      {value.trim().toUpperCase().slice(0, 2)}
+      {displayText}
     </span>
   )
 }
@@ -256,6 +281,50 @@ function getMarMedicationGroupKey(med: MARMedication): string {
   return isVitalsEntry
     ? `vitals|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
     : `${med.medication_name}|${med.dosage}|${med.start_date}|${med.stop_date || ''}`
+}
+
+/**
+ * Parse the Vitals `notes` field into its constituent parts.
+ *
+ * **New format** (saved by current code):  "VITAL:{value}\n{user notes}"
+ *   → { vitalValue: "55", userText: "good." }
+ *
+ * **Old format** (legacy entries where the vital reading lived in `initials`):
+ *   plain text                              "good."
+ *   → { vitalValue: null, userText: "good." }
+ *
+ * This is the single place that encodes/decodes the Vitals dual-field storage contract.
+ */
+function parseVitalsNotesField(raw: string | null | undefined): { vitalValue: string | null; userText: string | null } {
+  if (!raw) return { vitalValue: null, userText: null }
+  if (raw.startsWith('VITAL:')) {
+    const nlIdx = raw.indexOf('\n')
+    const vitalValue = nlIdx >= 0 ? raw.slice(6, nlIdx) : raw.slice(6)
+    const userText  = nlIdx >= 0 ? raw.slice(nlIdx + 1).trim() : ''
+    return { vitalValue: vitalValue || null, userText: userText || null }
+  }
+  return { vitalValue: null, userText: raw || null }
+}
+
+/**
+ * Parse the custom-legend `notes` field into its constituent parts.
+ *
+ * **New format** (saved by current code):  "LEGEND:{code}\n{user notes}"
+ *   → { legendCode: "T", userText: "blas" }
+ *
+ * **Old format** (legacy entries where the legend code lived in `initials`):
+ *   plain text (or null)
+ *   → { legendCode: null, userText: <raw notes> }
+ */
+function parseLegendNotesField(raw: string | null | undefined): { legendCode: string | null; userText: string | null } {
+  if (!raw) return { legendCode: null, userText: null }
+  if (raw.startsWith('LEGEND:')) {
+    const nlIdx = raw.indexOf('\n')
+    const legendCode = nlIdx >= 0 ? raw.slice(7, nlIdx) : raw.slice(7)
+    const userText   = nlIdx >= 0 ? raw.slice(nlIdx + 1).trim() : ''
+    return { legendCode: legendCode || null, userText: userText || null }
+  }
+  return { legendCode: null, userText: raw || null }
 }
 
 /** Legacy: one sortable id per PRN record row (`mar-prn-chart:<uuid>`). */
@@ -721,7 +790,8 @@ function DragHandleButton({ medId, readOnly, reorderLocked, onOpen }: {
   onOpen?: () => void
 }) {
   const dragContext = useDragHandle()
-  if (readOnly || reorderLocked) return null
+  // Never show for read-only users.
+  if (readOnly) return null
 
   const ReorderIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 dark:text-gray-500" viewBox="0 0 24 24" fill="currentColor">
@@ -736,6 +806,8 @@ function DragHandleButton({ medId, readOnly, reorderLocked, onOpen }: {
     </svg>
   )
 
+  // Modal trigger: always visible when onOpen is provided (works in any filter state since the
+  // modal shows all rows). reorderLocked only blocks the in-table drag-and-drop, not the modal.
   if (onOpen) {
     return (
       <button
@@ -750,7 +822,8 @@ function DragHandleButton({ medId, readOnly, reorderLocked, onOpen }: {
     )
   }
 
-  // Fallback: legacy in-table drag handle
+  // Fallback: legacy in-table drag handle — hide when reorder is locked (filtered view).
+  if (reorderLocked) return null
   if (!dragContext) return null
   const { listeners, attributes, setActivatorNodeRef, isDragging } = dragContext
   return (
@@ -775,7 +848,7 @@ const MAR_GRID_DAY_NUMBERS: readonly number[] = Array.from({ length: 31 }, (_, i
  * Wider columns so roughly **three** day columns are visible at once on a typical laptop viewport
  * (was 100px → ~8 days visible). Must match `MAR_COL.day` and scroll math: `(day - 1) * this value`.
  */
-const MAR_DAY_COL_WIDTH_PX = 100
+const MAR_DAY_COL_WIDTH_PX = 75
 
 export default function ViewMARForm() {
   const router = useRouter()
@@ -2060,6 +2133,61 @@ export default function ViewMARForm() {
     [missedMarDocumentation]
   )
 
+  /** Four at-a-glance stats shown above the missed-doc panel. Only time-sensitive counts (Given Today,
+   *  Due Next 4 Hrs, PRN Given Today) are computed when the viewed MAR is the current month; otherwise null. */
+  const marQuickStats = React.useMemo(() => {
+    const today = todayDayInViewedMar
+
+    // Given Today: ALL scheduled rows (meds + vitals) where today's admin is 'Given'.
+    // Uses raw `medications` so the count is never affected by the visible filter chips.
+    let givenToday = 0
+    if (today !== null) {
+      for (const med of medications) {
+        const admin = administrations[med.id]?.[today]
+        if (admin?.status === 'Given') givenToday++
+      }
+    }
+
+    // Due Next 4 Hrs: ALL scheduled rows (meds + vitals) whose hour falls within
+    // [now, now + 4 h] and haven't been given yet today.
+    // Uses raw `medications` so vitals are always included regardless of filter state.
+    let dueNext4Hrs = 0
+    if (today !== null) {
+      const now = new Date()
+      const nowMins = now.getHours() * 60 + now.getMinutes()
+      const limitMins = nowMins + 4 * 60
+      for (const med of medications) {
+        if (!med.hour) continue
+        const parts = med.hour.split(':')
+        const medMins = parseInt(parts[0] || '0', 10) * 60 + parseInt(parts[1] || '0', 10)
+        if (medMins >= nowMins && medMins <= limitMins) {
+          const admin = administrations[med.id]?.[today]
+          if (!admin || admin.status === 'Not Given') dueNext4Hrs++
+        }
+      }
+    }
+
+    // Missed This Month: already computed by missedMarDocumentation
+    const missedThisMonth = missedMarDocumentation.length
+
+    // PRN Given Today: PRN records whose date is today's ISO date
+    let prnGivenToday = 0
+    if (today !== null && marForm?.month_year) {
+      const parsed = parseMARMonthYear(marForm.month_year)
+      if (parsed) {
+        const todayIso = `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(today).padStart(2, '0')}`
+        prnGivenToday = prnRecords.filter((r) => !!r.date && String(r.date).slice(0, 10) === todayIso).length
+      }
+    }
+
+    return {
+      givenToday:    today !== null ? givenToday    : null,
+      dueNext4Hrs:   today !== null ? dueNext4Hrs   : null,
+      missedThisMonth,
+      prnGivenToday: today !== null ? prnGivenToday : null,
+    }
+  }, [todayDayInViewedMar, medications, administrations, missedMarDocumentation, prnRecords, marForm?.month_year])
+
   /** Horizontal scroll so day N aligns just after the fixed med / start-stop / hour columns (same math as initial load + missed-doc jumps). */
   const scrollMarTableToDayColumn = useCallback((day: number) => {
     const container = marTableScrollRef.current
@@ -2526,52 +2654,7 @@ export default function ViewMARForm() {
       const newMeds = await Promise.all(medicationsToInsert.map(m => rdsCreateMarMedication(m)))
       if (!newMeds || newMeds.length === 0) throw new Error('Failed to create medications')
 
-      // Populate initials for the START DATE of each medication
-      // If start date is Nov 1, populate column 1
-      // If start date is Nov 25, populate column 25
-      // This is dynamic based on the start date the nurse selects
-      
-      // Parse the start date string directly to avoid timezone issues
-      // Format: "YYYY-MM-DD" -> extract day number directly
-      const startDateParts = medData.startDate.split('-')
-      if (startDateParts.length === 3) {
-        const startYear = parseInt(startDateParts[0], 10)
-        const startMonth = parseInt(startDateParts[1], 10) - 1 // Month is 0-indexed in Date
-        const startDay = parseInt(startDateParts[2], 10) // Day of month (1-31)
-        
-        const formParsed = parseMARMonthYear(marForm.month_year)
-        const formYear = formParsed?.y
-        const formMonthIndex = formParsed != null ? formParsed.m - 1 : -1
-        
-        // Check if start date is in the same month/year as the form
-        if (formYear != null && formMonthIndex >= 0 && startYear === formYear && startMonth === formMonthIndex) {
-          // Validate that the day exists in this month (e.g., Feb doesn't have day 30)
-          try {
-            const testDate = new Date(formYear, formMonthIndex, startDay)
-            if (testDate.getDate() === startDay && testDate.getMonth() === formMonthIndex) {
-              // Create administration records for the start date for each medication
-              const adminRecords = newMeds.map(med => ({
-                mar_medication_id: med.id,
-                day_number: startDay, // Use the parsed day directly
-                status: 'Given',
-                initials: medData.initials,
-                administered_at: new Date().toISOString()
-              }))
-              
-              try {
-                await Promise.all(adminRecords.map((ar: any) => rdsUpsertAdministration(ar)))
-              } catch (adminErr) {
-                console.error('Error creating administration for start date:', adminErr)
-              }
-            }
-          } catch (e) {
-            console.error('Invalid date for medication start:', e)
-          }
-        }
-      }
-
       await loadMARForm()
-      const displayDay = startDateParts.length === 3 ? parseInt(startDateParts[2], 10) : 'N/A'
       const freqMessage = frequency > 1 ? ` (${frequency} times per day)` : ''
       setMessage(`Medication added successfully${freqMessage}!`)
       setTimeout(() => setMessage(''), 5000)
@@ -3574,11 +3657,26 @@ export default function ViewMARForm() {
                   </button>
                   {(
                     [
-                      { id: 'routine_meds' as const, label: 'Routine meds' },
-                      { id: 'vitals' as const, label: 'Vitals' },
-                      { id: 'prn' as const, label: 'PRN' },
+                      {
+                        id: 'routine_meds' as const,
+                        label: 'Routine meds',
+                        onClass: 'bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-900/40 dark:text-sky-300 dark:border-sky-800',
+                        offHover: 'hover:bg-sky-50 hover:text-sky-700 hover:border-sky-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-300',
+                      },
+                      {
+                        id: 'vitals' as const,
+                        label: 'Vitals',
+                        onClass: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-800',
+                        offHover: 'hover:bg-purple-50 hover:text-purple-700 hover:border-purple-200 dark:hover:bg-purple-900/20 dark:hover:text-purple-300',
+                      },
+                      {
+                        id: 'prn' as const,
+                        label: 'PRN',
+                        onClass: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800',
+                        offHover: 'hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-300',
+                      },
                     ] as const
-                  ).map(({ id, label }) => {
+                  ).map(({ id, label, onClass, offHover }) => {
                     const on = marTableCategoryVisible[id]
                     const vitalsBlocked = id === 'vitals' && hasActiveMedSearch
                     return (
@@ -3601,8 +3699,8 @@ export default function ViewMARForm() {
                           vitalsBlocked
                             ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-500 border-gray-200 dark:border-gray-600'
                             : on
-                              ? 'bg-lasso-teal text-white border-lasso-teal shadow-sm'
-                              : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
+                              ? `${onClass} shadow-sm`
+                              : `bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 ${offHover}`
                         }`}
                         aria-pressed={on}
                         aria-disabled={vitalsBlocked}
@@ -3610,7 +3708,7 @@ export default function ViewMARForm() {
                         {label}
                       </button>
                     )
-                  }                  )}
+                  })}
                   </div>
                   <div className="relative w-full max-w-md">
                     <label htmlFor="mar-med-search" className="sr-only">
@@ -3666,8 +3764,31 @@ export default function ViewMARForm() {
                 </div>
               </div>
 
+              {/* MAR Quick Stats */}
+              <div className="flex gap-3 mb-4">
+                {([
+                  { label: 'Given Today',       value: marQuickStats.givenToday,      color: 'text-green-600 dark:text-green-400' },
+                  { label: 'Due Next 4 Hrs',    value: marQuickStats.dueNext4Hrs,     color: 'text-lasso-blue' },
+                  { label: 'Missed This Month', value: marQuickStats.missedThisMonth, color: 'text-red-500 dark:text-red-400' },
+                  { label: 'PRN Given Today',   value: marQuickStats.prnGivenToday,   color: 'text-lasso-teal' },
+                ] as const).map(({ label, value, color }) => (
+                  <div
+                    key={label}
+                    className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3"
+                  >
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</div>
+                    <div className={`text-2xl font-bold ${color}`}>
+                      {value !== null ? value : '—'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* TODO: Re-enable missed-doc panel once dot-navigation UX is finalized.
+                   Currently hidden — the count is still surfaced in the "Missed This Month" stat card above.
+                   To restore: remove the `hidden` class (or this comment wrapper) from the outer div. */}
               {missedMarDocumentation.length > 0 && (
-                <div className="mb-4 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/35 px-4 pt-3 pb-3">
+                <div className="hidden mb-4 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/35 px-4 pt-3 pb-3">
                   <div className="text-sm font-semibold text-red-900 dark:text-red-100 mb-2">
                     Missed documentation ({missedMarDocumentation.length})
                   </div>
@@ -3712,22 +3833,23 @@ export default function ViewMARForm() {
                     </colgroup>
                     <thead>
                       <tr className="bg-gray-100 dark:bg-gray-700">
-                        <th className="pl-10 pr-3 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300 sticky left-0 z-[99999] bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700" style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}>
+                        <th className="pl-10 pr-3 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300 sticky left-0 z-[99999] bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700 border-r border-gray-200 dark:border-gray-700" style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}>
                           MEDICATION
                         </th>
-                        <th className="px-3 py-2 text-center text-xs font-bold text-gray-700 dark:text-gray-300 sticky z-[99998] bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700" style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop, maxWidth: MAR_COL.startStop, left: MAR_COL.med }}>
+                        <th className="px-3 py-2 text-center text-xs font-bold text-gray-700 dark:text-gray-300 sticky z-[99998] bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700 border-r border-gray-200 dark:border-gray-700" style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop, maxWidth: MAR_COL.startStop, left: MAR_COL.med }}>
                           START/STOP
                         </th>
-                        <th className="px-3 py-2 text-center text-xs font-bold text-gray-700 dark:text-gray-300 sticky z-[99997] bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700" style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth, left: MAR_COL.med + MAR_COL.startStop }}>
+                        <th className="px-3 py-2 text-center text-xs font-bold text-gray-700 dark:text-gray-300 sticky z-[99997] bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700 border-r border-gray-200 dark:border-gray-700" style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth, left: MAR_COL.med + MAR_COL.startStop }}>
                           HOUR
                         </th>
                         {days.map(day => (
                           <th
                             key={day}
-                            className={`px-1 py-2 text-center text-xs font-bold border-b border-gray-200 dark:border-gray-700 ${
+                            className={`px-1 py-2 text-center text-xs font-bold ${
                               day === todayDayInViewedMar
-                                ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100'
-                                : 'text-gray-700 dark:text-gray-300'
+                                // Today: thick amber top + side borders, rounded top, side drop-shadow
+                                ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100 border-t-2 border-l-2 border-r-2 border-amber-400 dark:border-amber-500 border-b border-gray-200 dark:border-gray-700 rounded-t-md relative z-[3] shadow-[3px_0_8px_rgba(0,0,0,0.08),-3px_0_8px_rgba(0,0,0,0.08)]'
+                                : 'text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700 border-r border-gray-200 dark:border-gray-700'
                             }`}
                             style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day }}
                           >
@@ -3787,6 +3909,12 @@ export default function ViewMARForm() {
                       </tr>
                     ) : (() => {
                       let globalRowIndex = 0
+                      // Total rendered rows (med + PRN) — used to detect the last row for the
+                      // "today" column bottom border + rounded-b treatment.
+                      const totalTableRowCount = marChartSegmentsForTable.reduce(
+                        (acc, seg) => acc + (seg.kind === 'prn' ? 1 : (seg.meds?.length ?? 0)),
+                        0
+                      )
                       return marChartSegmentsForTable.flatMap((seg, segIndex) => {
                         if (seg.kind === 'prn') {
                           const template = seg.template
@@ -3809,18 +3937,39 @@ export default function ViewMARForm() {
                             }
                             return null
                           }
+
+                          // Earliest valid day number in the viewed month for this PRN template.
+                          // Records and clickable cells before this day are suppressed.
+                          const parsedMarForPrnMonth = parseMARMonthYear(marForm?.month_year || '')
+                          const prnStartDayInMonth: number = (() => {
+                            if (!template.start_date || !parsedMarForPrnMonth) return 1
+                            const startIso = template.start_date.slice(0, 10)
+                            const parts = startIso.split('-')
+                            const sy = parseInt(parts[0] || '0', 10)
+                            const sm = parseInt(parts[1] || '0', 10)
+                            const sd = parseInt(parts[2] || '0', 10)
+                            if (isNaN(sy) || isNaN(sm) || isNaN(sd) || sd < 1) return 1
+                            // Start date is after this month — no days valid yet
+                            if (sy > parsedMarForPrnMonth.y || (sy === parsedMarForPrnMonth.y && sm > parsedMarForPrnMonth.m)) return 32
+                            // Start date is within this month — valid from that day forward
+                            if (sy === parsedMarForPrnMonth.y && sm === parsedMarForPrnMonth.m) return sd
+                            // Start date is before this month — all days valid
+                            return 1
+                          })()
+
                           const adminDaysInMonth = Array.from(
                             new Set(
                               seg.records
                                 .map((r) => getPrnAdminDayInMonth(r.date))
-                                .filter((d): d is number => d != null),
+                                // Exclude any record that falls before the template's start date
+                                .filter((d): d is number => d != null && d >= prnStartDayInMonth),
                             ),
                           ).sort((a, b) => a - b)
                           const prnChartStickyMed =
                             'sticky left-0 z-10'
                           const prnChartStickyStart =
                             'sticky z-10'
-                          const prnChartBg = 'bg-gray-100 dark:bg-gray-800'
+                          const prnChartBg = 'bg-emerald-50 dark:bg-emerald-900/10'
                           const startLabel = template.start_date
                             ? formatCalendarDate(template.start_date, 'en-US', {
                                 month: 'short',
@@ -3836,6 +3985,7 @@ export default function ViewMARForm() {
                           const showPrnDropAfter =
                             marReorderDropIndicator?.mode === 'after' &&
                             marReorderDropIndicator.prnGroupKey === seg.groupKey
+                          const isPrnLastTableRow = globalRowIndex === totalTableRowCount - 1
                           globalRowIndex += 1
                           return [
                             <Fragment key={`mar-prn-chart-wrap-${seg.groupKey}`}>
@@ -3852,7 +4002,7 @@ export default function ViewMARForm() {
                                 className={`${segIndex > 0 ? '' : ''}`}
                               >
                                 <td
-                                  className={`relative px-3 py-2 align-top ${prnChartStickyMed} ${prnChartBg}`}
+                                  className={`relative px-3 py-2 align-top ${prnChartStickyMed} ${prnChartBg} border-b border-gray-200 dark:border-gray-700 border-r border-gray-200 dark:border-gray-700`}
                                   style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}
                                 >
                                   <div className="flex gap-2">
@@ -3928,7 +4078,7 @@ export default function ViewMARForm() {
                                   )}
                                 </td>
                                 <td
-                                  className={`px-3 py-2 align-top text-center text-xs ${prnChartStickyStart} ${prnChartBg}`}
+                                  className={`px-3 py-2 align-top text-center text-xs ${prnChartStickyStart} ${prnChartBg} border-b border-gray-200 dark:border-gray-700 border-r border-gray-200 dark:border-gray-700`}
                                   style={{
                                     width: MAR_COL.startStop,
                                     minWidth: MAR_COL.startStop,
@@ -3939,7 +4089,7 @@ export default function ViewMARForm() {
                                   {startLabel}
                                 </td>
                                 <td
-                                  className={`px-3 py-2 align-top text-center text-xs ${prnChartStickyStart} ${prnChartBg}`}
+                                  className={`px-3 py-2 align-top text-center text-xs ${prnChartStickyStart} ${prnChartBg} border-b border-gray-200 dark:border-gray-700 border-r border-gray-200 dark:border-gray-700`}
                                   style={{
                                     width: hourColWidth,
                                     minWidth: hourColWidth,
@@ -3981,20 +4131,50 @@ export default function ViewMARForm() {
                                 {days.map((day) => {
                                   const dayCellHighlight =
                                     day === todayDayInViewedMar ? 'bg-amber-50/90 dark:bg-amber-900/25' : ''
-                                  const recsForDay = seg.records
-                                    .filter((r) => getPrnAdminDayInMonth(r.date) === day)
-                                    .sort((a, b) => {
-                                      const tA = prnHourToMinutes(a.hour)
-                                      const tB = prnHourToMinutes(b.hour)
-                                      if (tA !== tB) return tA - tB
-                                      return (a.created_at || '').localeCompare(b.created_at || '')
-                                    })
-                                  const canUseDayCell = isValidCalendarDayInMarMonth(day)
+                                  // Days before the PRN start date are inactive (same as invalid calendar days)
+                                  const isPrnDayBeforeStart = day < prnStartDayInMonth
+                                  const recsForDay = isPrnDayBeforeStart
+                                    ? []  // suppress records that are before the prescription start date
+                                    : seg.records
+                                        .filter((r) => getPrnAdminDayInMonth(r.date) === day)
+                                        .sort((a, b) => {
+                                          const tA = prnHourToMinutes(a.hour)
+                                          const tB = prnHourToMinutes(b.hour)
+                                          if (tA !== tB) return tA - tB
+                                          return (a.created_at || '').localeCompare(b.created_at || '')
+                                        })
+                                  // Pre-start days: white bg + no content (same rule as non-editable regular-med cells).
+                                  // Invalid calendar days (e.g. Feb 30): keep emerald tint but dim with opacity-40.
+                                  const isInvalidCalDay = !isValidCalendarDayInMarMonth(day)
+                                  // Future-date guard (same logic as the regular-med cells):
+                                  // nurses may only document today and past days.
+                                  const isFutureDayPrn = (() => {
+                                    if (todayDayInViewedMar !== null) return day > todayDayInViewedMar
+                                    if (!parsedMarForPrnMonth) return false
+                                    const now = new Date()
+                                    return parsedMarForPrnMonth.y > now.getFullYear() ||
+                                      (parsedMarForPrnMonth.y === now.getFullYear() &&
+                                       parsedMarForPrnMonth.m > now.getMonth() + 1)
+                                  })()
+                                  const canUseDayCell = !isInvalidCalDay && !isPrnDayBeforeStart && !isFutureDayPrn
+                                  const isTodayPrn = day === todayDayInViewedMar
                                   return (
                                     <td
                                       key={`prn-chart-${seg.groupKey}-d${day}`}
                                       style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day, height: MAR_COL.day }}
-                                      className={`text-center text-xs relative bg-[#eef8f1] dark:bg-[#14532d]/20 ${dayCellHighlight} ${!canUseDayCell ? 'opacity-40' : ''}`}
+                                      className={`text-center text-xs relative ${
+                                        isPrnDayBeforeStart || isFutureDayPrn
+                                          ? 'bg-white dark:bg-gray-900'
+                                          : `bg-[#eef8f1] dark:bg-[#14532d]/20 ${dayCellHighlight} ${isInvalidCalDay ? 'opacity-40' : ''}`
+                                      } ${
+                                        isTodayPrn
+                                          ? `border-l-2 border-l-amber-400 dark:border-l-amber-500 border-r-2 border-r-amber-400 dark:border-r-amber-500 z-[2] shadow-[3px_0_8px_rgba(0,0,0,0.07),-3px_0_8px_rgba(0,0,0,0.07)] ${
+                                              isPrnLastTableRow
+                                                ? 'border-b-2 border-b-amber-400 dark:border-b-amber-500 rounded-b-md'
+                                                : 'border-b border-amber-200 dark:border-amber-800/40'
+                                            }`
+                                          : 'border-b border-gray-200 dark:border-gray-700 border-r border-gray-200 dark:border-gray-700'
+                                      }`}
                                     >
                                       {canUseDayCell ? (
                                         <div
@@ -4042,7 +4222,7 @@ export default function ViewMARForm() {
                                                   <div className="flex items-center justify-center mt-0.5">
                                                     {uniqueUsers.slice(0, 3).map((iv, idx) => (
                                                       <div key={idx} className={idx > 0 ? '-ml-1' : ''} style={{ zIndex: uniqueUsers.length - idx }}>
-                                                        <MARCellAvatar value={iv} size="xs" />
+                                                        <MARCellAvatar value={iv} size="xs" userProfile={userProfile} facilityProfiles={facilityProfiles} />
                                                       </div>
                                                     ))}
                                                     {uniqueUsers.length > 3 && (
@@ -4085,6 +4265,7 @@ export default function ViewMARForm() {
                         const shouldMerge = group.rowSpan > 1
                         const isFirstRow = idxInSeg === 0
                         const isFirstTableRow = globalRowIndex === 0
+                        const isLastTableRow = globalRowIndex === totalTableRowCount - 1
                         globalRowIndex += 1
 
                         const marDropLineColSpan = 3 + days.length
@@ -4116,7 +4297,7 @@ export default function ViewMARForm() {
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
                                 data-medication-cell
-                                className={`px-3 py-2 align-top sticky left-0 relative overflow-visible z-10 bg-gray-100 dark:bg-gray-800`}
+                                className={`px-3 py-2 align-top sticky left-0 relative overflow-visible z-10 ${isVitalsEntry ? 'bg-purple-50 dark:bg-purple-900/10' : 'bg-sky-50 dark:bg-sky-900/10'} border-b border-gray-200 dark:border-gray-700 border-r border-gray-200 dark:border-gray-700`}
                                 style={{ width: MAR_COL.med, minWidth: MAR_COL.med, maxWidth: MAR_COL.med }}
                               >
                                 <div className="flex gap-2">
@@ -4234,7 +4415,7 @@ export default function ViewMARForm() {
                             {shouldMerge && !isFirstRow ? null : (
                               <td 
                                 rowSpan={shouldMerge ? group.rowSpan : undefined}
-                                className="px-3 py-2 align-top text-center text-xs sticky left-[200px] z-10 bg-gray-100 dark:bg-gray-800"
+                                className={`px-3 py-2 align-top text-center text-xs sticky left-[200px] z-10 ${isVitalsEntry ? 'bg-purple-50 dark:bg-purple-900/10' : 'bg-sky-50 dark:bg-sky-900/10'} border-b border-gray-200 dark:border-gray-700 border-r border-gray-200 dark:border-gray-700`}
                                 style={{ width: MAR_COL.startStop, minWidth: MAR_COL.startStop, maxWidth: MAR_COL.startStop }}
                               >
                               <div>Start: {formatCalendarDate(med.start_date, 'en-US', { month: 'short', day: 'numeric' })}</div>
@@ -4243,7 +4424,7 @@ export default function ViewMARForm() {
                               )}
                             </td>
                             )}
-                            <td className="px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 bg-gray-100 dark:bg-gray-800" style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth }}>
+                            <td className={`px-3 py-2 align-top text-center text-xs sticky left-[320px] z-10 ${isVitalsEntry ? 'bg-purple-50 dark:bg-purple-900/10' : 'bg-sky-50 dark:bg-sky-900/10'} border-b border-gray-200 dark:border-gray-700 border-r border-gray-200 dark:border-gray-700`} style={{ width: hourColWidth, minWidth: hourColWidth, maxWidth: hourColWidth }}>
                               <span className="text-gray-800 dark:text-white text-xs">{med.hour ? formatTimeDisplay(med.hour) : '—'}</span>
                             </td>
                             {days.map(day => {
@@ -4264,8 +4445,42 @@ export default function ViewMARForm() {
                               // avatarInitials: actual user's identity for the avatar circle.
                               // Old format stores a raw status code in initials → no avatar available.
                               // New format stores the user's initials in initials → show avatar.
+                              // For Vitals entries, two exclusion rules apply:
+                              //   1. Route accidentally stored as initials (e.g. 'VS1', 'oral').
+                              //   2. Vital READING stored as initials (e.g. '55', '120/80', '36.5') — starts with a digit.
+                              //      These are measurement values, not user identifiers, and must not render as an avatar.
                               const isRawStatusCode = ['DC', 'R', 'W', 'H'].includes(initialsForLogic)
-                              const avatarInitials = !isRawStatusCode && rawInitials ? rawInitials : null
+                              const vitalsRoute = isVitalsEntry ? (group.meds.find(m => m.route)?.route?.trim() || '') : ''
+                              const isRouteStoredAsInitials = isVitalsEntry && vitalsRoute &&
+                                rawInitials.trim().toLowerCase() === vitalsRoute.toLowerCase()
+                              const isVitalReading = isVitalsEntry && /^\d/.test(rawInitials.trim())
+                              // ── Custom-legend detection ───────────────────────────────────────────────
+                              // New format: notes starts with "LEGEND:{code}" — nurse's identity in initials.
+                              // Old format: the legend code itself was stored in initials (no avatar possible).
+                              const parsedLegendNotes = notes?.startsWith('LEGEND:') ? parseLegendNotesField(notes) : null
+                              const isOldFormatLegendCode = !parsedLegendNotes && isGiven &&
+                                !!rawInitials.trim() && customLegends.some(l => l.code === rawInitials.trim())
+                              const isCustomLegendCell = !!(parsedLegendNotes?.legendCode || isOldFormatLegendCode)
+                              const legendCodeDisplay: string | null = isCustomLegendCell
+                                ? (parsedLegendNotes?.legendCode ?? rawInitials.trim())
+                                : null
+                              // avatarInitials: exclude old-format legend codes (the code ≠ a person).
+                              const avatarInitials = !isRawStatusCode && rawInitials && !isRouteStoredAsInitials && !isVitalReading && !isOldFormatLegendCode ? rawInitials : null
+                              // vitalDisplayValue: the numeric/text reading to show inside the cell.
+                              // New format: parsed from notes ("VITAL:{value}\n…").
+                              // Old format: raw initials contained the reading (isVitalReading).
+                              const vitalDisplayValue: string | null = isVitalsEntry
+                                ? (notes?.startsWith('VITAL:')
+                                    ? parseVitalsNotesField(notes).vitalValue
+                                    : (isVitalReading ? rawInitials.trim() : null))
+                                : null
+                              // hasUserNotes: whether the cell has actual nurse-entered text notes.
+                              // Exclude prefixed storage formats (VITAL:, LEGEND:) from the red-dot check.
+                              const hasUserNotes: boolean = (() => {
+                                if (isVitalsEntry && notes?.startsWith('VITAL:')) return !!parseVitalsNotesField(notes).userText
+                                if (notes?.startsWith('LEGEND:')) return !!parseLegendNotesField(notes).userText
+                                return !!notes
+                              })()
                               const hasParameter = group.meds.some(m => !!m.parameter)
                               // SCG can only add/edit notes on their own entries.
                               // Uses same dual-match logic as the cell onClick guard.
@@ -4293,15 +4508,31 @@ export default function ViewMARForm() {
 
                               const missedDocThisCell =
                                 missedDocKeySet.has(`${med.id}|${day}`) && !isDiscontinued
-                              const cellBgClass = isDiscontinued
-                                ? 'bg-red-50 dark:bg-red-900/20'
-                                : missedDocThisCell
-                                  ? 'bg-red-100/90 dark:bg-red-950/35'
-                                  : day === todayDayInViewedMar
-                                    ? 'bg-amber-50 dark:bg-amber-900/20'
-                                    : !isMedActive
-                                      ? 'bg-gray-100 dark:bg-gray-800'
-                                      : ''
+                              // ── Future-date guard ─────────────────────────────────────────────────────
+                              // Clinical compliance: nurses may document today and past days only.
+                              // Future days are read-only (no click, no hover, white background).
+                              //
+                              // • Current-month view:  future when day > todayDayInViewedMar
+                              // • Future-month view:   every day is future
+                              // • Past-month view:     no day is future (corrections always allowed)
+                              const isFutureDay = (() => {
+                                if (todayDayInViewedMar !== null) {
+                                  return day > todayDayInViewedMar
+                                }
+                                if (!parsedMarMonthForRow) return false
+                                const now = new Date()
+                                return parsedMarMonthForRow.y > now.getFullYear() ||
+                                  (parsedMarMonthForRow.y === now.getFullYear() &&
+                                   parsedMarMonthForRow.m > now.getMonth() + 1)
+                              })()
+
+                              const cellBgClass = isDiscontinued || !isMedActive || isFutureDay
+                                ? 'bg-white dark:bg-gray-900'
+                                : day === todayDayInViewedMar
+                                  ? 'bg-amber-50 dark:bg-amber-900/20'
+                                  : isVitalsEntry
+                                    ? 'bg-[#ede8ff] dark:bg-purple-900/15'
+                                    : 'bg-[#daeeff] dark:bg-sky-900/15'
 
                               return (
                                 <td
@@ -4309,21 +4540,42 @@ export default function ViewMARForm() {
                                   data-mar-cell={`${med.id}|${day}`}
                                   style={{ width: MAR_COL.day, minWidth: MAR_COL.day, maxWidth: MAR_COL.day, height: MAR_COL.day }}
                                   className={`text-center text-xs relative ${cellBgClass} ${
-                                    isEditing && isMedActive && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
+                                    day === todayDayInViewedMar
+                                      // Today column: thick amber side borders, subtle side drop-shadow for the
+                                      // "slightly protruding" elevation effect.  Last row closes the box with
+                                      // a thick amber bottom border + rounded-b.
+                                      ? `border-l-2 border-l-amber-400 dark:border-l-amber-500 border-r-2 border-r-amber-400 dark:border-r-amber-500 z-[2] shadow-[3px_0_8px_rgba(0,0,0,0.07),-3px_0_8px_rgba(0,0,0,0.07)] ${
+                                          isLastTableRow
+                                            ? 'border-b-2 border-b-amber-400 dark:border-b-amber-500 rounded-b-md'
+                                            : 'border-b border-amber-200 dark:border-amber-800/40'
+                                        }`
+                                      : 'border-b border-gray-200 dark:border-gray-700 border-r border-gray-200 dark:border-gray-700'
+                                  } ${
+                                    isEditing && isMedActive && !isDiscontinued && !isFutureDay
+                                      ? `cursor-pointer ${
+                                          day === todayDayInViewedMar
+                                            ? 'hover:bg-amber-100 dark:hover:bg-amber-900/30'
+                                            : isVitalsEntry
+                                              ? 'hover:bg-purple-50 dark:hover:bg-purple-900/10'
+                                              : 'hover:bg-sky-50 dark:hover:bg-sky-900/10'
+                                        }`
+                                      : ''
                                   } ${isDiscontinued ? 'cursor-not-allowed' : ''}`}
-                                  onDoubleClick={isEditing && isMedActive && !isVitalsEntry && !isDiscontinued && !isSCG ? () => {
+                                  onDoubleClick={isEditing && isMedActive && !isVitalsEntry && !isDiscontinued && !isSCG && !isFutureDay ? () => {
                                     if (isGiven) {
                                       updateAdministration(med.id, day, 'Not Given', initials)
                                     }
                                   } : undefined}
                                   title={
-                                    isDiscontinued 
-                                      ? `Medication discontinued on day ${dcDay}. Cannot edit future days. Add a new medication to continue.`
-                                      : isEditing && isMedActive 
-                                        ? (isVitalsEntry ? 'Click to add vital signs' : 'Click to add initials, Double-click to mark as not given')
-                                        : !isMedActive 
-                                          ? (isVitalsEntry ? 'Vital signs entry' : 'Medication not active on this day')
-                                          : ''
+                                    isFutureDay
+                                      ? 'Future dates cannot be documented in advance.'
+                                      : isDiscontinued 
+                                        ? `Medication discontinued on day ${dcDay}. Cannot edit future days. Add a new medication to continue.`
+                                        : isEditing && isMedActive 
+                                          ? (isVitalsEntry ? 'Click to add vital signs' : 'Click to add initials, Double-click to mark as not given')
+                                          : !isMedActive 
+                                            ? (isVitalsEntry ? 'Vital signs entry' : 'Medication not active on this day')
+                                            : ''
                                   }
                                 >
                                   {/* Red strikethrough line for discontinued days */}
@@ -4341,7 +4593,7 @@ export default function ViewMARForm() {
                                         </div>
                                       ) : (
                                         <div
-                                            onClick={isEditing && !isDiscontinued ? () => {
+                                            onClick={isEditing && !isDiscontinued && !isFutureDay ? () => {
                                               // SCG cannot overwrite an existing entry recorded by a different user.
                                               // An entry is considered "own" if the raw stored value matches the user's
                                               // staff_initials exactly, OR the text version matches staff_initials_text.
@@ -4354,15 +4606,30 @@ export default function ViewMARForm() {
                                                 if (!isOwnExact && !isOwnText) return
                                               }
                                               setEditingCell({ medId: med.id, day })
-                                              // New-format entries store the user's initials in `initials`
-                                              // and the status type in `status` — restore button selection from status.
-                                              const selectionVal = isDC ? 'DC' : isRefused ? 'R' : isWithheld ? 'W'
-                                                : (initials || (isVitalsEntry ? (group.meds.find(m => m.route)?.route || '') : ''))
+                                              // Vitals new-format: vital reading lives in notes ("VITAL:{value}\n{user text}"),
+                                              // nurse's initials live in initials. Restore the correct pre-fill for both fields.
+                                              // Status-code entries (DC/R/W) and non-Vitals entries use the original logic.
+                                              let selectionVal: string
+                                              let noteVal: string
+                                              if (isVitalsEntry && notes?.startsWith('VITAL:')) {
+                                                // New-format Vitals: vital reading in notes, nurse in initials
+                                                const parsed = parseVitalsNotesField(notes)
+                                                selectionVal = parsed.vitalValue || ''
+                                                noteVal      = parsed.userText  || ''
+                                              } else if (notes?.startsWith('LEGEND:')) {
+                                                // New-format custom legend: code in notes, nurse in initials
+                                                const parsed = parseLegendNotesField(notes)
+                                                selectionVal = parsed.legendCode || ''
+                                                noteVal      = parsed.userText   || ''
+                                              } else {
+                                                selectionVal = isDC ? 'DC' : isRefused ? 'R' : isWithheld ? 'W' : (initials || '')
+                                                noteVal      = notes || ''
+                                              }
                                               setEditingCellValue(selectionVal)
-                                              setEditingCellNote(notes || '')
+                                              setEditingCellNote(noteVal)
                                             } : undefined}
                                           className={`absolute inset-0 flex flex-col items-center justify-center gap-1 ${
-                                              isEditing && !isDiscontinued ? 'cursor-pointer hover:bg-lasso-blue/10 dark:hover:bg-lasso-blue/20' : ''
+                                              isEditing && isMedActive && !isDiscontinued && !isFutureDay ? 'cursor-pointer' : ''
                                             }`}
                                           >
                                             {/* DC — red stop-sign octagon */}
@@ -4385,21 +4652,27 @@ export default function ViewMARForm() {
                                                 <rect x="14" y="4" width="4" height="16" rx="1.5" />
                                               </svg>
                                             )}
-                                            {/* Red dot: any cell (vitals or medication) that has notes */}
-                                            {notes && (
+                                            {/* Red dot: only when nurse-entered text notes exist (not just VITAL: prefix) */}
+                                            {hasUserNotes && (
                                               <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500 pointer-events-none" />
                                             )}
                                             {isGiven && !isDC && !isRefused && !isWithheld && (
                                               <div className="flex flex-col items-center gap-0.5">
-                                                <svg className="h-5 w-5 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                </svg>
-                                                {avatarInitials && <MARCellAvatar value={avatarInitials} size="xs" />}
+                                                {isCustomLegendCell ? (
+                                                  // Custom legend: show the code prominently (never a green checkmark)
+                                                  <span className="text-xs font-bold text-lasso-teal dark:text-lasso-teal leading-none">{legendCodeDisplay}</span>
+                                                ) : (
+                                                  // Standard "Given": green checkmark
+                                                  <svg className="h-5 w-5 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                  </svg>
+                                                )}
+                                                {avatarInitials && <MARCellAvatar value={avatarInitials} size="xs" userProfile={userProfile} facilityProfiles={facilityProfiles} />}
                                               </div>
                                             )}
                                             {(isDC || isRefused || isWithheld) && avatarInitials && (
                                               <div className="mt-0.5 flex items-center justify-center">
-                                                <MARCellAvatar value={avatarInitials} size="xs" />
+                                                <MARCellAvatar value={avatarInitials} size="xs" userProfile={userProfile} facilityProfiles={facilityProfiles} />
                                               </div>
                                             )}
                                             {isNotGiven && initials && !isDC && !isRefused && !isWithheld && (
@@ -4422,9 +4695,7 @@ export default function ViewMARForm() {
                                           </div>
                                       )}
                                     </>
-                                  ) : (
-                                    <span className="text-gray-400">—</span>
-                                  )}
+                                  ) : null}
                                 </td>
                               )
                             })}
@@ -4470,20 +4741,41 @@ export default function ViewMARForm() {
                 <div>
                   <strong className="font-bold uppercase">Legend:</strong>
                 </div>
-                <div className="mt-1 space-y-0.5">
+                <div className="mt-2 space-y-1.5">
                   {(() => {
                     const hasUserInitials = !!(userProfile?.staff_initials || userProfile?.staff_initials_text)
+                    const avatarVal = userProfile?.staff_initials_text?.trim() || userProfile?.staff_initials || ''
                     return (
                       <>
                         {hasUserInitials && (
-                          <div className="font-semibold flex items-center gap-1">
-                            <InitialsOrSignatureDisplay value={userProfile?.staff_initials ?? null} variant="initials" userProfile={userProfile} facilityProfiles={facilityProfiles} />
-                            <span>= {userProfile?.full_name || 'Your Initials'}</span>
+                          <div className="flex items-center gap-2">
+                            <MARCellAvatar value={avatarVal} size="sm" userProfile={userProfile} facilityProfiles={facilityProfiles} />
+                            <span className="font-medium">= {userProfile?.full_name || 'Your Initials'}</span>
                           </div>
                         )}
-                        <div>DC = Discontinued</div>
-                        <div>W = Withheld</div>
-                        <div>R = Refused</div>
+                        {/* DC */}
+                        <div className="flex items-center gap-2">
+                          <svg className="h-4 w-4 shrink-0 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8.6 2h6.8L21 8.6v6.8L15.4 21H8.6L3 15.4V8.6L8.6 2z" />
+                            <path stroke="white" strokeWidth="1.75" strokeLinecap="round" d="M9.5 9.5l5 5M14.5 9.5l-5 5" />
+                          </svg>
+                          <span>= Discontinued</span>
+                        </div>
+                        {/* Withheld */}
+                        <div className="flex items-center gap-2">
+                          <svg className="h-4 w-4 shrink-0 text-orange-500" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="6" y="4" width="4" height="16" rx="1.5" />
+                            <rect x="14" y="4" width="4" height="16" rx="1.5" />
+                          </svg>
+                          <span>= Withheld</span>
+                        </div>
+                        {/* Refused */}
+                        <div className="flex items-center gap-2">
+                          <svg className="h-4 w-4 shrink-0 text-red-500" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M10 4V12M10 4a2 2 0 00-4 0v8M10 4a2 2 0 014 0v4m0 0V6a2 2 0 014 0v6M14 8v4m0 0v-4m0 4v2m0 0a6 6 0 01-6 6H7a6 6 0 01-6-6v-2a2 2 0 014 0" />
+                          </svg>
+                          <span>= Refused</span>
+                        </div>
                         {customLegends.map(legend => (
                           <div key={legend.id} className="flex items-center justify-between group">
                             <span className="block relative text-gray-700 dark:text-gray-300">
@@ -6355,14 +6647,39 @@ export default function ViewMARForm() {
           // __GIVEN__ is the sentinel used when the nurse has no staff_initials configured yet
           const resolvedValue = value === '__GIVEN__' ? (autoInitials || 'G') : value
           const entryStatus = statusCodes[resolvedValue] ?? 'Given'
-          const entryInitials = statusCodes[resolvedValue]
-            // For DC/R/W: use the nurse's initials; never fall back to the status code itself
-            // (the status code disables the avatar since it looks like old-format data).
-            // Use '?' when the profile has no initials configured — it still renders an avatar circle.
-            ? (autoInitials || '?')
-            : resolvedValue
+
+          let entryInitials: string
+          let entryNoteToSave: string | null
+
+          if (editingIsVitals && !statusCodes[resolvedValue]) {
+            // ── Vitals dual-field format ──────────────────────────────────────────────
+            // initials → nurse's identity so the avatar can render correctly.
+            // notes    → "VITAL:{reading}\n{user notes}" so the reading is preserved
+            //            and is parsed back when the cell is clicked to re-open the modal.
+            // Use '?' when no staff_initials are configured — avatar circle still renders.
+            entryInitials   = autoInitials || '?'
+            const userNotePart = editingCellNote.trim()
+            entryNoteToSave = `VITAL:${resolvedValue}${userNotePart ? '\n' + userNotePart : ''}`
+          } else if (!statusCodes[resolvedValue] && customLegends.some(l => l.code === resolvedValue)) {
+            // ── Custom legend dual-field format ───────────────────────────────────────
+            // initials → nurse's identity (for the avatar in the cell).
+            // notes    → "LEGEND:{code}\n{user notes}" so the code can be displayed
+            //            in the cell and restored when the nurse re-opens the modal.
+            entryInitials   = autoInitials || '?'
+            const userNotePart = editingCellNote.trim()
+            entryNoteToSave = `LEGEND:${resolvedValue}${userNotePart ? '\n' + userNotePart : ''}`
+          } else {
+            entryInitials = statusCodes[resolvedValue]
+              // For DC/R/W: use the nurse's initials; never fall back to the status code itself
+              // (the status code disables the avatar since it looks like old-format data).
+              // Use '?' when the profile has no initials configured — it still renders an avatar circle.
+              ? (autoInitials || '?')
+              : resolvedValue
+            entryNoteToSave = editingCellNote.trim() || null
+          }
+
           await updateAdministration(editingCell.medId, editingCell.day, entryStatus, entryInitials)
-          await updateAdministrationNote(editingCell.medId, editingCell.day, editingCellNote.trim() || null, entryInitials, entryStatus)
+          await updateAdministrationNote(editingCell.medId, editingCell.day, entryNoteToSave, entryInitials, entryStatus)
           closeModal()
         }
 
@@ -7775,6 +8092,9 @@ function AddPRNMedicationForm({
 }
 
 // Add PRN Record Form Component
+// Flow: (1) select medication from PRN list → (2) date + auto-filled fields appear.
+// The date picker's min is clamped to the later of the MAR month start and the selected
+// medication's start_date so the nurse can't log a record before the prescription was written.
 function AddPRNRecordForm({ 
   onSubmit, 
   onCancel,
@@ -7801,15 +8121,40 @@ function AddPRNRecordForm({
   prnMedicationList: MARPRNMedication[]
   initialPrnMedicationId?: string | null
 }) {
-  const [formData, setFormData] = useState({
-    date: defaultDate,
-    medication: '',
-    dosage: '',
-    reason: '',
-    prnMedicationId: '',
-    startDate: ''
+  // Lazy initializer — runs once on mount. When the modal was opened via "Add record" link,
+  // initialPrnMedicationId is already set, so we pre-fill everything on the very first render
+  // (no useEffect flash / jump from empty → filled form).
+  const [formData, setFormData] = useState(() => {
+    const base = { date: defaultDate, medication: '', dosage: '', reason: '', prnMedicationId: '', startDate: '' }
+    if (!initialPrnMedicationId) return base
+    const selected = prnMedicationList.find((m) => m.id === initialPrnMedicationId)
+    if (!selected) return base
+    const medStart = ymdFromDateInput(selected.start_date) || ''
+    const newMin = (dateMin && medStart)
+      ? (dateMin >= medStart ? dateMin : medStart)
+      : (dateMin || medStart)
+    const clampedDate = newMin && defaultDate < newMin ? newMin : defaultDate
+    return {
+      date: clampedDate,
+      medication: selected.medication,
+      dosage: selected.dosage || '',
+      reason: selected.reason,
+      prnMedicationId: initialPrnMedicationId,
+      startDate: medStart,
+    }
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Effective date minimum: whichever is later — MAR month start OR selected medication's start_date.
+  // Both values are YYYY-MM-DD strings so lexicographic comparison is correct.
+  const effectiveDateMin: string | undefined = (() => {
+    const marMin = dateMin ?? ''
+    const medStart = formData.startDate ?? ''
+    if (!marMin && !medStart) return undefined
+    if (!marMin) return medStart || undefined
+    if (!medStart) return marMin || undefined
+    return marMin >= medStart ? marMin : medStart
+  })()
 
   const handleSelectPRNMedication = (id: string) => {
     const selected = prnMedicationList.find((m) => m.id === id)
@@ -7817,34 +8162,36 @@ function AddPRNRecordForm({
       setFormData(prev => ({ ...prev, prnMedicationId: '', medication: '', dosage: '', reason: '', startDate: '' }))
       return
     }
+    const medStart = ymdFromDateInput(selected.start_date) || ''
+    // Effective min after this selection
+    const newMin = (dateMin && medStart)
+      ? (dateMin >= medStart ? dateMin : medStart)
+      : (dateMin || medStart)
+    // Clamp the current date up to the new minimum so the field is never invalid on open
+    const clampedDate = newMin && formData.date < newMin ? newMin : formData.date
     setFormData(prev => ({
       ...prev,
       prnMedicationId: id,
       medication: selected.medication,
       dosage: selected.dosage || '',
       reason: selected.reason,
-      startDate: ymdFromDateInput(selected.start_date),
+      startDate: medStart,
+      date: clampedDate,
     }))
   }
 
-  useEffect(() => {
-    if (initialPrnMedicationId) {
-      handleSelectPRNMedication(initialPrnMedicationId)
-    }
-  }, [initialPrnMedicationId, prnMedicationList])
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.date || !formData.medication || !formData.reason) {
-      alert('Please select a PRN from the list')
-      return
-    }
     if (!formData.prnMedicationId) {
-      alert('Please select a PRN from the list')
+      alert('Please select a PRN from the list first.')
       return
     }
-    if (dateMin && formData.date < dateMin) {
-      alert('PRN date must fall within this MAR month.')
+    if (!formData.date) {
+      alert('Please enter a date.')
+      return
+    }
+    if (effectiveDateMin && formData.date < effectiveDateMin) {
+      alert(`Date cannot be before the medication's start date (${effectiveDateMin}).`)
       return
     }
     if (dateMax && formData.date > dateMax) {
@@ -7862,7 +8209,7 @@ function AddPRNRecordForm({
         reason: formData.reason,
         result: null,
         initials: null,
-        startDate: ymdFromDateInput(formData.startDate) || null
+        startDate: ymdFromDateInput(formData.startDate) || null,
       })
       setFormData({
         date: defaultDate,
@@ -7870,7 +8217,7 @@ function AddPRNRecordForm({
         dosage: '',
         reason: '',
         prnMedicationId: '',
-        startDate: ''
+        startDate: '',
       })
     } catch (err) {
       console.error('Error submitting PRN record:', err)
@@ -7879,26 +8226,15 @@ function AddPRNRecordForm({
     }
   }
 
+  const medicationSelected = !!formData.prnMedicationId
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Date *
-        </label>
-        <input
-          type="date"
-          value={formData.date}
-          min={dateMin}
-          max={dateMax}
-          onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-          required
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-        />
-      </div>
 
+      {/* Step 1 — always visible: choose the medication first */}
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          PRN List
+          PRN List <span className="text-red-500">*</span>
         </label>
         <select
           value={formData.prnMedicationId}
@@ -7914,44 +8250,64 @@ function AddPRNRecordForm({
         </select>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Medication Name
-        </label>
-        <input
-          type="text"
-          value={formData.medication}
-          readOnly
-          placeholder="Select a PRN item above"
-          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400"
-        />
-      </div>
+      {/* Steps 2-5 — revealed after medication is selected */}
+      {medicationSelected && (
+        <>
+          {/* Date — min is clamped to medication's start_date */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Date <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={formData.date}
+              min={effectiveDateMin}
+              max={dateMax}
+              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+          </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Dosage
-        </label>
-        <input
-          type="text"
-          value={formData.dosage}
-          readOnly
-          placeholder="Auto-filled from PRN list"
-          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400"
-        />
-      </div>
+          {/* Auto-filled fields */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Medication Name
+            </label>
+            <input
+              type="text"
+              value={formData.medication}
+              readOnly
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300"
+            />
+          </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Reason/Indication
-        </label>
-        <input
-          type="text"
-          value={formData.reason}
-          readOnly
-          placeholder="Auto-filled from PRN list"
-          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400"
-        />
-      </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Dosage
+            </label>
+            <input
+              type="text"
+              value={formData.dosage}
+              readOnly
+              placeholder="—"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Reason / Indication
+            </label>
+            <input
+              type="text"
+              value={formData.reason}
+              readOnly
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300"
+            />
+          </div>
+        </>
+      )}
 
       <div className="flex justify-end space-x-3 pt-4">
         <button
@@ -7963,7 +8319,7 @@ function AddPRNRecordForm({
         </button>
         <button
           type="submit"
-          disabled={isSubmitting || !formData.prnMedicationId}
+          disabled={isSubmitting || !medicationSelected}
           className="px-4 py-2 bg-lasso-navy text-white rounded-md hover:bg-lasso-teal focus:outline-none focus:ring-2 focus:ring-lasso-teal disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? 'Adding...' : 'Add PRN Record'}
