@@ -2736,7 +2736,7 @@ export default function ViewMARForm() {
         setMedications((prev) => prev.filter((m) => !idsToDelete.has(m.id)))
         setAdministrations((prev) => {
           const next = { ...prev }
-          for (const id of idsToDelete) delete next[id]
+          Array.from(idsToDelete).forEach((id) => { delete next[id] })
           return next
         })
       }
