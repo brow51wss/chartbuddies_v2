@@ -991,6 +991,8 @@ export default function ViewMARForm() {
   const [showAddPRNModal, setShowAddPRNModal] = useState(false)
   const [showAddPRNRecordModal, setShowAddPRNRecordModal] = useState(false)
   const [selectedPRNRecordMedicationId, setSelectedPRNRecordMedicationId] = useState<string | null>(null)
+  /** Two-step PRN log modal used exclusively in the Day View ("Today's Med Pass"). */
+  const [showDayViewPRNModal, setShowDayViewPRNModal] = useState(false)
   const showPrnRecordsSection = false // temporary: hide PRN Records section on MAR
   const [showManagePRNListModal, setShowManagePRNListModal] = useState(false)
   const [prnListDeleteTarget, setPrnListDeleteTarget] = useState<MARPRNMedication | null>(null)
@@ -1014,6 +1016,8 @@ export default function ViewMARForm() {
   // Separate state for the inline accordion edit form (independent of the top add form)
   const [prnDayCellEditForm, setPrnDayCellEditForm] = useState({ hour: '', initials: '', result: '', note: '' })
   const [showMissedDocAlerts, setShowMissedDocAlerts] = useState(true)
+  /** 'daily' = Today's Med Pass; 'monthly' = Monthly Grid (Audit View). */
+  const [marViewMode, setMarViewMode] = useState<'monthly' | 'daily'>('monthly')
   const [dotTooltip, setDotTooltip] = useState<{ x: number; y: number; label: string } | null>(null)
   /** Recompute missed-documentation when the scheduled “past due” window changes (e.g. crossing a row’s hour). */
   const [missedDocClock, setMissedDocClock] = useState(0)
@@ -1412,8 +1416,11 @@ export default function ViewMARForm() {
 
   // Scroll MAR table so "today" (for current MAR month) is first visible day after Hour.
   // For non-current MAR months, fall back to last filled day (or day 1).
+  // marViewMode is in the dep array: switching Daily → Monthly remounts the scroll containers,
+  // so we must re-apply the scroll position to the fresh DOM nodes.
   useEffect(() => {
     if (loading || !marForm) return
+    if (marViewMode !== 'monthly') return   // scroll containers only exist in monthly view
     let lastFilledDay = 0
     for (const medId of Object.keys(administrations)) {
       for (const dayStr of Object.keys(administrations[medId] || {})) {
@@ -1437,9 +1444,11 @@ export default function ViewMARForm() {
       applyScroll()
       if (!marTableScrollRef.current || !marHeaderScrollRef.current) setTimeout(applyScroll, 50)
     })
-  }, [loading, marForm, readOnly])
+  }, [loading, marForm, readOnly, marViewMode])
 
-  // Sync horizontal scroll between sticky header and body so they stay aligned (header outside overflow so sticky works)
+  // Sync horizontal scroll between sticky header and body so they stay aligned (header outside overflow so sticky works).
+  // marViewMode is in the dep array so the listeners re-attach whenever the monthly table is unmounted/remounted
+  // (switching Daily ↔ Monthly replaces the DOM nodes that the refs point to).
   useEffect(() => {
     const body = marTableScrollRef.current
     const header = marHeaderScrollRef.current
@@ -1463,7 +1472,7 @@ export default function ViewMARForm() {
       body.removeEventListener('scroll', syncHeader)
       header.removeEventListener('scroll', syncBody)
     }
-  }, [loading])
+  }, [loading, marViewMode])
 
   const saveCustomLegend = async (code: string, description: string, id: string | null = null) => {
     if (!userProfile?.id) return
@@ -1613,20 +1622,32 @@ export default function ViewMARForm() {
       }
 
       if (savedAdmin?.notes?.trim() && marForm?.patient_id && marForm?.month_year) {
-        const legendLabel = getMARLegendProgressNoteLabel(savedAdmin.initials)
-        if (legendLabel) {
+        // Resolve legendLabel: with dual-field storage the legend code lives in notes as "LEGEND:XX\n…"
+        // rather than in initials, so we must parse it out before syncing to Progress Notes.
+        let submitLegendLabel = getMARLegendProgressNoteLabel(savedAdmin.initials)
+        let submitNoteForSync: string | null = savedAdmin.notes
+        if (!submitLegendLabel && savedAdmin.notes.startsWith('LEGEND:')) {
+          const parsedLeg = parseLegendNotesField(savedAdmin.notes)
+          if (parsedLeg.legendCode) {
+            submitLegendLabel = getMARLegendProgressNoteLabel(parsedLeg.legendCode) || parsedLeg.legendCode
+          }
+          submitNoteForSync = parsedLeg.userText || null
+        }
+        if (submitLegendLabel && submitNoteForSync?.trim()) {
           const med = medications.find((m) => m.id === medId)
-          const timeLabel = med?.hour ? formatTimeDisplay(med.hour) : undefined
           const isVitalsMed = med?.medication_name === 'VITALS' || med?.notes === 'Vital Signs Entry'
-          await syncMARNoteToProgressNotes(
-            marForm.patient_id,
-            marForm.month_year,
-            day,
-            savedAdmin.notes,
-            timeLabel,
-            legendLabel,
-            (!isVitalsMed && med?.medication_name) || undefined
-          )
+          if (!isVitalsMed) {
+            const timeLabel = med?.hour ? formatTimeDisplay(med.hour) : undefined
+            await syncMARNoteToProgressNotes(
+              marForm.patient_id,
+              marForm.month_year,
+              day,
+              submitNoteForSync,
+              timeLabel,
+              submitLegendLabel,
+              med?.medication_name || undefined
+            )
+          }
         }
       }
 
@@ -1690,12 +1711,30 @@ export default function ViewMARForm() {
       setSaving(true)
       const nextEntryNumber = prnRecords.length + 1
 
+      // Auto-fill initials from the logged-in user profile when the caller didn't provide them.
+      // This is required for Progress Notes sync (shouldSyncMarPrnRecordToProgressNotes checks initials).
+      // Mirrors the same derivation used elsewhere in this file (staff_initials only when plain text,
+      // fall back to 2-letter abbreviation from full_name). Always capped at 10 chars (varchar(10)).
+      const autoInitials = (() => {
+        if (record.initials?.trim()) return record.initials.trim().slice(0, 10)
+        const si = userProfile?.staff_initials
+        if (si && typeof si === 'string' && !si.startsWith('data:image') && !si.startsWith('s3:') && si.trim().length > 0) {
+          return si.trim().toUpperCase().slice(0, 10)
+        }
+        if (userProfile?.full_name) {
+          const names = userProfile.full_name.trim().split(/\s+/)
+          if (names.length >= 2) return (names[0][0] + names[names.length - 1][0]).toUpperCase()
+          if (names.length === 1 && names[0].length > 0) return names[0][0].toUpperCase()
+        }
+        return null
+      })()
+
       const inserted = await rdsCreatePrnRecord({
         mar_form_id: marFormId,
         start_date: normalizedStartDate || null,
         date: normalizedDate,
         hour: record.hour,
-        initials: record.initials,
+        initials: autoInitials,
         medication: record.medication,
         dosage: record.dosage?.trim() || null,
         reason: record.reason,
@@ -2387,10 +2426,25 @@ export default function ViewMARForm() {
       if (marForm?.patient_id && marForm?.month_year) {
         const med = medications.find((m) => m.id === medId)
         const timeLabel = med?.hour ? formatTimeDisplay(med.hour) : undefined
-        const legendLabel = getMARLegendProgressNoteLabel(initialsToUse)
         const isVitalsMed = med?.medication_name === 'VITALS' || med?.notes === 'Vital Signs Entry'
 
-        if (!note?.trim()) {
+        // Vitals entries are never synced to Progress Notes — skip the entire block.
+        if (!isVitalsMed) {
+
+        // Resolve legendLabel and the note text to sync.  With the dual-field approach the nurse's
+        // initials are stored in `initials` and the legend code is embedded in `notes` as "LEGEND:XX\n…".
+        // We must parse that prefix here so Progress Notes receives a human-readable label, not raw markup.
+        let legendLabel = getMARLegendProgressNoteLabel(initialsToUse)
+        let noteForSync = note
+        if (!legendLabel && note?.startsWith('LEGEND:')) {
+          const parsedLegend = parseLegendNotesField(note)
+          if (parsedLegend.legendCode) {
+            legendLabel = getMARLegendProgressNoteLabel(parsedLegend.legendCode) || parsedLegend.legendCode
+          }
+          noteForSync = parsedLegend.userText || null
+        }
+
+        if (!noteForSync?.trim()) {
           // Note was cleared — directly scrub any MAR line for this time from progress notes
           try {
             const parsed = parseMARMonthYear(marForm.month_year)
@@ -2420,8 +2474,10 @@ export default function ViewMARForm() {
             console.error('Progress note cleanup on note clear failed:', cleanErr)
           }
         } else {
-          await syncMARNoteToProgressNotes(marForm.patient_id, marForm.month_year, day, note, timeLabel, legendLabel, (!isVitalsMed && med?.medication_name) || undefined)
+          await syncMARNoteToProgressNotes(marForm.patient_id, marForm.month_year, day, noteForSync, timeLabel, legendLabel, med?.medication_name || undefined)
         }
+
+        } // end !isVitalsMed guard
       }
 
       await loadMARForm()
@@ -3633,15 +3689,47 @@ export default function ViewMARForm() {
                     <p className="text-lg font-medium text-gray-800 dark:text-white">
                       Facility Name: {facilityNameFromProfile ?? marForm.facility_name ?? 'N/A'}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">From your profile (assigned facility)</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">From your profile (assigned facility)</p>
+                </div>
+              </div>
+
+              {/* View Mode Toggle — only visible when viewing the current month */}
+              {todayDayInViewedMar !== null && (
+                <div className="mt-4">
+                  <div className="inline-flex items-center gap-0.5 p-1 bg-gray-100 dark:bg-gray-700 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setMarViewMode('daily')}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        marViewMode === 'daily'
+                          ? 'bg-lasso-navy text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'
+                      }`}
+                    >
+                      Today&apos;s Med Pass
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMarViewMode('monthly')}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        marViewMode === 'monthly'
+                          ? 'bg-lasso-navy text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'
+                      }`}
+                    >
+                      Monthly Grid (Audit View)
+                    </button>
                   </div>
                 </div>
-                <div className="mt-4 flex flex-col gap-3">
-                  <div
-                    className="flex flex-wrap items-center gap-2"
-                    role="group"
-                    aria-label="Filter MAR table rows"
-                  >
+              )}
+
+              {marViewMode === 'monthly' && (
+              <div className="mt-4 flex flex-col gap-3">
+                <div
+                  className="flex flex-wrap items-center gap-2"
+                  role="group"
+                  aria-label="Filter MAR table rows"
+                >
                   <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mr-1">Show</span>
                   <button
                     type="button"
@@ -3762,7 +3850,10 @@ export default function ViewMARForm() {
                   </button>
                   */}
                 </div>
+              )}
               </div>
+
+              {marViewMode === 'monthly' && (<>
 
               {/* MAR Quick Stats */}
               <div className="flex gap-3 mb-4">
@@ -3774,7 +3865,7 @@ export default function ViewMARForm() {
                 ] as const).map(({ label, value, color }) => (
                   <div
                     key={label}
-                    className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3"
+                    className="flex-1 bg-white dark:bg-gray-800 rounded-xl px-4 py-3"
                   >
                     <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</div>
                     <div className={`text-2xl font-bold ${color}`}>
@@ -4729,6 +4820,389 @@ export default function ViewMARForm() {
                 </table>
                 </div>
               </div>
+              </>)}
+
+              {/* ─── Today's Med Pass — Day View ───────────────────────────────────────
+                  Only rendered when marViewMode === 'daily' and we're viewing the current month.
+                  Time periods (Morning / Afternoon / Evening / Overnight) are derived from each
+                  medication's scheduled `hour`. PRN section shows today's administered records.
+                  ──────────────────────────────────────────────────────────────────────────── */}
+              {marViewMode === 'daily' && todayDayInViewedMar !== null && (() => {
+                const _today = todayDayInViewedMar!
+                const _now   = new Date()
+                const _nowMins = _now.getHours() * 60 + _now.getMinutes()
+                const _parsed  = parseMARMonthYear(marForm.month_year)
+
+                /** Resolve text initials from the current user's profile (never returns an image URL). */
+                const _autoInit = (() => {
+                  const sit = userProfile?.staff_initials_text?.trim()
+                  if (sit) return sit
+                  const si = userProfile?.staff_initials
+                  if (si && !si.startsWith('s3:') && !si.startsWith('data:')) return si.trim()
+                  return '?'
+                })()
+
+                const _resolveInitials = (initials: string | null | undefined): string => {
+                  if (!initials) return ''
+                  if (initials.startsWith('s3:') || initials.startsWith('data:')) return _autoInit
+                  return initials.trim()
+                }
+
+                const _isVitalsRow = (m: MARMedication) =>
+                  m.medication_name === 'VITALS' || m.notes === 'Vital Signs Entry'
+
+                const _scheduledMins = (hour: string | null | undefined): number => {
+                  if (!hour || !hour.trim()) return -1
+                  const parts = hour.split(':')
+                  return parseInt(parts[0] || '0', 10) * 60 + parseInt(parts[1] || '0', 10)
+                }
+
+                /** Medications active on today's day number in the viewed month. */
+                const _todayMeds: MARMedication[] = _parsed
+                  ? medications.filter(m =>
+                      isMarRowActiveOnDayColumn(m, _today, _parsed.y, _parsed.m)
+                    )
+                  : []
+
+                /** PRN records administered today. */
+                const _todayPrns = _parsed
+                  ? prnRecords.filter(r => {
+                      if (!r.date) return false
+                      const iso = String(r.date).slice(0, 10)
+                      const exp = `${_parsed.y}-${String(_parsed.m).padStart(2, '0')}-${String(_today).padStart(2, '0')}`
+                      return iso === exp
+                    })
+                  : []
+
+                /** Open the standard MAR cell-editing modal (reused for Hold, Vitals record, etc.). */
+                const _handleOpenModal = (med: MARMedication, prefill = '') => {
+                  if (readOnly) return
+                  setEditingCell({ medId: med.id, day: _today })
+                  setEditingCellValue(prefill)
+                  setEditingCellNote('')
+                }
+
+                /** Immediately mark a medication as Given with the current user's initials. */
+                const _handleGive = async (med: MARMedication) => {
+                  if (readOnly) return
+                  await updateAdministration(med.id, _today, 'Given', _autoInit)
+                  await updateAdministrationNote(med.id, _today, null, _autoInit, 'Given')
+                }
+
+                /** Open the existing cell-editing modal pre-filled with the current entry's values.
+                 *  Mirrors the pre-fill logic used by the monthly-grid cell click handler. */
+                const _handleEdit = (med: MARMedication, adm: typeof administrations[string][number] | null) => {
+                  if (readOnly) return
+                  const isVitals = _isVitalsRow(med)
+                  const notes    = adm?.notes
+                  const initials = adm?.initials || ''
+                  const status   = adm?.status || 'Not Given'
+
+                  let selVal: string
+                  let noteVal: string
+
+                  if (isVitals && notes?.startsWith('VITAL:')) {
+                    const parsed = parseVitalsNotesField(notes)
+                    selVal  = parsed.vitalValue || ''
+                    noteVal = parsed.userText   || ''
+                  } else if (notes?.startsWith('LEGEND:')) {
+                    const parsed = parseLegendNotesField(notes)
+                    selVal  = parsed.legendCode || ''
+                    noteVal = parsed.userText   || ''
+                  } else {
+                    selVal  = status === 'DC' ? 'DC' : status === 'Refused' ? 'R' : status === 'Withheld' ? 'W' : initials
+                    noteVal = notes || ''
+                  }
+
+                  setEditingCell({ medId: med.id, day: _today })
+                  setEditingCellValue(selVal)
+                  setEditingCellNote(noteVal)
+                }
+
+                type _Period = { id: string; label: string; range: string }
+                const _PERIODS: _Period[] = [
+                  { id: 'morning',   label: 'Morning',          range: '6:00 – 11:00 AM' },
+                  { id: 'afternoon', label: 'Afternoon',         range: '12:00 – 5:00 PM' },
+                  { id: 'evening',   label: 'Evening',           range: '6:00 – 10:00 PM' },
+                  { id: 'other',     label: 'Overnight / Other', range: '' },
+                ]
+
+                const _getPeriodId = (hour: string | null | undefined): string => {
+                  if (!hour || !hour.trim()) return 'other'
+                  const h = parseInt(hour.split(':')[0] || '0', 10)
+                  if (h >= 6  && h <= 11) return 'morning'
+                  if (h >= 12 && h <= 17) return 'afternoon'
+                  if (h >= 18 && h <= 22) return 'evening'
+                  return 'other'
+                }
+
+                const _renderMedRow = (med: MARMedication) => {
+                  const admin      = administrations[med.id]?.[_today] || null
+                  const status     = admin?.status || 'Not Given'
+                  const isGiven    = status === 'Given'
+                  const isWithheld = status === 'Withheld'
+                  const isRefused  = status === 'Refused'
+                  const isDC       = status === 'DC'
+                  const isVitals   = _isVitalsRow(med)
+                  const sched      = _scheduledMins(med.hour)
+                  const hasHour    = sched >= 0
+                  const isPast     = hasHour && sched <= _nowMins
+                  const isMissed   = hasHour && !isGiven && !isWithheld && !isRefused && !isDC && isPast
+                  const isDue      = !isGiven && !isWithheld && !isRefused && !isDC && !isPast
+                  const initials   = _resolveInitials(admin?.initials)
+
+                  // ── Structured data from admin notes ──────────────────────────
+                  const _rawNotes = admin?.notes || null
+                  /** Vital reading (e.g. "120/80", "72") parsed from VITAL: prefix. */
+                  const _vitalValue: string | null = isVitals && _rawNotes?.startsWith('VITAL:')
+                    ? parseVitalsNotesField(_rawNotes).vitalValue
+                    : null
+                  /** Custom legend code (e.g. "T") parsed from LEGEND: prefix. */
+                  const _legendCode: string | null = _rawNotes?.startsWith('LEGEND:')
+                    ? parseLegendNotesField(_rawNotes).legendCode
+                    : null
+                  /** Free-text notes the nurse typed (stripped of VITAL: / LEGEND: prefix). */
+                  const _userNotes: string | null = (() => {
+                    if (!_rawNotes) return null
+                    if (isVitals && _rawNotes.startsWith('VITAL:')) return parseVitalsNotesField(_rawNotes).userText
+                    if (_rawNotes.startsWith('LEGEND:'))            return parseLegendNotesField(_rawNotes).userText
+                    return _rawNotes
+                  })()
+                  /** Text initials suitable for the avatar — excludes image URLs and placeholder '?'. */
+                  const _avatarVal = (initials && initials !== '?') ? initials : null
+
+                  /** Chip label + color class matching the MAR table first-column chips. */
+                  const _chipLabel = isVitals ? 'VITALS' : 'MED'
+                  const _chipClass  = isVitals
+                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300'
+                    : 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300'
+
+                  const displayName = isVitals
+                    ? (med.parameter || med.dosage || med.medication_name)
+                    : med.medication_name
+                  const subLabel = isVitals
+                    ? [med.parameter, med.route].filter(Boolean).join(' · ')
+                    : [med.dosage, med.route].filter(Boolean).join(' · ')
+
+                  return (
+                    <div
+                      key={med.id}
+                      className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                    >
+                      {/* ── Left: chip + medication name, sub-label, vital value, notes ── */}
+                      <div className="min-w-0 flex-1 pr-4">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0 ${_chipClass}`}>
+                            {_chipLabel}
+                          </span>
+                          <span className="font-medium text-sm text-gray-900 dark:text-white truncate">{displayName}</span>
+                        </div>
+                        {subLabel && <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{subLabel}</div>}
+                        {/* Vital reading value (e.g. "120/80") — shown when Given */}
+                        {_vitalValue && isGiven && (
+                          <div className="text-xs font-semibold text-purple-700 dark:text-purple-300 mt-1">{_vitalValue}</div>
+                        )}
+                        {/* Nurse notes */}
+                        {_userNotes && (
+                          <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 italic truncate">{_userNotes}</div>
+                        )}
+                      </div>
+
+                      {/* ── Right: status pill + avatar ── */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* ── Given — checkmark (or custom legend code) + time; clickable to edit ── */}
+                        {isGiven && (
+                          <button
+                            type="button"
+                            onClick={() => _handleEdit(med, admin)}
+                            disabled={readOnly}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-medium transition-all enabled:hover:brightness-90 enabled:cursor-pointer disabled:cursor-default"
+                          >
+                            {_legendCode ? (
+                              <span className="text-xs font-bold text-lasso-teal dark:text-lasso-teal leading-none">{_legendCode}</span>
+                            ) : (
+                              <svg className="h-4 w-4 text-green-500 dark:text-green-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                            {med.hour && <span>{formatTimeDisplay(med.hour)}</span>}
+                          </button>
+                        )}
+                        {/* ── Withheld — orange pause-bars icon; clickable to edit ── */}
+                        {isWithheld && (
+                          <button
+                            type="button"
+                            onClick={() => _handleEdit(med, admin)}
+                            disabled={readOnly}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs font-medium transition-all enabled:hover:brightness-90 enabled:cursor-pointer disabled:cursor-default"
+                          >
+                            <svg className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                              <rect x="6" y="4" width="4" height="16" rx="1.5" />
+                              <rect x="14" y="4" width="4" height="16" rx="1.5" />
+                            </svg>
+                          </button>
+                        )}
+                        {/* ── Refused — red raised-hand icon; clickable to edit ── */}
+                        {isRefused && (
+                          <button
+                            type="button"
+                            onClick={() => _handleEdit(med, admin)}
+                            disabled={readOnly}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs font-medium transition-all enabled:hover:brightness-90 enabled:cursor-pointer disabled:cursor-default"
+                          >
+                            <svg className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M10 4V12M10 4a2 2 0 00-4 0v8M10 4a2 2 0 014 0v4m0 0V6a2 2 0 014 0v6M14 8v4m0 0v-4m0 4v2m0 0a6 6 0 01-6 6H7a6 6 0 01-6-6v-2a2 2 0 014 0" />
+                            </svg>
+                          </button>
+                        )}
+                        {/* ── Discontinued — red stop-sign icon; not editable from day view ── */}
+                        {isDC && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 text-xs font-medium">
+                            <svg className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8.6 2h6.8L21 8.6v6.8L15.4 21H8.6L3 15.4V8.6L8.6 2z" />
+                              <path fill="white" d="M9.5 9.5l5 5M14.5 9.5l-5 5" stroke="white" strokeWidth="1.75" strokeLinecap="round" />
+                            </svg>
+                          </span>
+                        )}
+                        {/* ── Missed — pill is also clickable to open the modal ── */}
+                        {isMissed && (
+                          <button
+                            type="button"
+                            onClick={() => _handleEdit(med, admin)}
+                            disabled={readOnly}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-medium transition-all enabled:hover:brightness-90 enabled:cursor-pointer disabled:cursor-default"
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />
+                            Missed{med.hour ? ` · ${formatTimeDisplay(med.hour)}` : ''}
+                          </button>
+                        )}
+                        {/* ── Avatar (who administered / held / refused) ── */}
+                        {_avatarVal && (isGiven || isWithheld || isRefused) && (
+                          <MARCellAvatar value={_avatarVal} size="xs" userProfile={userProfile} facilityProfiles={facilityProfiles} />
+                        )}
+                        {/* ── Due (scheduled, not yet time) ── */}
+                        {isDue && hasHour && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 text-xs font-medium whitespace-nowrap">
+                            Due {formatTimeDisplay(med.hour)}
+                          </span>
+                        )}
+                        {/* ── Action button (Due / Missed) — always opens the full entry modal ── */}
+                        {(isDue || isMissed) && !readOnly && (
+                          <button
+                            type="button"
+                            onClick={() => _handleOpenModal(med)}
+                            className="px-3 py-1.5 bg-lasso-teal text-white rounded-lg text-xs font-semibold hover:bg-lasso-blue transition-colors"
+                          >
+                            Record
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div className="mt-6 space-y-3">
+                    {/* Time-period sections (Morning / Afternoon / Evening / Other) */}
+                    {_PERIODS.map(period => {
+                      const meds = period.id === 'other'
+                        ? _todayMeds.filter(m => _getPeriodId(m.hour) === 'other')
+                        : _todayMeds.filter(m => _getPeriodId(m.hour) === period.id)
+                      if (meds.length === 0) return null
+                      return (
+                        <div key={period.id} className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-700">
+                            <span className="font-semibold text-sm text-gray-700 dark:text-gray-200">{period.label}</span>
+                            {period.range && (
+                              <span className="text-xs text-gray-400 dark:text-gray-500">{period.range}</span>
+                            )}
+                          </div>
+                          <div>{meds.map(_renderMedRow)}</div>
+                        </div>
+                      )
+                    })}
+
+                    {/* As Needed (PRN) section */}
+                    <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-700">
+                        <span className="font-semibold text-sm text-gray-700 dark:text-gray-200">As Needed (PRN)</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500">Given when required</span>
+                      </div>
+                      {_todayPrns.length > 0 ? (
+                        <div>
+                          {_todayPrns.map(rec => {
+                            const ini = _resolveInitials(rec.initials)
+                            const _prnAvatarVal = (ini && ini !== '?') ? ini : null
+                            return (
+                              <div
+                                key={rec.id}
+                                className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                              >
+                                {/* Left: PRN chip + name, dosage, reason, result, notes */}
+                                <div className="min-w-0 flex-1 pr-4">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                      PRN
+                                    </span>
+                                    <span className="font-medium text-sm text-gray-900 dark:text-white truncate">{rec.medication}</span>
+                                  </div>
+                                  {rec.dosage && (
+                                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{rec.dosage}</div>
+                                  )}
+                                  {rec.reason && (
+                                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Reason: {rec.reason}</div>
+                                  )}
+                                  {rec.result && (
+                                    <div className="text-xs font-medium text-lasso-teal dark:text-teal-300 mt-0.5">Result: {rec.result}</div>
+                                  )}
+                                  {rec.note && (
+                                    <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 italic truncate">{rec.note}</div>
+                                  )}
+                                </div>
+                                {/* Right: checkmark pill + avatar */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-medium">
+                                    <svg className="h-4 w-4 text-green-500 dark:text-green-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    {rec.hour ? formatTimeDisplay(rec.hour) : ''}
+                                  </span>
+                                  {_prnAvatarVal && (
+                                    <MARCellAvatar value={_prnAvatarVal} size="xs" userProfile={userProfile} facilityProfiles={facilityProfiles} />
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="px-4 py-5 text-sm text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 text-center italic">
+                          No PRN medications given today
+                        </div>
+                      )}
+                      {!readOnly && (
+                        <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-900/60 border-t border-gray-200 dark:border-gray-700">
+                          <button
+                            type="button"
+                            onClick={() => setShowDayViewPRNModal(true)}
+                            className="text-xs text-lasso-blue hover:text-lasso-teal font-medium transition-colors"
+                          >
+                            + Log PRN
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Empty state */}
+                    {_todayMeds.length === 0 && _todayPrns.length === 0 && (
+                      <div className="py-12 text-center text-gray-400 dark:text-gray-500 text-sm">
+                        No medications are scheduled for today.
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
           </div>
 
           {/* Patient info (diet + legend), PRN - keep original max-width so they don't stretch */}
@@ -5743,6 +6217,33 @@ export default function ViewMARForm() {
           </div>
         </div>
       )}
+
+      {/* Day-View PRN Log Modal — two-step flow used by "+ Log PRN" in Today's Med Pass */}
+      {showDayViewPRNModal && todayDayInViewedMar !== null && (() => {
+        const _p  = parseMARMonthYear(marForm?.month_year || '')
+        const _todayYMD = _p
+          ? `${_p.y}-${String(_p.m).padStart(2, '0')}-${String(todayDayInViewedMar).padStart(2, '0')}`
+          : ''
+        const _abbr = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+        const _monthDay = _p ? `${_abbr[_p.m - 1]} ${todayDayInViewedMar}` : ''
+        return (
+          <DayViewPRNLogModal
+            onClose={() => setShowDayViewPRNModal(false)}
+            onSubmit={async (prnData) => {
+              try {
+                await addPRNRecord(prnData)
+                setShowDayViewPRNModal(false)
+              } catch (err) {
+                console.error('Error logging PRN:', err)
+              }
+            }}
+            todayDay={todayDayInViewedMar}
+            todayDateYMD={_todayYMD}
+            subtitleMonthDay={_monthDay}
+            prnMedicationList={prnMedicationList}
+          />
+        )
+      })()}
 
       {/* View/Manage PRN library (mar_prn_medications) */}
       {showManagePRNListModal && (
@@ -8326,6 +8827,260 @@ function AddPRNRecordForm({
         </button>
       </div>
     </form>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DayViewPRNLogModal
+// Two-step modal used by "+ Log PRN" in Today's Med Pass day view.
+//   Step 1 – nurse selects from PRN list.
+//   Step 2 – nurse enters time, result, and notes, then taps "Log Administration".
+// ─────────────────────────────────────────────────────────────────────────────
+function DayViewPRNLogModal({
+  onClose,
+  onSubmit,
+  todayDay,
+  todayDateYMD,
+  subtitleMonthDay,
+  prnMedicationList,
+}: {
+  onClose: () => void
+  onSubmit: (data: {
+    date: string
+    hour: string | null
+    initials: string | null
+    medication: string
+    dosage: string | null
+    reason: string
+    result: string | null
+    note: string | null
+    startDate: string | null
+  }) => Promise<void>
+  todayDay: number
+  todayDateYMD: string
+  subtitleMonthDay: string
+  prnMedicationList: MARPRNMedication[]
+}) {
+  const [step, setStep] = useState<'select' | 'log'>('select')
+  const [selectedMedId, setSelectedMedId] = useState('')
+  const [timeValue, setTimeValue] = useState(() => {
+    const n = new Date()
+    const h = n.getHours()
+    const m = n.getMinutes()
+    const period = h >= 12 ? 'PM' : 'AM'
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
+    return `${h12}:${m.toString().padStart(2, '0')} ${period}`
+  })
+  const [result, setResult] = useState('')
+  const [notes, setNotes] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const selectedMed = prnMedicationList.find((m) => m.id === selectedMedId) ?? null
+
+  const handleLogAdministration = async () => {
+    if (!selectedMed || !todayDateYMD) return
+    setIsSubmitting(true)
+    try {
+      await onSubmit({
+        date: todayDateYMD,
+        hour: timeValue || null,
+        initials: null,
+        medication: selectedMed.medication,
+        dosage: selectedMed.dosage?.trim() || null,
+        reason: selectedMed.reason,
+        result: result.trim() || null,
+        note: notes.trim() || null,
+        startDate: ymdFromDateInput(selectedMed.start_date) || null,
+      })
+    } catch (err) {
+      console.error('Error logging PRN administration:', err)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const inputClass =
+    'w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal'
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md mx-auto overflow-hidden flex flex-col">
+
+        {step === 'select' ? (
+          /* ── Step 1: choose medication ─────────────────────────────────── */
+          <>
+            <div className="flex justify-between items-center px-6 pt-6 pb-4">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white uppercase tracking-wide">
+                Add PRN Record
+              </h2>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="px-6 pb-6 space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  PRN List <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedMedId}
+                  onChange={(e) => setSelectedMedId(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">Select from PRN list</option>
+                  {prnMedicationList.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.medication}{item.dosage ? ` (${item.dosage})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!selectedMedId}
+                  onClick={() => setStep('log')}
+                  className="px-4 py-2 bg-lasso-navy text-white rounded-xl text-sm font-semibold hover:bg-lasso-teal transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          /* ── Step 2: log administration ────────────────────────────────── */
+          <>
+            {/* Header */}
+            <div className="flex justify-between items-start px-6 pt-6 pb-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white uppercase tracking-wide">
+                  {selectedMed?.medication}
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  PRN Log &middot; Day {todayDay} ({subtitleMonthDay})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none mt-1"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="border-t border-gray-200 dark:border-gray-700" />
+
+            {/* Dosage / Reason info bar */}
+            {(selectedMed?.dosage || selectedMed?.reason) && (
+              <div className="px-6 py-3 bg-gray-50 dark:bg-gray-900/40 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                {selectedMed.dosage && (
+                  <span>
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">Dosage:</span>{' '}
+                    <span className="text-gray-600 dark:text-gray-400">{selectedMed.dosage}</span>
+                  </span>
+                )}
+                {selectedMed.reason && (
+                  <span>
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">Reason:</span>{' '}
+                    <span className="text-gray-600 dark:text-gray-400">{selectedMed.reason}</span>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Log Administration card */}
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                Log Administration
+              </p>
+
+              <div className="bg-gray-50 dark:bg-gray-900/40 rounded-xl p-4 space-y-4">
+                {/* Time */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Time administered
+                  </label>
+                  <TimeInput
+                    value={timeValue}
+                    onChange={setTimeValue}
+                    compact
+                    splitAmPm
+                  />
+                </div>
+
+                {/* Result/Response */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    Result / Response{' '}
+                    <span className="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={result}
+                    onChange={(e) => setResult(e.target.value)}
+                    placeholder="e.g. Pain reduced from 7/10 to 3/10"
+                    className={inputClass}
+                  />
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    Notes{' '}
+                    <span className="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
+                  </label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Any additional observations..."
+                    className={`${inputClass} resize-none`}
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={handleLogAdministration}
+                    className="px-5 py-2.5 bg-lasso-teal text-white rounded-xl text-sm font-semibold hover:bg-lasso-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? 'Logging…' : 'Log Administration'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Done footer */}
+            <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 

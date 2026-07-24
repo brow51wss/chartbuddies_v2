@@ -25,7 +25,8 @@ function marPrnHasDocumentedHour(record: MARPRNRecord): boolean {
 }
 
 export function shouldSyncMarPrnRecordToProgressNotes(record: MARPRNRecord): boolean {
-  if (!marPrnHasDocumentedHour(record)) return false
+  // Require initials (who logged it). Hour is informational only — the note body
+  // already handles a missing time gracefully, so we don't gate sync on it.
   if (!(record.initials && String(record.initials).trim())) return false
   return true
 }

@@ -160,6 +160,45 @@ function physicianDisplayText(raw: string | null | undefined): string {
   return (raw || '').trim()
 }
 
+/** Colored-circle text avatar for MAR-triggered progress note entries. */
+function PrnAvatarBadge({ initials }: { initials: string }) {
+  const palette = [
+    'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-rose-500',
+    'bg-amber-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-teal-500',
+    'bg-orange-500', 'bg-lime-600',
+  ]
+  const idx = initials.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % palette.length
+  return (
+    <div
+      className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${palette[idx]}`}
+      title={initials}
+    >
+      {initials.slice(0, 2).toUpperCase()}
+    </div>
+  )
+}
+
+/**
+ * Derive short initials for a MAR-triggered progress note.
+ * Priority: "MAR initials: XX" embedded in the note body → current user profile → "?".
+ */
+function getPrnEntryInitials(entry: { notes: string; created_by?: string | null }, userProfile: UserProfile | null): string {
+  const match = (entry.notes || '').match(/^MAR initials:\s*(.+)$/m)
+  if (match?.[1]?.trim()) return match[1].trim().slice(0, 3).toUpperCase()
+  if (userProfile) {
+    const si = userProfile.staff_initials
+    if (si && !si.startsWith('data:image') && !si.startsWith('s3:') && si.trim()) {
+      return si.trim().toUpperCase().slice(0, 3)
+    }
+    if (userProfile.full_name) {
+      const names = userProfile.full_name.trim().split(/\s+/)
+      if (names.length >= 2) return (names[0][0] + names[names.length - 1][0]).toUpperCase()
+      if (names[0]) return names[0][0].toUpperCase()
+    }
+  }
+  return '?'
+}
+
 /** PRN-synced bodies may still end with Initials/Documentation from older syncs; signature column covers that. */
 function stripPrnProgressNoteRedundantTail(notes: string): string {
   if (!notes) return notes
@@ -174,10 +213,27 @@ function stripPrnProgressNoteRedundantTail(notes: string): string {
   return lines.slice(0, end).join('\n')
 }
 
+/**
+ * Strip raw "LEGEND:XX" and "VITAL:XX" markers that leaked into MAR-synced progress notes.
+ * • `(from MAR, …) [MedName] LEGEND:T` → `(from MAR, …) [MedName]`
+ * • `(from MAR, …) VITAL:55`           → removed entirely (Vitals should never appear here)
+ * The user text on the following line(s) is preserved.
+ */
+function sanitizeMarMarkersInNotes(notes: string): string {
+  // Remove lines that are solely a Vitals marker (the whole line starts with the prefix + VITAL:)
+  const withoutVitals = notes
+    .split('\n')
+    .filter((line) => !/^\(from MAR[^)]*\)[^\n]*VITAL:\S*/i.test(line.trim()))
+    .join('\n')
+  // Strip LEGEND:XX that follows a "(from MAR…) [Med]" header on the same line
+  return withoutVitals.replace(/(\(from MAR[^)]*\)[^\n]*) LEGEND:\S+/g, '$1').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 function page1EntryNotesDisplay(entry: ProgressNoteEntry): string {
-  return entry.source_mar_prn_record_id
+  const raw = entry.source_mar_prn_record_id
     ? stripPrnProgressNoteRedundantTail(entry.notes)
     : entry.notes
+  return sanitizeMarMarkersInNotes(raw)
 }
 
 function effectivePhysicianName(selectedPhysician: string, customPhysician: string): string {
@@ -304,7 +360,7 @@ export default function ProgressNotesPage() {
   const [newDate, setNewDate] = useState<string>(() => localTodayYMD())
   const [newNotes, setNewNotes] = useState('')
   // User must explicitly sign to confirm the note (saved signature is applied on "Sign")
-  const [newNoteSigned, setNewNoteSigned] = useState(false)
+  // newNoteSigned removed — new entries are attributed via avatar (created_by) instead of a signature
   // Page 2: Monthly Summary
   const [activeTab, setActiveTab] = useState<'page1' | 'page2'>('page1')
   const [summaryMonthYear, setSummaryMonthYear] = useState<string>(() => {
@@ -483,10 +539,6 @@ export default function ProgressNotesPage() {
       setError('Please enter notes.')
       return
     }
-    if (!newNoteSigned) {
-      setError('Please sign to confirm this note.')
-      return
-    }
     setSaving(true)
     setError('')
     const physicianRaw = effectivePhysicianName(selectedPhysician, customPhysician)
@@ -496,7 +548,7 @@ export default function ProgressNotesPage() {
         patient_id: patientId,
         note_date: newDate,
         notes: newNotes.trim(),
-        signature: userProfile.staff_signature || null,
+        signature: null,
         physician_name: physician,
         is_addendum: false,
         created_by: userProfile.id,
@@ -516,7 +568,6 @@ export default function ProgressNotesPage() {
         return key ? `${key}-01` : localTodayYMD()
       })()
     )
-    setNewNoteSigned(false)
     await refetchEntries()
     setSaving(false)
   }
@@ -928,7 +979,7 @@ export default function ProgressNotesPage() {
                     >
                       Notes
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-32">Signature</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-20">By</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -961,44 +1012,20 @@ export default function ProgressNotesPage() {
                         className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
                       />
                     </td>
-                    <td className="px-4 py-2 align-top">
-                      {newNoteSigned && userProfile?.staff_signature ? (
-                        <div className="flex flex-col gap-1">
-                          <InitialsOrSignatureDisplay
-                            value={userProfile.staff_signature}
-                            variant="signature"
-                            userProfile={userProfile}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setNewNoteSigned(false)}
-                            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 underline"
-                          >
-                            Clear signature
-                          </button>
-                        </div>
-                      ) : userProfile?.staff_signature ? (
-                        <button
-                          type="button"
-                          onClick={() => { setNewNoteSigned(true); setError(''); }}
-                          disabled={!hasNewNoteText}
-                          className="px-2 py-1 text-sm font-medium text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400 disabled:bg-gray-100 dark:hover:bg-lasso-teal/20 dark:disabled:border-gray-600 dark:disabled:bg-gray-700 dark:disabled:text-gray-500"
-                        >
-                          Sign
-                        </button>
-                      ) : (
-                        <span className="text-amber-600 dark:text-amber-400 text-sm">Set signature in Profile first</span>
+                    <td className="px-4 py-2 align-middle">
+                      {userProfile && (
+                        <PrnAvatarBadge initials={getPrnEntryInitials({ notes: '', created_by: userProfile.id }, userProfile)} />
                       )}
                     </td>
                   </tr>
                   )}
-                  {!readOnly && newNoteSigned && (
+                  {!readOnly && hasNewNoteText && (
                   <tr>
                     <td colSpan={4} className="px-4 py-2 text-right">
                       <button
                         type="button"
                         onClick={handleAddEntry}
-                        disabled={saving || !hasNewNoteText}
+                        disabled={saving}
                         className="px-4 py-2 bg-lasso-teal text-white rounded-lg text-sm font-medium hover:bg-lasso-blue disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {saving ? 'Saving...' : 'Add Note'}
@@ -1033,7 +1060,7 @@ export default function ProgressNotesPage() {
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-28">Date</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-40">Physician/APRN or Clinic</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Notes</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-32">Signature</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-20">By</th>
                   </tr>
                   {mainEntries.map((entry) => (
                     <tr key={entry.id} className="border-t border-gray-200 dark:border-gray-600">
@@ -1063,25 +1090,7 @@ export default function ProgressNotesPage() {
                         )}
                       </td>
                       <td className="px-4 py-2 align-top">
-                        {(entry.signature || (entry.created_by === userProfile?.id && userProfile?.staff_signature)) ? (
-                          <div className="flex flex-col gap-1">
-                            <InitialsOrSignatureDisplay
-                              value={entry.created_by === userProfile?.id && userProfile?.staff_signature ? userProfile.staff_signature : (entry.signature ?? '')}
-                              variant="signature"
-                              userProfile={userProfile}
-                            />
-                          </div>
-                        ) : userProfile?.staff_signature && !readOnly ? (
-                          <button
-                            type="button"
-                            onClick={() => handleSignEntry(entry.id)}
-                            className="px-2 py-1 text-sm font-medium text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10 dark:hover:bg-lasso-teal/20"
-                          >
-                            Sign
-                          </button>
-                        ) : !userProfile?.staff_signature ? (
-                          <span className="text-amber-600 dark:text-amber-400 text-sm">Set signature in Profile first</span>
-                        ) : null}
+                        <PrnAvatarBadge initials={getPrnEntryInitials(entry, userProfile)} />
                         {canDeleteNotes && (
                           <button
                             type="button"
