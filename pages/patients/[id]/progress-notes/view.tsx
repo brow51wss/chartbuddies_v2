@@ -355,6 +355,9 @@ export default function ProgressNotesPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [editingEntry, setEditingEntry] = useState<ProgressNoteEntry | null>(null)
+  const [editNotes, setEditNotes] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
 
   // New entry being added (unsaved row)
   const [newDate, setNewDate] = useState<string>(() => localTodayYMD())
@@ -882,110 +885,21 @@ export default function ProgressNotesPage() {
 
           {activeTab === 'page1' && (
           <>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
-             
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Name of ARCH</label>
-                  <div className="text-sm font-medium text-gray-900 dark:text-white border-b border-gray-300 dark:border-gray-600 pb-1">
-                    {facilityName || '—'}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Primary Care Giver</label>
-                  <div className="text-sm font-medium text-gray-900 dark:text-white border-b border-gray-300 dark:border-gray-600 pb-1">
-                    {userProfile?.full_name ?? '—'}
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Resident Last Name</label>
-                  <div className="text-sm font-medium text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded px-3 py-2">
-                    {lastName || '—'}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Resident&apos;s First Name</label>
-                  <div className="text-sm font-medium text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded px-3 py-2">
-                    {firstName || '—'}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Physician/APRN or Clinic</label>
-                  <div className="flex flex-col gap-2">
-                    <select
-                      value={selectedPhysician}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        setSelectedPhysician(v)
-                        if (!v || v !== PHYSICIAN_SELECT_ADD_OTHER) setCustomPhysician('')
-                      }}
-                      disabled={readOnly || physicianSelectionLocked}
-                      className={`w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal ${readOnly || physicianSelectionLocked ? 'cursor-not-allowed opacity-60' : ''}`}
-                    >
-                      <option value="">Select</option>
-                      {physicians.map(p => (
-                        <option key={p} value={p}>{p}</option>
-                      ))}
-                      <option value={PHYSICIAN_SELECT_ADD_OTHER}>+ Add</option>
-                    </select>
-                    {!readOnly && !physicianSelectionLocked && selectedPhysician === PHYSICIAN_SELECT_ADD_OTHER && (
-                      <input
-                        type="text"
-                        placeholder="Add New"
-                        value={customPhysician}
-                        onChange={(e) => {
-                          setCustomPhysician(e.target.value)
-                        }}
-                        className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
-                      />
-                    )}
-                    {physicianSelectionLocked && !readOnly && (
-                      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100">
-                        <p>{PHYSICIAN_SELECTION_BLOCKED_HINT}</p>
-                        <button
-                          type="button"
-                          onClick={openEditPatientModal}
-                          className="mt-2 font-medium text-lasso-teal hover:underline"
-                        >
-                          Complete patient details
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full table-fixed">
-                <colgroup>
-                  <col className="w-[16%]" />
-                  <col className="w-[16%]" />
-                  <col className="w-[52%]" />
-                  <col className="w-[16%]" />
-                </colgroup>
-                <thead>
-                  <tr className="bg-gray-100 dark:bg-gray-700">
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-28">Date</th>
-                    {showPhysicianColumn && (
-                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-40">Physician/APRN or Clinic</th>
-                    )}
-                    <th
-                      colSpan={showPhysicianColumn ? 1 : 2}
-                      className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300"
-                    >
-                      Notes
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-20">By</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {!readOnly && (
-                  <tr className="border-t border-gray-200 dark:border-gray-600 bg-lasso-teal/5">
-                    <td className="px-4 py-2 align-top">
+            {/* ── New entry input card ─────────────────────────────────── */}
+            {!readOnly && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
+                <textarea
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  placeholder="Enter progress note..."
+                  rows={4}
+                  className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal resize-none mb-3"
+                />
+                <div className="flex flex-wrap items-start gap-3 justify-between">
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Date picker */}
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Date:</label>
                       <input
                         type="date"
                         min={monthFilterKey ? `${monthFilterKey}-01` : undefined}
@@ -995,33 +909,53 @@ export default function ProgressNotesPage() {
                           : newDate
                         }
                         onChange={(e) => setNewDate(e.target.value)}
-                        className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 dark:bg-gray-700 text-gray-900 dark:text-white"
+                        className="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
-                    </td>
-                    {showPhysicianColumn && (
-                      <td className="px-4 py-2 align-top text-xs text-gray-700 dark:text-gray-300">
-                        {selectedPhysicianDisplay}
-                      </td>
-                    )}
-                    <td colSpan={showPhysicianColumn ? 1 : 2} className="px-4 py-2 align-top">
-                      <textarea
-                        value={newNotes}
-                        onChange={(e) => setNewNotes(e.target.value)}
-                        placeholder="Enter progress note..."
-                        rows={3}
-                        className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
-                      />
-                    </td>
-                    <td className="px-4 py-2 align-middle">
-                      {userProfile && (
-                        <PrnAvatarBadge initials={getPrnEntryInitials({ notes: '', created_by: userProfile.id }, userProfile)} />
+                    </div>
+                    {/* Physician selector */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Physician:</label>
+                      <select
+                        value={selectedPhysician}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setSelectedPhysician(v)
+                          if (!v || v !== PHYSICIAN_SELECT_ADD_OTHER) setCustomPhysician('')
+                        }}
+                        disabled={readOnly || physicianSelectionLocked}
+                        className={`text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal ${readOnly || physicianSelectionLocked ? 'cursor-not-allowed opacity-60' : ''}`}
+                      >
+                        <option value="">Select</option>
+                        {physicians.map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                        <option value={PHYSICIAN_SELECT_ADD_OTHER}>+ Add</option>
+                      </select>
+                      {!readOnly && !physicianSelectionLocked && selectedPhysician === PHYSICIAN_SELECT_ADD_OTHER && (
+                        <input
+                          type="text"
+                          placeholder="Add new physician"
+                          value={customPhysician}
+                          onChange={(e) => setCustomPhysician(e.target.value)}
+                          className="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
+                        />
                       )}
-                    </td>
-                  </tr>
-                  )}
-                  {!readOnly && hasNewNoteText && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-2 text-right">
+                      {physicianSelectionLocked && !readOnly && (
+                        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100">
+                          <p>{PHYSICIAN_SELECTION_BLOCKED_HINT}</p>
+                          <button type="button" onClick={openEditPatientModal} className="mt-1 font-medium text-lasso-teal hover:underline">
+                            Complete patient details
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {/* Avatar + Add Note button */}
+                  <div className="flex items-center gap-2 ml-auto">
+                    {userProfile && (
+                      <PrnAvatarBadge initials={getPrnEntryInitials({ notes: '', created_by: userProfile.id }, userProfile)} />
+                    )}
+                    {hasNewNoteText && (
                       <button
                         type="button"
                         onClick={handleAddEntry}
@@ -1030,87 +964,116 @@ export default function ProgressNotesPage() {
                       >
                         {saving ? 'Saving...' : 'Add Note'}
                       </button>
-                    </td>
-                  </tr>
-                  )}
-                  <tr className="border-t-2 border-gray-300 dark:border-gray-600">
-                    <td colSpan={existingNotesColumnCount} className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Existing notes</h3>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={handlePrintAllNotes}
-                            className="text-xs px-3 py-1.5 bg-gray-600 text-white rounded hover:bg-gray-700"
-                          >
-                            Print all notes
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => refetchEntries()}
-                            className="text-xs px-2 py-1 text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10"
-                          >
-                            Refresh
-                          </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Toolbar ──────────────────────────────────────────────── */}
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-xs text-gray-400 dark:text-gray-500">
+                {mainEntries.length > 0 ? `${mainEntries.length} note${mainEntries.length === 1 ? '' : 's'}` : ''}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintAllNotes}
+                  className="text-xs px-3 py-1.5 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Print all notes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => refetchEntries()}
+                  className="text-xs px-2 py-1 text-lasso-teal border border-lasso-teal rounded hover:bg-lasso-teal/10"
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {/* ── Day cards ─────────────────────────────────────────────── */}
+            {mainEntries.length === 0 ? (
+              <div className="text-center py-16 text-gray-500 dark:text-gray-400 text-sm">
+                No progress notes for this period.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {(() => {
+                  const dateOrder: string[] = []
+                  const byDate: Record<string, ProgressNoteEntry[]> = {}
+                  mainEntries.forEach(e => {
+                    const d = e.note_date ? String(e.note_date).slice(0, 10) : 'unknown'
+                    if (!byDate[d]) { byDate[d] = []; dateOrder.push(d) }
+                    byDate[d].push(e)
+                  })
+                  dateOrder.sort((a, b) => b.localeCompare(a))
+                  return dateOrder.map((date) => {
+                    const dayEntries = byDate[date]
+                    return (
+                      <div key={date} className="flex gap-3 items-start">
+                        {/* Timeline dot + vertical connector */}
+                        <div className="flex flex-col items-center pt-[18px] shrink-0 self-stretch">
+                          <div className="w-2.5 h-2.5 rounded-full bg-lasso-navy dark:bg-lasso-teal shrink-0" />
+                          <div className="flex-1 w-0.5 bg-gray-200 dark:bg-gray-700 mt-1" />
+                        </div>
+                        {/* Card */}
+                        <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                          {/* Date header */}
+                          <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40">
+                            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                              {formatCalendarDate(date, 'en-US')}
+                            </span>
+                          </div>
+                          {/* Entries within this day */}
+                          {dayEntries.map((entry, idx) => (
+                            <div
+                              key={entry.id}
+                              className={idx > 0 ? 'border-t border-gray-100 dark:border-gray-700' : ''}
+                            >
+                              <div
+                                className={`px-4 pt-3 pb-2${!readOnly ? ' cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors' : ''}`}
+                                onClick={() => {
+                                  if (readOnly) return
+                                  setEditingEntry(entry)
+                                  setEditNotes(page1EntryNotesDisplay(entry))
+                                }}
+                              >
+                                <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                                  {page1EntryNotesDisplay(entry)}
+                                </p>
+                              </div>
+                              <div className="px-4 pb-3 flex items-center justify-between">
+                                <span className="text-xs text-gray-400 dark:text-gray-500">
+                                  {physicianDisplayText(entry.physician_name) || ''}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <PrnAvatarBadge initials={getPrnEntryInitials(entry, userProfile)} />
+                                  {canDeleteNotes && (
+                                    <button
+                                      type="button"
+                                      onClick={(ev) => { ev.stopPropagation(); setDeletingNoteId(entry.id); setShowDeleteNoteModal(true) }}
+                                      className="text-red-400 hover:text-red-600 dark:hover:text-red-400 transition-colors p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                                      title="Delete entry"
+                                      aria-label="Delete progress note entry"
+                                    >
+                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    </td>
-                  </tr>
-                  <tr className="bg-gray-100 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-28">Date</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-40">Physician/APRN or Clinic</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Notes</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 w-20">By</th>
-                  </tr>
-                  {mainEntries.map((entry) => (
-                    <tr key={entry.id} className="border-t border-gray-200 dark:border-gray-600">
-                      <td className="px-4 py-2 align-top text-sm text-gray-900 dark:text-white whitespace-nowrap">
-                        {formatCalendarDate(entry.note_date, 'en-US')}
-                      </td>
-                      <td className="px-4 py-2 align-top text-sm text-gray-900 dark:text-white whitespace-nowrap">
-                        {physicianDisplayText(entry.physician_name) || 'n/a'}
-                      </td>
-                      <td className="px-4 py-2 align-top">
-                        {readOnly ? (
-                          <div className="w-full text-sm text-gray-900 dark:text-white whitespace-pre-wrap py-2">
-                            {page1EntryNotesDisplay(entry)}
-                          </div>
-                        ) : (
-                          <textarea
-                            value={page1EntryNotesDisplay(entry)}
-                            onChange={(e) => {
-                              const v = e.target.value
-                              entryNotesRef.current[entry.id] = v
-                              setEntries(prev => prev.map(ex => ex.id === entry.id ? { ...ex, notes: v } : ex))
-                              schedulePage1EntrySave(entry.id, entry.note_date)
-                            }}
-                            rows={Math.max(2, page1EntryNotesDisplay(entry).split('\n').length)}
-                            className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-2 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal"
-                          />
-                        )}
-                      </td>
-                      <td className="px-4 py-2 align-top">
-                        <PrnAvatarBadge initials={getPrnEntryInitials(entry, userProfile)} />
-                        {canDeleteNotes && (
-                          <button
-                            type="button"
-                            onClick={() => { setDeletingNoteId(entry.id); setShowDeleteNoteModal(true) }}
-                            className="mt-2 text-red-400 hover:text-red-600 dark:hover:text-red-400 transition-colors p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                            title="Delete entry"
-                            aria-label="Delete progress note entry"
-                          >
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    )
+                  })
+                })()}
+              </div>
+            )}
           </>
           )}
 
@@ -1460,6 +1423,64 @@ export default function ProgressNotesPage() {
           </div>
           )}
         </main>
+
+        {/* Edit Progress Note Modal */}
+        {editingEntry && !readOnly && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-lg mx-4 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-gray-900 dark:text-white">Edit Note</h2>
+                <button
+                  type="button"
+                  onClick={() => setEditingEntry(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
+                {formatCalendarDate(String(editingEntry.note_date || '').slice(0, 10), 'en-US')}
+                {physicianDisplayText(editingEntry.physician_name) ? ` · ${physicianDisplayText(editingEntry.physician_name)}` : ''}
+              </p>
+              <textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                rows={8}
+                autoFocus
+                className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-lasso-teal resize-none"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingEntry(null)}
+                  disabled={editSaving}
+                  className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={editSaving || !editNotes.trim()}
+                  onClick={async () => {
+                    setEditSaving(true)
+                    await handleUpdateEntry(
+                      editingEntry.id,
+                      editNotes,
+                      String(editingEntry.note_date || '').slice(0, 10)
+                    )
+                    setEditSaving(false)
+                    setEditingEntry(null)
+                  }}
+                  className="px-4 py-2 text-sm bg-lasso-teal text-white rounded-lg hover:bg-lasso-blue disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {editSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Delete Progress Note Confirmation Modal */}
         {showDeleteNoteModal && deletingNoteId && (
