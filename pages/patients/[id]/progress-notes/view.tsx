@@ -4,7 +4,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
 import AppHeader from '../../../../components/AppHeader'
-import PatientStickyBar from '../../../../components/PatientStickyBar'
+import { PatientSidebar } from '../../../../components/PatientSidebar'
 import EditPatientInfoModal, { type EditPatientInfoSaveArgs } from '../../../../components/EditPatientInfoModal'
 import { supabase } from '../../../../lib/supabase'
 import {
@@ -353,6 +353,7 @@ export default function ProgressNotesPage() {
   const [showEditPatientInfoModal, setShowEditPatientInfoModal] = useState(false)
   const [selectedPhysician, setSelectedPhysician] = useState<string>('')
   const [customPhysician, setCustomPhysician] = useState<string>('')
+  const [latestMarFormId, setLatestMarFormId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -422,6 +423,19 @@ export default function ProgressNotesPage() {
         return
       }
       setPatient(patientData)
+
+      // Fetch latest MAR form so PatientSidebar can link directly to it
+      ;(async () => {
+        try {
+          const marForms = await rdsListMarForms(patientId as string)
+          const sorted = [...marForms].sort((a: any, b: any) =>
+            String(b.month_year || '').localeCompare(String(a.month_year || ''))
+          )
+          if (sorted.length > 0) setLatestMarFormId(sorted[0].id)
+        } catch {
+          // link gracefully degrades — fail silently
+        }
+      })()
 
       if (profile.hospital_id) {
         const { data: hospital } = await supabase
@@ -849,32 +863,18 @@ export default function ProgressNotesPage() {
             patientName={patient?.patient_name}
           />
         </div>
-        <PatientStickyBar
-          patientId={typeof router.query.id === 'string' ? router.query.id : Array.isArray(router.query.id) ? router.query.id[0] : undefined}
-          patientName={patient?.patient_name}
-          dateOfBirth={patient?.date_of_birth}
-          sex={patient?.sex}
-          allergies={patient?.allergies}
-          recordNumber={patient?.record_number}
-          onEditPatient={readOnly ? undefined : () => void openEditPatientModal()}
-          editPatientLabel="Patient Details"
-        />
+        <div className="no-print w-[95vw] min-w-[900px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-        <main className="no-print max-w-5xl mx-auto px-4 py-6">
-          <Link
-            href={router.query.id ? `/patients/${router.query.id}/progress-notes` : '/dashboard'}
-            className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm font-medium inline-block mb-2"
-          >
-            ← Back to Progress Notes
-          </Link>
-          {/* h1 — outside the card, matches MAR style */}
-          <h1 className="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-2 mb-6">
-            <span aria-hidden="true">📝</span>
-            <span>Progress Notes</span>
-          </h1>
+          {/* Page title — spans full content width */}
+          <div className="max-w-7xl mx-auto py-[50px]">
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+              <span aria-hidden="true">📝</span>
+              <span>Progress Notes</span>
+            </h1>
+          </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-800 dark:text-red-200 text-sm">
+            <div className="max-w-7xl mx-auto mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-800 dark:text-red-200 text-sm">
               {error}
             </div>
           )}
@@ -883,6 +883,34 @@ export default function ProgressNotesPage() {
               {activeTab === 'page2' && summarySaving ? 'Saving...' : message}
             </div>
           )}
+
+          {/* Two-column: Patient Sidebar (left) + Module content (right) */}
+          <div className="max-w-7xl mx-auto grid grid-cols-[auto_minmax(0,1fr)] gap-6 items-start">
+
+            {/* Left: Patient Sidebar */}
+            <aside className="sticky top-[85px] self-start w-[200px]">
+              {patient && (
+                <PatientSidebar
+                  activeModule="progress-notes"
+                  patient={{
+                    patient_name: patient.patient_name || '',
+                    date_of_birth: patient.date_of_birth ?? null,
+                    created_at: patient.created_at ?? '',
+                    diagnosis: patient.diagnosis ?? null,
+                    sex: patient.sex ?? null,
+                    patient_photo: patient.patient_photo ?? null,
+                  }}
+                  marHref={
+                    latestMarFormId && patientId
+                      ? `/patients/${patientId}/mar/${latestMarFormId}`
+                      : undefined
+                  }
+                />
+              )}
+            </aside>
+
+            {/* Right: module header + tab content */}
+            <div className="min-w-0">
 
           <ModuleHeader>
             {monthFilterKey && (
@@ -1503,7 +1531,9 @@ export default function ProgressNotesPage() {
             </div>
           </div>
           )}
-        </main>
+            </div>{/* end Right column */}
+          </div>{/* end grid */}
+        </div>{/* end content wrapper */}
 
         {/* Edit Progress Note Modal */}
         {editingEntry && !readOnly && (

@@ -5,7 +5,8 @@ import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../../../../components/ProtectedRoute'
 import AppHeader from '../../../../components/AppHeader'
-import PatientStickyBar from '../../../../components/PatientStickyBar'
+import { PatientSidebar } from '../../../../components/PatientSidebar'
+import type { PatientSummaryCardPatient } from '../../../../components/PatientSummaryCard'
 import TimeInput, { formatTimeDisplay } from '../../../../components/TimeInput'
 import {
   upsertProgressNoteFromPRNRecordRds,
@@ -223,7 +224,7 @@ import {
   rdsCreatePrnMedication, rdsPatchPrnMedication, rdsDeletePrnMedication,
   rdsUpsertVitalSigns,
   rdsCreateMarMedication, rdsPatchMarMedication, rdsDeleteMarMedication,
-  rdsPatchPatient,
+  rdsPatchPatient, rdsGetPatient,
   rdsListProgressNotes, rdsCreateProgressNote, rdsPatchProgressNote, rdsDeleteProgressNote,
 } from '../../../../lib/rdsApi'
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
@@ -860,6 +861,7 @@ export default function ViewMARForm() {
   const marFormId = Array.isArray(marId) ? marId[0] : marId
   const patientFormId = Array.isArray(patientId) ? patientId[0] : patientId
   const [marForm, setMarForm] = useState<MARForm | null>(null)
+  const [patientPhoto, setPatientPhoto] = useState<string | null>(null)
   const [medications, setMedications] = useState<MARMedication[]>([])
   /** On-screen MAR grid only; print always uses full `medications`. Multi-select: routine / vitals / PRN chart rows. */
   const [marTableCategoryVisible, setMarTableCategoryVisible] =
@@ -3209,6 +3211,18 @@ export default function ViewMARForm() {
 
       setMarForm(formData)
 
+      // Fetch patient photo separately (not stored on the MAR form snapshot)
+      if (formData?.patient_id) {
+        ;(async () => {
+          try {
+            const p = await rdsGetPatient(formData.patient_id)
+            if (p?.patient_photo) setPatientPhoto(p.patient_photo)
+          } catch {
+            // photo is optional — fail silently
+          }
+        })()
+      }
+
       const sortedMeds = (medsData || []).sort((a: any, b: any) => {
         if (a.display_order != null && b.display_order != null) return a.display_order - b.display_order
         if (a.display_order != null) return -1
@@ -3606,27 +3620,11 @@ export default function ViewMARForm() {
               patientName={marForm?.patient_name}
             />
         </div>
-        <PatientStickyBar
-          patientId={marForm?.patient_id}
-          patientName={marForm?.patient_name}
-          dateOfBirth={marForm?.date_of_birth}
-          sex={marForm?.sex}
-          allergies={marForm?.allergies}
-          recordNumber={marForm?.record_number}
-          onEditPatient={readOnly ? undefined : () => void openMarEditPatientModal()}
-          editPatientLabel="Patient Details"
-        />
 
-        {/* Main Content - 95vw with min 1000px so the white MAR card uses almost the full screen */}
+        {/* Two-column layout: patient card + MAR content (mirrors Binder grid) */}
         <div className="no-print w-[95vw] min-w-[1000px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Header Navigation */}
-          <div className="max-w-7xl mx-auto mb-6">
-            <button
-              onClick={() => router.push(marForm?.patient_id ? `/patients/${marForm.patient_id}/forms` : '/dashboard')}
-              className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue text-sm mb-4"
-            >
-              ← Back to MAR Forms
-            </button>
+          {/* Page title + action buttons — spans full content width */}
+          <div className="max-w-7xl mx-auto py-[50px]">
             <div className="flex justify-between items-center">
               <h1 className="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
                 <span aria-hidden="true">💊</span>
@@ -3641,13 +3639,13 @@ export default function ViewMARForm() {
                         setEditingEntry(null) // Clear editing entry to ensure add mode
                         setShowAddMedModal(true)
                       }}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-lasso-blue text-lasso-blue bg-transparent hover:border-lasso-teal hover:text-lasso-teal transition-colors text-sm font-medium"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-gray-800 text-gray-800 dark:border-gray-200 dark:text-gray-200 bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm font-medium"
                     >
                       💊 Medication
                     </button>
                     <button
                       onClick={() => setShowVitalSignsModal(true)}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-lasso-blue text-lasso-blue bg-transparent hover:border-lasso-teal hover:text-lasso-teal transition-colors text-sm font-medium"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-gray-800 text-gray-800 dark:border-gray-200 dark:text-gray-200 bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm font-medium"
                     >
                       📊 Vital Signs
                     </button>
@@ -3658,7 +3656,7 @@ export default function ViewMARForm() {
                         setPrnListEditTarget(null)
                         setShowManagePRNListModal(true)
                       }}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-lasso-blue text-lasso-blue bg-transparent hover:border-lasso-teal hover:text-lasso-teal transition-colors text-sm font-medium"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-gray-800 text-gray-800 dark:border-gray-200 dark:text-gray-200 bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm font-medium"
                     >
                       <svg className="h-4 w-4 shrink-0 text-orange-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L22 12L12 22L2 12Z"/></svg>
                       Manage PRN
@@ -3669,18 +3667,44 @@ export default function ViewMARForm() {
             </div>
           </div>
 
-
           {error && (
-            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+            <div className="max-w-7xl mx-auto mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
               <p className="text-red-800 dark:text-red-200">{error}</p>
             </div>
           )}
-
           {message && (
-            <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+            <div className="max-w-7xl mx-auto mb-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
               <p className="text-green-800 dark:text-green-200">{message}</p>
             </div>
           )}
+
+          {/* Two-column: patient card (left) aligned with module header (right) */}
+          <div className="max-w-7xl mx-auto grid grid-cols-[auto_minmax(0,1fr)] gap-6 items-start">
+
+            {/* Left: Patient Sidebar */}
+            <aside className="sticky top-[85px] self-start w-[200px]">
+              {marForm && (
+                <PatientSidebar
+                  activeModule="mar"
+                  patient={{
+                    patient_name: marForm.patient_name || '',
+                    date_of_birth: marForm.date_of_birth ?? null,
+                    created_at: '',
+                    diagnosis: marForm.diagnosis ?? null,
+                    sex: (marForm.sex as PatientSummaryCardPatient['sex']) ?? null,
+                    patient_photo: patientPhoto,
+                  }}
+                  progressNotesHref={
+                    marForm.patient_id && marForm.month_year
+                      ? `/patients/${marForm.patient_id}/progress-notes/view?month=${encodeURIComponent(marForm.month_year)}`
+                      : undefined
+                  }
+                />
+              )}
+            </aside>
+
+            {/* Right: module header + table */}
+            <div className="min-w-0 overflow-x-auto">
 
 
           {/* Medication Administration Table - Box 1 */}
@@ -5790,6 +5814,8 @@ export default function ViewMARForm() {
                   </table>
                 </div>
               )}
+          </div>
+          </div>
           </div>
           </div>
         </div>

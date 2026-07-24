@@ -18,12 +18,6 @@ interface AppHeaderProps {
   patientName?: string
 }
 
-const PATIENT_MODULES = [
-  { label: 'Patient overview', path: '' },
-  { label: 'MAR Forms', path: '/forms' },
-  { label: 'Progress Notes', path: '/progress-notes' }
-] as const
-
 /**
  * Global navigation header for all module pages.
  * Edit this file to change the nav across the app.
@@ -33,7 +27,6 @@ const PATIENT_MODULES = [
 export default function AppHeader({ userProfile: userProfileProp, onLogout, patientId, patientName }: AppHeaderProps) {
   const router = useRouter()
   const [fetchedProfile, setFetchedProfile] = useState<UserProfile | null>(null)
-  const [modulesOpen, setModulesOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [showExitReadOnlyModal, setShowExitReadOnlyModal] = useState(false)
   const [exitPassword, setExitPassword] = useState('')
@@ -44,7 +37,6 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const warnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const userProfile = userProfileProp ?? fetchedProfile
   const { isReadOnly, enterReadOnly, exitReadOnly } = useReadOnly()
@@ -67,14 +59,6 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
       setExitError('Incorrect password')
     }
   }
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setModulesOpen(false)
-    }
-    if (modulesOpen) document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [modulesOpen])
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -163,39 +147,6 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
               >
                 <span>Patient info</span>
               </button>
-            )}
-            {patientId && (
-              <div className="relative" ref={menuRef}>
-                <button
-                  type="button"
-                  onClick={() => setModulesOpen((o) => !o)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors duration-200 flex items-center gap-1.5"
-                  aria-expanded={modulesOpen}
-                  aria-haspopup="true"
-                >
-                  <span>Go to form</span>
-                  <svg className={`w-4 h-4 transition-transform ${modulesOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {modulesOpen && (
-                  <div className="absolute top-full left-0 mt-1 py-1 w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-app-header-dropdown">
-                    <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-500 dark:text-gray-400 truncate">
-                      {patientName ? `Patient: ${patientName}` : 'Jump to module'}
-                    </div>
-                    {PATIENT_MODULES.map(({ label, path }) => (
-                      <Link
-                        key={path || 'overview'}
-                        href={`/patients/${patientId}${path}`}
-                        onClick={() => setModulesOpen(false)}
-                        className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                      >
-                        {label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
             )}
             <Link
               href="/dashboard"

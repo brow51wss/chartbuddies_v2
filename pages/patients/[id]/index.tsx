@@ -101,6 +101,8 @@ export default function PatientHub() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [activityRows, setActivityRows] = useState<BinderActivityRow[]>([])
+  const [latestMarFormId, setLatestMarFormId] = useState<string | null>(null)
+  const [latestProgressMonth, setLatestProgressMonth] = useState<string | null>(null)
   const [showActivityStatus, setShowActivityStatus] = useState(true)
   const [showEditModal, setShowEditModal] = useState(false)
   const rightColRef = useRef<HTMLDivElement>(null)
@@ -187,12 +189,29 @@ export default function PatientHub() {
         (a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
       )
       const latestMar = sortedForms[0] ?? null
+      setLatestMarFormId(latestMar?.id ?? null)
       const monthByMarFormId = new Map(allMarForms.map((f: any) => [f.id, f.month_year]))
 
       const sortedNotes = [...allProgressNotes].sort(
         (a, b) => new Date(b.updated_at || b.note_date).getTime() - new Date(a.updated_at || a.note_date).getTime()
       )
       const latestProgressEntry = sortedNotes[0] ?? null
+
+      // Derive the most recent month that has progress notes.
+      // note_date is an ISO date (e.g. "2026-07-24"); find the MAR form whose month matches.
+      let latestProgressMonthLocal: string | null = null
+      if (latestProgressEntry?.note_date) {
+        const nd = new Date(latestProgressEntry.note_date)
+        const matchingForm = sortedForms.find((f: any) => {
+          const raw = String(f.month_year || '').toLowerCase()
+          return raw.includes(nd.toLocaleString('en-US', { month: 'long' }).toLowerCase())
+            && raw.includes(String(nd.getFullYear()))
+        })
+        latestProgressMonthLocal = matchingForm?.month_year ?? latestMar?.month_year ?? null
+      } else if (latestMar) {
+        latestProgressMonthLocal = latestMar.month_year ?? null
+      }
+      setLatestProgressMonth(latestProgressMonthLocal)
 
       // Check vitals from the most recent MAR form that has vital_signs data
       let latestVitalsActivity: {
@@ -236,7 +255,7 @@ export default function PatientHub() {
           moduleName: marModule.name,
           statusLabel: `${String(latestMar.status || 'active').replace('_', ' ')} (${latestMar.month_year || 'unknown month'})`,
           lastActivityLabel: formatDateTimeLabel(marRaw),
-          href: marModule.href ? `/patients/${loadPatientId}/${marModule.href}` : undefined,
+          href: latestMar ? `/patients/${loadPatientId}/mar/${latestMar.id}` : undefined,
           lastActivitySortMs: activityTimestampMs(marRaw),
         })
       }
@@ -250,7 +269,9 @@ export default function PatientHub() {
           moduleName: progressModule.name,
           statusLabel: 'Has entries',
           lastActivityLabel: formatDateTimeLabel(progressRaw),
-          href: progressModule.href ? `/patients/${loadPatientId}/${progressModule.href}` : undefined,
+          href: latestProgressMonthLocal
+            ? `/patients/${loadPatientId}/progress-notes/view?month=${encodeURIComponent(latestProgressMonthLocal)}`
+            : progressModule.href ? `/patients/${loadPatientId}/${progressModule.href}` : undefined,
           lastActivitySortMs: activityTimestampMs(progressRaw),
         })
       }
@@ -488,7 +509,11 @@ export default function PatientHub() {
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {MODULES.map((module) => {
                 const isAvailable = module.status === 'available' && module.href
-                const href = module.href ? `/patients/${patient.id}/${module.href}` : '#'
+                const href = module.id === 'mar' && latestMarFormId
+                  ? `/patients/${patient.id}/mar/${latestMarFormId}`
+                  : module.id === 'progress' && latestProgressMonth
+                  ? `/patients/${patient.id}/progress-notes/view?month=${encodeURIComponent(latestProgressMonth)}`
+                  : module.href ? `/patients/${patient.id}/${module.href}` : '#'
                 const cardClasses = `group relative block bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border transition-all duration-300 ${
                   isAvailable
                     ? 'cursor-pointer hover:shadow-xl hover:scale-[1.02] border-gray-200 dark:border-gray-700 hover:border-lasso-blue dark:hover:border-lasso-blue'

@@ -87,4 +87,31 @@ Inactive state: plain text with hover
 
 ---
 
+---
+
+## Patient Sidebar
+
+**Component:** `components/PatientSidebar.tsx`
+
+The sticky left-column panel used on module pages (MAR, Progress Notes).
+
+Contains two sub-elements:
+- **Patient Card** — the `PatientSummaryCard` displaying photo, name, DOB, sex, and diagnosis.
+- **Module Nav** — a vertical list of pill buttons; the active module is filled `bg-lasso-navy`, inactive modules are plain text links.
+
+| Prop | Notes |
+|---|---|
+| `patient` | `PatientSummaryCardPatient` object (photo, name, DOB, etc.) |
+| `activeModule` | `'mar'` \| `'progress-notes'` — determines which button is filled |
+| `marHref` | Direct link to the patient's latest MAR form (optional; falls back to `#`) |
+| `progressNotesHref` | Direct link to the patient's latest Progress Notes month (optional; falls back to `#`) |
+
+**Used on:**
+- MAR page (`pages/patients/[id]/mar/[marId].tsx`) — `activeModule="mar"`
+- Progress Notes view (`pages/patients/[id]/progress-notes/view.tsx`) — `activeModule="progress-notes"`
+
+**Added: 2026-07-24**
+
+---
+
 *Last updated: 2026-07-24*
