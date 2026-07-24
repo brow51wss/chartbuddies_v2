@@ -217,7 +217,7 @@ function currentUserInitialsForMatch(userProfile: UserProfile | null): string {
 import { supabase } from '../../../../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../../../../lib/auth'
 import {
-  rdsGetMarForm, rdsPatchMarForm,
+  rdsGetMarForm, rdsPatchMarForm, rdsListMarForms,
   rdsUpsertAdministration,
   rdsCreatePrnRecord, rdsPatchPrnRecord, rdsDeletePrnRecord,
   rdsCreatePrnMedication, rdsPatchPrnMedication, rdsDeletePrnMedication,
@@ -267,6 +267,8 @@ import {
   type SortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { MonthPickerButton } from '../../../../components/MonthPickerButton'
+import { ModuleHeader } from '../../../../components/ModuleHeader'
 
 /**
  * Do not translate table rows while dragging. Multi-time meds use several `<tr>`s but only one sortable id;
@@ -2152,6 +2154,12 @@ export default function ViewMARForm() {
     return Math.min(31, now.getDate())
   }, [marForm?.month_year])
 
+  // When navigating to a past/future month todayDayInViewedMar becomes null — the toggle
+  // hides but marViewMode could still be 'daily', leaving the page blank. Reset to monthly.
+  useEffect(() => {
+    if (todayDayInViewedMar === null) setMarViewMode('monthly')
+  }, [todayDayInViewedMar])
+
   const missedMarDocumentation = React.useMemo(() => {
     if (!marForm?.month_year) return []
     const parsed = parseMARMonthYear(marForm.month_year)
@@ -3589,7 +3597,7 @@ export default function ViewMARForm() {
           .mar-print-measure { position: absolute; left: -9999px; top: 0; width: 960px; visibility: hidden; pointer-events: none; }
         `}} />
       </Head>
-      <div className="min-h-screen">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <div className="no-print">
           <AppHeader
               userProfile={userProfile}
@@ -3676,53 +3684,61 @@ export default function ViewMARForm() {
 
 
           {/* Medication Administration Table - Box 1 */}
-          <div className="max-w-7xl mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
-              {/* Form Header */}
-              <div className="mb-6 border-b-2 border-gray-300 dark:border-gray-600 pb-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center">
-                    <span className="text-lg font-medium text-gray-800 dark:text-white select-none cursor-default">
-                      {formatMarMonthYearDisplay(marForm.month_year)}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-lg font-medium text-gray-800 dark:text-white">
-                      Facility Name: {facilityNameFromProfile ?? marForm.facility_name ?? 'N/A'}
-                    </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">From your profile (assigned facility)</p>
-                </div>
+          <div className="max-w-7xl mx-auto">
+          <ModuleHeader>
+            <div className="flex items-start justify-between mb-4 border-b-2 border-gray-300 dark:border-gray-600 pb-4">
+              <MonthPickerButton
+                key={marForm.id}
+                currentLabel={formatMarMonthYearDisplay(marForm.month_year)}
+                loadMonths={async () => {
+                  const forms = await rdsListMarForms(patientFormId as string).catch(() => [])
+                  return [...forms]
+                    .sort((a, b) => String(b.month_year || '').localeCompare(String(a.month_year || '')))
+                    .map((form) => ({
+                      id: form.id,
+                      label: formatMarMonthYearDisplay(form.month_year),
+                      isCurrent: form.id === marForm.id,
+                      onClick: () => router.push(`/patients/${patientFormId}/mar/${form.id}`),
+                    }))
+                }}
+              />
+              <div>
+                <p className="text-lg font-medium text-gray-800 dark:text-white">
+                  Facility Name: {facilityNameFromProfile ?? marForm.facility_name ?? 'N/A'}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">From your profile (assigned facility)</p>
               </div>
-
-              {/* View Mode Toggle — only visible when viewing the current month */}
-              {todayDayInViewedMar !== null && (
-                <div className="mt-4">
-                  <div className="inline-flex items-center gap-0.5 p-1 bg-gray-100 dark:bg-gray-700 rounded-xl">
-                    <button
-                      type="button"
-                      onClick={() => setMarViewMode('daily')}
-                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                        marViewMode === 'daily'
-                          ? 'bg-lasso-navy text-white shadow-sm'
-                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'
-                      }`}
-                    >
-                      Today&apos;s Med Pass
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMarViewMode('monthly')}
-                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                        marViewMode === 'monthly'
-                          ? 'bg-lasso-navy text-white shadow-sm'
-                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'
-                      }`}
-                    >
-                      Monthly Grid (Audit View)
-                    </button>
-                  </div>
-                </div>
-              )}
-
+            </div>
+            {todayDayInViewedMar !== null && (
+              <div className="inline-flex items-center gap-0.5 p-1 bg-gray-100 dark:bg-gray-700 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setMarViewMode('daily')}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    marViewMode === 'daily'
+                      ? 'bg-lasso-navy text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'
+                  }`}
+                >
+                  Today&apos;s Med Pass
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMarViewMode('monthly')}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    marViewMode === 'monthly'
+                      ? 'bg-lasso-navy text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'
+                  }`}
+                >
+                  Monthly Grid (Audit View)
+                </button>
+              </div>
+            )}
+          </ModuleHeader>
+          </div>{/* closes max-w-7xl wrapper around ModuleHeader */}
+          {/* Table content */}
+          <div className="max-w-7xl mx-auto">
               {marViewMode === 'monthly' && (
               <div className="mt-4 flex flex-col gap-3">
                 <div
@@ -3851,7 +3867,6 @@ export default function ViewMARForm() {
                   */}
                 </div>
               )}
-              </div>
 
               {marViewMode === 'monthly' && (<>
 
@@ -4944,6 +4959,8 @@ export default function ViewMARForm() {
                   const isRefused  = status === 'Refused'
                   const isDC       = status === 'DC'
                   const isVitals   = _isVitalsRow(med)
+                  const _rawInit   = (admin?.initials ?? '').trim().toUpperCase()
+                  const _withheldLabel = (_rawInit === 'H' && status !== 'Withheld') ? 'Held' : 'Withheld'
                   const sched      = _scheduledMins(med.hour)
                   const hasHour    = sched >= 0
                   const isPast     = hasHour && sched <= _nowMins
@@ -5025,10 +5042,11 @@ export default function ViewMARForm() {
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                               </svg>
                             )}
-                            {med.hour && <span>{formatTimeDisplay(med.hour)}</span>}
+                            {!isVitals && <span>Given</span>}
+                            {med.hour && <span className="opacity-70">· {formatTimeDisplay(med.hour)}</span>}
                           </button>
                         )}
-                        {/* ── Withheld — orange pause-bars icon; clickable to edit ── */}
+                        {/* ── Withheld / Held — orange pause-bars icon; clickable to edit ── */}
                         {isWithheld && (
                           <button
                             type="button"
@@ -5040,6 +5058,8 @@ export default function ViewMARForm() {
                               <rect x="6" y="4" width="4" height="16" rx="1.5" />
                               <rect x="14" y="4" width="4" height="16" rx="1.5" />
                             </svg>
+                            {!isVitals && <span>{_withheldLabel}</span>}
+                            {!isVitals && med.hour && <span className="opacity-70">· {formatTimeDisplay(med.hour)}</span>}
                           </button>
                         )}
                         {/* ── Refused — red raised-hand icon; clickable to edit ── */}
@@ -5053,16 +5073,25 @@ export default function ViewMARForm() {
                             <svg className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M10 4V12M10 4a2 2 0 00-4 0v8M10 4a2 2 0 014 0v4m0 0V6a2 2 0 014 0v6M14 8v4m0 0v-4m0 4v2m0 0a6 6 0 01-6 6H7a6 6 0 01-6-6v-2a2 2 0 014 0" />
                             </svg>
+                            {!isVitals && <span>Refused</span>}
+                            {!isVitals && med.hour && <span className="opacity-70">· {formatTimeDisplay(med.hour)}</span>}
                           </button>
                         )}
-                        {/* ── Discontinued — red stop-sign icon; not editable from day view ── */}
+                        {/* ── Discontinued — red stop-sign icon; clickable to edit in case of accidental DC ── */}
                         {isDC && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 text-xs font-medium">
+                          <button
+                            type="button"
+                            onClick={() => _handleEdit(med, admin)}
+                            disabled={readOnly}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs font-medium transition-all enabled:hover:brightness-90 enabled:cursor-pointer disabled:cursor-default"
+                          >
                             <svg className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" fill="currentColor" viewBox="0 0 24 24">
                               <path d="M8.6 2h6.8L21 8.6v6.8L15.4 21H8.6L3 15.4V8.6L8.6 2z" />
                               <path fill="white" d="M9.5 9.5l5 5M14.5 9.5l-5 5" stroke="white" strokeWidth="1.75" strokeLinecap="round" />
                             </svg>
-                          </span>
+                            {!isVitals && <span>Discontinued</span>}
+                            {!isVitals && med.hour && <span className="opacity-70">· {formatTimeDisplay(med.hour)}</span>}
+                          </button>
                         )}
                         {/* ── Missed — pill is also clickable to open the modal ── */}
                         {isMissed && (
@@ -5202,9 +5231,7 @@ export default function ViewMARForm() {
                   </div>
                 )
               })()}
-
           </div>
-
           {/* Patient info (diet + legend), PRN - keep original max-width so they don't stretch */}
           <div className="max-w-7xl mx-auto">
           {/* Patient Information Section - Box 2 */}
@@ -5955,6 +5982,7 @@ export default function ViewMARForm() {
         })()}
       </div>
 
+      {/* Month Picker Modal */}
       {/* Add Medication/Vitals Modal */}
       {showAddMedModal && (
         <div 

@@ -64,7 +64,7 @@ export function PatientSummaryCard({
   const lastName  = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
 
   const nameClass =
-    'mt-3 w-full text-center text-xl font-normal leading-snug text-gray-900 dark:text-white'
+    'mt-3 w-full text-center text-sm font-normal leading-snug text-gray-900 dark:text-white'
 
   const nameContent = (
     <>

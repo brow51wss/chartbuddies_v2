@@ -32,6 +32,8 @@ import {
 import { useReadOnly } from '../../../../contexts/ReadOnlyContext'
 import type { UserProfile, Patient } from '../../../../types/auth'
 import type { ProgressNoteEntry, ProgressNoteMonthlySummary } from '../../../../types/progress-notes'
+import { MonthPickerButton } from '../../../../components/MonthPickerButton'
+import { ModuleHeader } from '../../../../components/ModuleHeader'
 
 const SIGNATURE_FONTS_LINK_ID = 'progress-notes-signature-fonts'
 function ensureSignatureFontsLoaded(font: string) {
@@ -865,15 +867,12 @@ export default function ProgressNotesPage() {
           >
             ← Back to Progress Notes
           </Link>
-          <div className="mb-2">
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <span aria-hidden="true">📝</span>
-              <span>Progress Notes</span>
-            </h1>
-            {monthFromQuery && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Showing: {monthFromQuery}</p>
-            )}
-          </div>
+          {/* h1 — outside the card, matches MAR style */}
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-2 mb-6">
+            <span aria-hidden="true">📝</span>
+            <span>Progress Notes</span>
+          </h1>
+
           {error && (
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-800 dark:text-red-200 text-sm">
               {error}
@@ -885,22 +884,49 @@ export default function ProgressNotesPage() {
             </div>
           )}
 
-          <div className="flex gap-2 mb-4">
-            <button
-              type="button"
-              onClick={() => setActiveTab('page1')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'page1' ? 'bg-lasso-teal text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}`}
-            >
-              Notes & Addendum
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('page2')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'page2' ? 'bg-lasso-teal text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}`}
-            >
-              Monthly Summary
-            </button>
-          </div>
+          <ModuleHeader>
+            {monthFilterKey && (
+              <div className="mb-4 border-b-2 border-gray-300 dark:border-gray-600 pb-4">
+                <MonthPickerButton
+                  key={monthFilterKey}
+                  currentLabel={formatMonthYearDisplay(monthFilterKey)}
+                  loadMonths={async () => {
+                    const forms = await rdsListMarForms(patientId as string).catch(() => [])
+                    return [...forms]
+                      .sort((a, b) => String(b.month_year || '').localeCompare(String(a.month_year || '')))
+                      .map((form) => {
+                        const normalized = parseMonthQuery(form.month_year) ?? form.month_year
+                        return {
+                          id: form.id,
+                          label: formatMonthYearDisplay(normalized),
+                          isCurrent: normalized === monthFilterKey,
+                          onClick: () =>
+                            router.push(
+                              `/patients/${patientId}/progress-notes/view?month=${encodeURIComponent(form.month_year)}`
+                            ),
+                        }
+                      })
+                  }}
+                />
+              </div>
+            )}
+            <div className="inline-flex items-center gap-0.5 p-1 bg-gray-100 dark:bg-gray-700 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setActiveTab('page1')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'page1' ? 'bg-lasso-navy text-white shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'}`}
+              >
+                Notes &amp; Addendum
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('page2')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'page2' ? 'bg-lasso-navy text-white shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'}`}
+              >
+                Monthly Summary
+              </button>
+            </div>
+          </ModuleHeader>
 
           {activeTab === 'page1' && (
           <>
@@ -1140,7 +1166,7 @@ export default function ProgressNotesPage() {
               <div className="flex flex-wrap items-center gap-4">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Month / Year:</label>
                 {monthFilterKey ? (
-                  <span className="text-sm font-medium text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 bg-gray-50 dark:bg-gray-700">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
                     {formatMonthYearDisplay(monthFilterKey)}
                   </span>
                 ) : (
