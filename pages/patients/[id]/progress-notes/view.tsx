@@ -358,6 +358,7 @@ export default function ProgressNotesPage() {
   const [editingEntry, setEditingEntry] = useState<ProgressNoteEntry | null>(null)
   const [editNotes, setEditNotes] = useState('')
   const [editSaving, setEditSaving] = useState(false)
+  const [activeSummarySection, setActiveSummarySection] = useState('sum-vitals')
 
   // New entry being added (unsaved row)
   const [newDate, setNewDate] = useState<string>(() => localTodayYMD())
@@ -759,6 +760,24 @@ export default function ProgressNotesPage() {
     }, SUMMARY_DEBOUNCE_MS)
   }
 
+  // Track which Monthly Summary section is in view for the left-nav highlight
+  useEffect(() => {
+    if (activeTab !== 'page2') return
+    const ids = ['sum-vitals','sum-medication','sum-treatments','sum-adl','sum-skin','sum-pain','sum-mental','sum-changes','sum-plan','sum-signature']
+    const observers: IntersectionObserver[] = []
+    ids.forEach(id => {
+      const el = document.getElementById(id)
+      if (!el) return
+      const obs = new IntersectionObserver(
+        ([entry]) => { if (entry.isIntersecting) setActiveSummarySection(id) },
+        { rootMargin: '-15% 0px -75% 0px' }
+      )
+      obs.observe(el)
+      observers.push(obs)
+    })
+    return () => observers.forEach(o => o.disconnect())
+  }, [activeTab])
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -1078,7 +1097,42 @@ export default function ProgressNotesPage() {
           )}
 
           {activeTab === 'page2' && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="flex gap-6 items-start">
+            {/* ── Sticky left navigation ─────────────────────────────── */}
+            <nav className="sticky top-44 w-44 shrink-0 hidden lg:block">
+              <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3 px-2">Sections</p>
+              <ul className="space-y-0.5">
+                {[
+                  { id: 'sum-vitals',     label: 'Monthly Summary' },
+                  { id: 'sum-medication', label: 'Medication' },
+                  { id: 'sum-treatments', label: 'Treatments' },
+                  { id: 'sum-adl',        label: 'ADL / Ambulation' },
+                  { id: 'sum-skin',       label: 'Skin Integrity' },
+                  { id: 'sum-pain',       label: 'Pain' },
+                  { id: 'sum-mental',     label: 'Mental' },
+                  { id: 'sum-changes',    label: 'Changes & Actions' },
+                  { id: 'sum-plan',       label: 'Plan of Care' },
+                  { id: 'sum-signature',  label: 'Signature' },
+                ].map(s => (
+                  <li key={s.id}>
+                    <button
+                      type="button"
+                      onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                        activeSummarySection === s.id
+                          ? 'bg-lasso-teal/10 text-lasso-teal font-semibold'
+                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+
+            {/* ── Form content ───────────────────────────────────────── */}
+            <div className="flex-1 min-w-0">
             <div className="px-6 py-4 space-y-6">
               <h2 className="text-center font-bold text-gray-900 dark:text-white">MONTHLY SUMMARY</h2>
 
@@ -1116,7 +1170,7 @@ export default function ProgressNotesPage() {
                 const weightDiff = hasWeightChange ? currentWtNum - previousWtNum : null
                 const weightUnit = (summaryForm.weight_unit === 'kg' || summaryForm.weight_unit === 'lbs') ? summaryForm.weight_unit : 'lbs'
                 return (
-              <section className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+              <section id="sum-vitals" className="scroll-mt-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Monthly Summary</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-3">
                   {(['bp', 'pulse', 'resp', 'temp'] as const).map(f => (
@@ -1151,7 +1205,7 @@ export default function ProgressNotesPage() {
               })()}
 
               {/* Medication */}
-              <section className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+              <section id="sum-medication" className="scroll-mt-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Medication</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-3">
                   {(['medication_available_yn', 'medication_secured_yn', 'taking_medications_yn'] as const).map(f => (
@@ -1184,7 +1238,7 @@ export default function ProgressNotesPage() {
               </section>
 
               {/* Treatments */}
-              <section className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+              <section id="sum-treatments" className="scroll-mt-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Treatments</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
@@ -1217,7 +1271,7 @@ export default function ProgressNotesPage() {
               </section>
 
               {/* ADL */}
-              <section className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+              <section id="sum-adl" className="scroll-mt-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">ADL / Ambulation / Continence / BM</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
@@ -1260,7 +1314,7 @@ export default function ProgressNotesPage() {
               </section>
 
               {/* Skin Integrity */}
-              <section className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+              <section id="sum-skin" className="scroll-mt-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Skin Integrity</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
@@ -1286,7 +1340,7 @@ export default function ProgressNotesPage() {
               </section>
 
               {/* Pain */}
-              <section className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+              <section id="sum-pain" className="scroll-mt-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Pain</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
@@ -1316,7 +1370,7 @@ export default function ProgressNotesPage() {
               </section>
 
               {/* Mental Status */}
-              <section className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+              <section id="sum-mental" className="scroll-mt-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Mental</h3>
                 <div className="mb-3">
                   <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Select all that apply (comma-separated or type)</label>
@@ -1330,7 +1384,7 @@ export default function ProgressNotesPage() {
               </section>
 
               {/* Changes and Actions */}
-              <section className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+              <section id="sum-changes" className="scroll-mt-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Changes and Actions</h3>
                 <div className="space-y-3 mb-3">
                   <div>
@@ -1373,13 +1427,13 @@ export default function ProgressNotesPage() {
               </section>
 
               {/* Plan of Care */}
-              <section className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+              <section id="sum-plan" className="scroll-mt-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Plan of Care</h3>
                 <textarea value={summaryForm.plan_of_care ?? ''} onChange={(e) => updateSummaryField('plan_of_care', e.target.value)} disabled={readOnly} rows={4} className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 text-gray-900 dark:text-white" />
               </section>
 
               {/* Signature / Title / Date */}
-              <section className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+              <section id="sum-signature" className="scroll-mt-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Signature / Title / Date</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
@@ -1419,6 +1473,7 @@ export default function ProgressNotesPage() {
                   ) : null}
                 </div>
               </section>
+            </div>
             </div>
           </div>
           )}
