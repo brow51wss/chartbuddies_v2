@@ -2156,8 +2156,22 @@ export default function ViewMARForm() {
     return Math.min(31, now.getDate())
   }, [marForm?.month_year])
 
-  // When navigating to a past/future month todayDayInViewedMar becomes null — the toggle
-  // hides but marViewMode could still be 'daily', leaving the page blank. Reset to monthly.
+  /**
+   * The day number used by the Day View (Today's Med Pass).
+   * For the current month → today's date.
+   * For past/future months → the last calendar day of that month.
+   * Always non-null when marForm is loaded, so the toggle is always visible.
+   */
+  const effectiveDayViewDay = React.useMemo(() => {
+    if (todayDayInViewedMar !== null) return todayDayInViewedMar
+    if (!marForm?.month_year) return null
+    const parsed = parseMARMonthYear(marForm.month_year)
+    if (!parsed) return null
+    return new Date(parsed.y, parsed.m, 0).getDate() // last day of month
+  }, [todayDayInViewedMar, marForm?.month_year])
+
+  // Auto-reset to Monthly Grid when navigating to a non-current month
+  // so the page never lands on a blank Day View.
   useEffect(() => {
     if (todayDayInViewedMar === null) setMarViewMode('monthly')
   }, [todayDayInViewedMar])
@@ -3733,13 +3747,17 @@ export default function ViewMARForm() {
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">From your profile (assigned facility)</p>
               </div>
             </div>
-            {todayDayInViewedMar !== null && (
+            {effectiveDayViewDay !== null && (
               <div className="inline-flex items-center gap-0.5 p-1 bg-gray-100 dark:bg-gray-700 rounded-xl">
                 <button
                   type="button"
+                  disabled={todayDayInViewedMar === null}
                   onClick={() => setMarViewMode('daily')}
+                  title={todayDayInViewedMar === null ? 'Only available for the current month' : undefined}
                   className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    marViewMode === 'daily'
+                    todayDayInViewedMar === null
+                      ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed'
+                      : marViewMode === 'daily'
                       ? 'bg-lasso-navy text-white shadow-sm'
                       : 'text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'
                   }`}
@@ -4866,8 +4884,8 @@ export default function ViewMARForm() {
                   Time periods (Morning / Afternoon / Evening / Overnight) are derived from each
                   medication's scheduled `hour`. PRN section shows today's administered records.
                   ──────────────────────────────────────────────────────────────────────────── */}
-              {marViewMode === 'daily' && todayDayInViewedMar !== null && (() => {
-                const _today = todayDayInViewedMar!
+              {marViewMode === 'daily' && effectiveDayViewDay !== null && (() => {
+                const _today = effectiveDayViewDay!
                 const _now   = new Date()
                 const _nowMins = _now.getHours() * 60 + _now.getMinutes()
                 const _parsed  = parseMARMonthYear(marForm.month_year)
@@ -6273,13 +6291,13 @@ export default function ViewMARForm() {
       )}
 
       {/* Day-View PRN Log Modal — two-step flow used by "+ Log PRN" in Today's Med Pass */}
-      {showDayViewPRNModal && todayDayInViewedMar !== null && (() => {
+      {showDayViewPRNModal && effectiveDayViewDay !== null && (() => {
         const _p  = parseMARMonthYear(marForm?.month_year || '')
         const _todayYMD = _p
-          ? `${_p.y}-${String(_p.m).padStart(2, '0')}-${String(todayDayInViewedMar).padStart(2, '0')}`
+          ? `${_p.y}-${String(_p.m).padStart(2, '0')}-${String(effectiveDayViewDay).padStart(2, '0')}`
           : ''
         const _abbr = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-        const _monthDay = _p ? `${_abbr[_p.m - 1]} ${todayDayInViewedMar}` : ''
+        const _monthDay = _p ? `${_abbr[_p.m - 1]} ${effectiveDayViewDay}` : ''
         return (
           <DayViewPRNLogModal
             onClose={() => setShowDayViewPRNModal(false)}
@@ -6291,7 +6309,7 @@ export default function ViewMARForm() {
                 console.error('Error logging PRN:', err)
               }
             }}
-            todayDay={todayDayInViewedMar}
+            todayDay={effectiveDayViewDay}
             todayDateYMD={_todayYMD}
             subtitleMonthDay={_monthDay}
             prnMedicationList={prnMedicationList}
