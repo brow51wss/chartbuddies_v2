@@ -57,7 +57,8 @@ export default function StaffLogin() {
   const [loginError, setLoginError] = useState('')
   const passwordRef = useRef<HTMLInputElement>(null)
 
-  // Success / clock-in
+  // Success — keep staff reference separate so closeModal() doesn't wipe it
+  const [clockedInStaff, setClockedInStaff] = useState<SafeUserProfile | null>(null)
   const [clockInTime, setClockInTime] = useState('')
 
   // Redirect if already logged in
@@ -151,6 +152,8 @@ export default function StaffLogin() {
     // TODO: Record clock-in once shift_logs table exists.
     // Columns needed: user_id, hospital_id, clock_in (timestamptz), clock_out (nullable timestamptz)
     const now = new Date()
+    // Capture staff before closeModal() nullifies selectedStaff
+    setClockedInStaff(selectedStaff)
     setClockInTime(now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }))
     closeModal()
     setStep('success')
@@ -159,13 +162,8 @@ export default function StaffLogin() {
   }
 
   const handleContinueToDashboard = () => {
-    if (!selectedStaff) return
-    // Mirror existing login flow: if no signature/initials yet, go to onboarding
-    if (!selectedStaff.staff_signature || !selectedStaff.staff_initials) {
-      router.push('/onboarding')
-    } else {
-      router.push('/dashboard')
-    }
+    // Always go to dashboard — it handles the onboarding banner internally
+    router.push('/dashboard')
   }
 
   return (
@@ -323,12 +321,12 @@ export default function StaffLogin() {
       {/* ════════════════════════════════
           STEP 3 — Clock-in confirmation
       ════════════════════════════════ */}
-      {step === 'success' && selectedStaff && (
+      {step === 'success' && clockedInStaff && (
         <div className="min-h-screen flex flex-col items-center justify-center p-6">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-8 w-full max-w-sm text-center">
             <div className="text-5xl mb-4">✅</div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-              Welcome, {getFirstName(selectedStaff)}
+              Welcome, {getFirstName(clockedInStaff)}
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
               You are now clocked in. Your shift has started.
@@ -348,7 +346,7 @@ export default function StaffLogin() {
               <div className="flex justify-between px-4 py-3">
                 <span className="text-gray-500 dark:text-gray-400 font-medium">Role</span>
                 <span className="font-semibold text-gray-900 dark:text-white">
-                  {getRoleLabel(selectedStaff.role)}
+                  {getRoleLabel(clockedInStaff.role)}
                 </span>
               </div>
             </div>
