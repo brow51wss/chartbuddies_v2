@@ -489,3 +489,28 @@ The EHR app (`app.lasso-app.com`) is hosted on AWS Amplify. The database is AWS 
 - Billing/e-commerce work is intentionally paused until live stability is restored.
 - Live homepage incidents: **§3** tracker + **§4** line-by-line actions. Product work: **§5** (ordered 1–8 + extended backlog + **MAR & Patient Binder — team intake 2026-05-12**). Dev observations: **§6**. Partner checklist: **§6a** (2026-04-18).
 
+---
+
+## 14) PENDING STUDY — Live Security Testing Tools
+
+**Noted:** 2026-08-11 · **Status:** REMIND AT NEXT SESSION START
+
+Before these tools are used on the project, dedicated time is needed to fully understand:
+
+### A) k6 (Rate Limit & Load Testing)
+- **WHEN** to use it: after implementing rate limiting — to verify the limits actually fire
+- **HOW** to use it: write a `.js` test script, run `k6 run test-file.js`, read the output
+- **WHERE** to use it: against staging/preview URLs — never blindly against production
+- **Understand**: what a 429 response means, how to interpret pass/fail results, how to set thresholds
+- Install: `brew install k6` — docs: k6.io/docs
+
+### B) DAST — Dynamic Application Security Testing (OWASP ZAP / Burp Suite / Nuclei)
+- **WHEN** to use it: after deploying security fixes — to verify they hold under real attack simulation
+- **HOW** to use it: point tool at a running URL, run automated scan, read the report
+- **WHERE** to use it: staging only — DAST sends real attack payloads and can break things
+- **Understand**: difference between active vs passive scan, how to read severity findings, how results map to code fixes
+- Start with: OWASP ZAP (free, zaproxy.org) — it is the most beginner-friendly
+- Also already used: isitsecure.ai (lightweight DAST — re-run after fixes to verify progress)
+
+**Note to AI:** Surface this item at the start of the next session before doing anything else.
+

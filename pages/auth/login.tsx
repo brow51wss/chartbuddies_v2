@@ -114,6 +114,16 @@ export default function Login() {
       }
       
       if (profile) {
+        // This login is restricted to superadmin and head_nurse (PCG) only.
+        // Nurses must use /auth/staff-login.
+        if (profile.role === 'nurse') {
+          await supabase.auth.signOut()
+          setError('This login is for facility administrators only. Please use the staff login.')
+          setLoading(false)
+          loginInFlightRef.current = false
+          return
+        }
+
         // If user has no facility, try to apply a pending invite for their email (e.g. they signed up earlier but invite wasn't applied)
         const needsFacility = !profile.hospital_id
         if (needsFacility) {
@@ -160,6 +170,9 @@ export default function Login() {
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
               Welcome Back
             </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Administrator &amp; facility owner access only
+            </p>
           </div>
 
           {error && (
@@ -262,9 +275,9 @@ export default function Login() {
 
           <div className="mt-8 text-center">
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Don't have an account?{' '}
-              <Link href="/auth/signup" className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue dark:hover:text-lasso-blue/80 font-medium transition-colors duration-200">
-                Sign up
+              Are you a staff member?{' '}
+              <Link href="/auth/staff-login" className="text-lasso-blue hover:text-lasso-teal dark:text-lasso-blue dark:hover:text-lasso-blue/80 font-medium transition-colors duration-200">
+                Staff login
               </Link>
             </p>
           </div>
