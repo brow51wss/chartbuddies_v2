@@ -128,6 +128,10 @@ export async function rdsDeleteMarMedication(medId: string): Promise<void> {
 // MAR Administrations
 // ---------------------------------------------------------------------------
 
+export async function rdsListAdministrations(marMedicationId: string): Promise<any[]> {
+  return rdsApiFetch(`/api/rds/mar/administrations?mar_medication_id=${marMedicationId}`)
+}
+
 export async function rdsUpsertAdministration(body: Record<string, any>): Promise<any> {
   return rdsApiFetch('/api/rds/mar/administrations', {
     method: 'POST',

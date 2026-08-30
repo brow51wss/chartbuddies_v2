@@ -4,8 +4,8 @@ import { signOut } from '../lib/auth'
 import { useReadOnly } from '../contexts/ReadOnlyContext'
 import type { UserProfile, Patient } from '../types/auth'
 
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000
-const WARN_BEFORE_MS  =  1 * 60 * 1000
+const IDLE_TIMEOUT_MS = 60 * 60 * 1000
+const WARN_BEFORE_MS  =  2 * 60 * 1000
 
 function facilityInitials(name: string): string {
   return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'F'
@@ -273,7 +273,9 @@ export default function DashboardLayout({
 
         {/* Main content area */}
         <main className="flex-1 overflow-y-auto p-7">
-          {children}
+          <div className="w-full max-w-[1120px]">
+            {children}
+          </div>
         </main>
       </div>
 
