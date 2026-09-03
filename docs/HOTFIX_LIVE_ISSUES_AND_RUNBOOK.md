@@ -477,8 +477,8 @@ The EHR app (`app.lasso-app.com`) is hosted on AWS Amplify. The database is AWS 
 - Configure Amplify Lambda functions to run inside the same VPC as RDS.
 - Set RDS "Publicly accessible" to `No`.
 - Update RDS security group to allow port 5432 only from the Lambda security group (not the open internet).
-- Fix `rejectUnauthorized: false` in `lib/rds.ts` — use the AWS RDS CA bundle instead of disabling cert verification.
-- Fix `NODE_TLS_REJECT_UNAUTHORIZED = '0'` in `lib/rds.ts` — this disables TLS cert verification globally for the entire Node.js process.
+- Later (not this ship): install the AWS RDS CA on the pool and set `rejectUnauthorized: true`. Then run a Sentinel `networking-touched` pass. Do not treat caregiver/auth as needing a re-audit for this.
+- `NODE_TLS_REJECT_UNAUTHORIZED = '0'` was removed (2026-09-03). Add-resident then failed (`SELF_SIGNED_CERT_IN_CHAIN`) because the URI `sslmode=require` overrode `Pool.ssl`. Current state: `sslmode` is stripped; the RDS pool still uses `rejectUnauthorized: false` only. Do not put the process-wide bypass back.
 
 **Priority:** Important for HIPAA compliance before onboarding real facilities at scale. Not a blocker for current demo/development phase.
 

@@ -3,16 +3,20 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
-import type { Hospital, UserProfile } from '../../types/auth'
+import type { Hospital } from '../../types/auth'
 
-// Safe subset — email is intentionally absent (never sent from /api/staff/users)
-type SafeUserProfile = Omit<UserProfile, 'email' | 'is_active' | 'created_at' | 'updated_at'>
+type StaffTile = {
+  id: string
+  full_name: string
+  first_name: string | null
+  last_name: string | null
+  staff_initials_text: string | null
+  role: string
+}
 
 type Step = 'facility' | 'staff' | 'success'
 
-function getInitials(profile: SafeUserProfile): string {
-  // staff_initials_text holds the actual letter initials (e.g. "KM")
-  // staff_initials holds the S3 image path — do not use for display text
+function getInitials(profile: StaffTile): string {
   if (profile.staff_initials_text) return profile.staff_initials_text.toUpperCase()
   if (profile.first_name && profile.last_name) {
     return (profile.first_name[0] + profile.last_name[0]).toUpperCase()
@@ -26,7 +30,7 @@ function getInitials(profile: SafeUserProfile): string {
     .toUpperCase() || '?'
 }
 
-function getFirstName(profile: SafeUserProfile): string {
+function getFirstName(profile: StaffTile): string {
   return profile.first_name || profile.full_name.split(' ')[0] || profile.full_name
 }
 
@@ -46,19 +50,19 @@ export default function StaffLogin() {
   const searchTimer = useRef<NodeJS.Timeout | null>(null)
 
   // Staff grid
-  const [staffList, setStaffList] = useState<SafeUserProfile[]>([])
+  const [staffList, setStaffList] = useState<StaffTile[]>([])
   const [staffLoading, setStaffLoading] = useState(false)
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false)
-  const [selectedStaff, setSelectedStaff] = useState<SafeUserProfile | null>(null)
+  const [selectedStaff, setSelectedStaff] = useState<StaffTile | null>(null)
   const [password, setPassword] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginError, setLoginError] = useState('')
   const passwordRef = useRef<HTMLInputElement>(null)
 
   // Success — keep staff reference separate so closeModal() doesn't wipe it
-  const [clockedInStaff, setClockedInStaff] = useState<SafeUserProfile | null>(null)
+  const [clockedInStaff, setClockedInStaff] = useState<StaffTile | null>(null)
   const [clockInTime, setClockInTime] = useState('')
 
   // Redirect if already logged in
@@ -68,17 +72,13 @@ export default function StaffLogin() {
     })
   }, [router])
 
-  // Facility search with 300ms debounce — hospitals table has an anon RLS SELECT policy
   const searchFacilities = useCallback(async (q: string) => {
-    if (!q.trim()) { setResults([]); return }
+    const trimmed = q.trim()
+    if (trimmed.length < 2) { setResults([]); return }
     setSearching(true)
-    const { data } = await supabase
-      .from('hospitals')
-      .select('id, name, facility_type, address, is_active')
-      .ilike('name', `%${q.trim()}%`)
-      .eq('is_active', true)
-      .limit(6)
-    setResults(data || [])
+    const res = await fetch(`/api/staff/facilities?q=${encodeURIComponent(trimmed)}`)
+    const data: Hospital[] = res.ok ? await res.json() : []
+    setResults(Array.isArray(data) ? data : [])
     setSearching(false)
   }, [])
 
@@ -97,12 +97,12 @@ export default function StaffLogin() {
 
     // Fetch staff via server-side API route — email is never returned to the client
     const res = await fetch(`/api/staff/users?hospital_id=${facility.id}`)
-    const data: SafeUserProfile[] = res.ok ? await res.json() : []
+    const data: StaffTile[] = res.ok ? await res.json() : []
     setStaffList(data)
     setStaffLoading(false)
   }
 
-  const openModal = (staff: SafeUserProfile) => {
+  const openModal = (staff: StaffTile) => {
     setSelectedStaff(staff)
     setPassword('')
     setLoginError('')
@@ -419,13 +419,10 @@ export default function StaffLogin() {
               </button>
             </form>
 
-            <div className="flex items-center justify-between mt-3">
-              <Link
-                href="/auth/forgot-password"
-                className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 font-medium"
-              >
-                Forgot password?
-              </Link>
+            <p className="text-center text-xs text-gray-400 mt-3">
+              Forgot your password? Ask your administrator to reset it.
+            </p>
+            <div className="flex justify-center mt-2">
               <button
                 type="button"
                 onClick={closeModal}

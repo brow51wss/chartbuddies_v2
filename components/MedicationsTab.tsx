@@ -14,7 +14,16 @@ import {
   rdsPatchMarMedication,
   rdsDeleteMarMedication,
   rdsCreateMarMedication,
+  rdsCreatePrnRecord,
 } from '../lib/rdsApi'
+import {
+  shouldSyncMarPrnRecordToProgressNotes,
+  upsertProgressNoteFromPRNRecordRds,
+} from '../lib/prn-progress-notes-rds'
+import {
+  removeMarAdminLineFromProgressNotes,
+  upsertMarAdminLineInProgressNotes,
+} from '../lib/mar-admin-progress-notes-rds'
 
 type MarView = 'yesterday' | 'today' | 'tomorrow' | 'week' | 'month'
 
@@ -337,6 +346,10 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
   const [prnSaving, setPrnSaving] = useState(false)
   const [removingPrn, setRemovingPrn] = useState<any | null>(null)
   const [prnRemoving, setPrnRemoving] = useState(false)
+  const [loggingPrn, setLoggingPrn] = useState<any | null>(null)
+  const [logPrnDraft, setLogPrnDraft] = useState({ hour: '', result: '', note: '' })
+  const [logPrnSaving, setLogPrnSaving] = useState(false)
+  const [logPrnError, setLogPrnError] = useState('')
   const monthScrollRef = useRef<HTMLDivElement>(null)
 
   function hourToInput(h: number | string | null | undefined): string {
@@ -413,6 +426,17 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
       reason: prn.reason || '',
       start_date: (prn.start_date || '').slice(0, 10),
     })
+  }
+
+  function openLogPrn(med: any) {
+    setLoggingPrn(med)
+    setLogPrnDraft({ hour: '', result: '', note: '' })
+    setLogPrnError('')
+  }
+
+  function closeLogPrn() {
+    setLoggingPrn(null)
+    setLogPrnError('')
   }
 
   function closeEditPrn() {
@@ -612,6 +636,62 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
   const allergies    = parseList(patient.allergies)
   const canManage    = userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin'
 
+  async function submitLogPrn() {
+    if (!loggingPrn || !marForm || !userProfile) return
+    const hour = logPrnDraft.hour.trim()
+    if (!hour) {
+      setLogPrnError('Time administered is required.')
+      return
+    }
+    const reason = (loggingPrn.reason || '').trim()
+    if (!reason) {
+      setLogPrnError('This PRN has no reason on file. Edit the PRN in Manage meds first.')
+      return
+    }
+    const medication = (loggingPrn.medication || loggingPrn.medication_name || '').trim()
+    if (!medication) {
+      setLogPrnError('Medication name is missing.')
+      return
+    }
+    setLogPrnSaving(true)
+    setLogPrnError('')
+    try {
+      const inserted = await rdsCreatePrnRecord({
+        mar_form_id: marForm.id,
+        start_date: (loggingPrn.start_date || '').slice(0, 10) || null,
+        date: todayDateStr,
+        hour,
+        initials: userInitials,
+        medication,
+        dosage: (loggingPrn.dosage || '').trim() || null,
+        reason,
+        result: logPrnDraft.result.trim() || null,
+        note: logPrnDraft.note.trim() || null,
+      })
+      const rec = inserted?.prn_record || inserted
+      if (rec) {
+        setPrnRecords(prev => [...prev, rec])
+        if (shouldSyncMarPrnRecordToProgressNotes(rec) && userProfile.id) {
+          try {
+            await upsertProgressNoteFromPRNRecordRds({
+              patientId: patient.id,
+              record: rec,
+              physicianName: patient.physician_name ?? marForm.physician_name ?? null,
+              createdBy: userProfile.id,
+            })
+          } catch (syncErr) {
+            console.error('PRN → Progress Notes sync failed:', syncErr)
+          }
+        }
+      }
+      closeLogPrn()
+    } catch (err: any) {
+      setLogPrnError(err.message ?? 'Failed to log PRN')
+    } finally {
+      setLogPrnSaving(false)
+    }
+  }
+
   // ── Data loading ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -730,6 +810,7 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
     setCellSaving(true)
     const statusMap: Record<string, string> = { Given: 'Given', DC: 'DC', R: 'Refused', W: 'Withheld' }
     const status = statusMap[editingValue] ?? 'Given'
+    const statusLabel = status === 'DC' ? 'Discontinued' : status
     try {
       const rec = await rdsUpsertAdministration({
         mar_medication_id: editingCell.medId,
@@ -740,6 +821,24 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
         administered_at: status === 'Given' ? new Date().toISOString() : null,
       })
       applyAdminToMap(editingCell.medId, editingCell.day, rec)
+      const med = medications.find(m => m.id === editingCell.medId)
+      const noteDate = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(editingCell.day).padStart(2, '0')}`
+      if (userProfile.id && med?.medication_name !== 'VITALS') {
+        try {
+          await upsertMarAdminLineInProgressNotes({
+            patientId: patient.id,
+            createdBy: userProfile.id,
+            physicianName: patient.physician_name ?? marForm?.physician_name ?? null,
+            noteDate,
+            timeLabel: med?.hour != null && med.hour !== '' ? fmtHour(med.hour) : undefined,
+            medicationName: med?.medication_name,
+            statusLabel,
+            note: editingNote.trim() || null,
+          })
+        } catch (syncErr) {
+          console.error('MAR → Progress Notes sync failed:', syncErr)
+        }
+      }
       closeCellModal()
     } catch (err: any) {
       alert(err.message ?? 'Failed to save')
@@ -750,6 +849,8 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
     if (!editingCell) return
     setCellSaving(true)
     try {
+      const med = medications.find(m => m.id === editingCell.medId)
+      const noteDate = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(editingCell.day).padStart(2, '0')}`
       await rdsUpsertAdministration({
         mar_medication_id: editingCell.medId,
         day_number: editingCell.day,
@@ -759,6 +860,18 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
         administered_at: null,
       })
       applyAdminToMap(editingCell.medId, editingCell.day, null)
+      if (med?.medication_name !== 'VITALS') {
+        try {
+          await removeMarAdminLineFromProgressNotes({
+            patientId: patient.id,
+            noteDate,
+            timeLabel: med?.hour != null && med.hour !== '' ? fmtHour(med.hour) : undefined,
+            medicationName: med?.medication_name,
+          })
+        } catch (syncErr) {
+          console.error('MAR → Progress Notes clear failed:', syncErr)
+        }
+      }
       closeCellModal()
     } catch (err: any) {
       alert(err.message ?? 'Failed to clear')
@@ -994,10 +1107,13 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
                       badge={<span className="ml-1.5 text-[10px] font-bold text-[#2b8878] border border-[#2b8878]/30 rounded px-1">PRN</span>}
                     />
                   </span>
-                  <Link href={`/patients/${patient.id}/mar`}
-                    className="flex-shrink-0 border border-lasso-teal text-lasso-teal text-xs font-extrabold px-3 py-2 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors">
-                    Log PRN →
-                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => openLogPrn(med)}
+                    className="flex-shrink-0 border border-lasso-teal text-lasso-teal text-xs font-extrabold px-3 py-2 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors"
+                  >
+                    Log PRN
+                  </button>
                 </div>
               ))}
             </div>
@@ -1821,6 +1937,109 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
               <button type="button" onClick={() => setRemovingPrn(null)} className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">Cancel</button>
               <button type="button" onClick={confirmRemovePrn} disabled={prnRemoving} className="px-4 py-2 text-sm text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-40">
                 {prnRemoving ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {loggingPrn && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" onClick={closeLogPrn}>
+          <div
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 flex flex-col max-h-[90vh]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white uppercase">
+                  {loggingPrn.medication || loggingPrn.medication_name}
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  PRN Log · Day {todayNum} ({now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
+                </p>
+              </div>
+              <button type="button" onClick={closeLogPrn} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none" aria-label="Close">×</button>
+            </div>
+
+            {(loggingPrn.dosage || loggingPrn.reason) && (
+              <div className="px-5 py-2.5 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40 flex flex-wrap gap-x-4 gap-y-1 shrink-0">
+                {loggingPrn.dosage && (
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Dosage: </span>
+                    {loggingPrn.dosage}
+                  </div>
+                )}
+                {loggingPrn.reason && (
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Reason: </span>
+                    {loggingPrn.reason}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="overflow-y-auto flex-1 px-5 py-4">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                Log Administration
+              </p>
+              <div className="space-y-3 rounded-lg border border-gray-200 dark:border-gray-600 px-4 py-3 bg-gray-50 dark:bg-gray-700/40">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Time administered</label>
+                  <input
+                    type="time"
+                    value={logPrnDraft.hour}
+                    onChange={e => setLogPrnDraft(prev => ({ ...prev, hour: e.target.value }))}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Result / Response <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={logPrnDraft.result}
+                    onChange={e => setLogPrnDraft(prev => ({ ...prev, result: e.target.value }))}
+                    placeholder="e.g. Pain reduced from 7/10 to 3/10"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Notes <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <textarea
+                    value={logPrnDraft.note}
+                    onChange={e => setLogPrnDraft(prev => ({ ...prev, note: e.target.value }))}
+                    placeholder="Any additional observations…"
+                    rows={2}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal resize-none"
+                  />
+                </div>
+                {logPrnError && (
+                  <p className="text-sm text-red-500">{logPrnError}</p>
+                )}
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={submitLogPrn}
+                    disabled={logPrnSaving || !logPrnDraft.hour.trim()}
+                    className="px-3 py-1.5 text-sm text-white bg-lasso-teal rounded-lg hover:brightness-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={!logPrnDraft.hour.trim() ? 'Time is required' : undefined}
+                  >
+                    {logPrnSaving ? 'Saving…' : 'Log PRN'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 shrink-0">
+              <button
+                type="button"
+                onClick={closeLogPrn}
+                className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Done
               </button>
             </div>
           </div>

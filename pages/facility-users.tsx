@@ -8,26 +8,71 @@ import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile } from '../lib/auth'
 import type { UserProfile } from '../types/auth'
 
-interface FacilityUserRow {
+interface CaregiverTile {
   id: string
+  full_name: string
   first_name: string | null
-  middle_name: string | null
   last_name: string | null
-  full_name?: string | null
-  email: string
+  staff_initials_text: string | null
   role: string
   designation: string | null
-  invited_at: string | null
-  invite_code: string | null
-  verified_at: string | null
+}
+
+function tileInitials(c: CaregiverTile): string {
+  if (c.staff_initials_text?.trim()) return c.staff_initials_text.trim().toUpperCase().slice(0, 4)
+  const fn = c.first_name?.trim()?.[0] || ''
+  const ln = c.last_name?.trim()?.[0] || ''
+  if (fn && ln) return (fn + ln).toUpperCase()
+  return (
+    c.full_name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
+  )
+}
+
+function tileFirstName(c: CaregiverTile): string {
+  return c.first_name?.trim() || c.full_name.split(' ')[0] || c.full_name
+}
+
+function roleLabel(role: string, designation: string | null): string {
+  if (designation === 'PCG' || role === 'superadmin') return 'PCG'
+  if (role === 'head_nurse') return 'Head nurse'
+  return 'Nurse'
 }
 
 export default function FacilityUsersPage() {
   const router = useRouter()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
-  const [rows, setRows] = useState<FacilityUserRow[]>([])
+  const [caregivers, setCaregivers] = useState<CaregiverTile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [initials, setInitials] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [justAdded, setJustAdded] = useState('')
+  const [resetting, setResetting] = useState<CaregiverTile | null>(null)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetConfirm, setResetConfirm] = useState('')
+  const [resetSaving, setResetSaving] = useState(false)
+  const [resetError, setResetError] = useState('')
+
+  const canManage = userProfile?.role === 'superadmin' && Boolean(userProfile.hospital_id)
+  const canAdd = canManage
+
+  async function loadCaregivers(hospitalId: string) {
+    const { data, error: loadError } = await supabase
+      .from('user_profiles')
+      .select('id, full_name, first_name, last_name, staff_initials_text, role, designation, is_active')
+      .eq('hospital_id', hospitalId)
+      .eq('is_active', true)
+      .order('first_name', { ascending: true })
+
+    if (loadError) throw loadError
+    setCaregivers((data || []) as CaregiverTile[])
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -36,113 +81,150 @@ export default function FacilityUsersPage() {
         router.push('/auth/login')
         return
       }
-
-      // Only facility members with a hospital (superadmin/PCG and nurse/SCG) can view this page
-      if (!profile.hospital_id || (profile.role !== 'superadmin' && profile.role !== 'nurse')) {
+      if (!profile.hospital_id || (profile.role !== 'superadmin' && profile.role !== 'nurse' && profile.role !== 'head_nurse')) {
         router.push('/dashboard')
         return
       }
-
       setUserProfile(profile)
-
       try {
-        // Load users in this facility
-        const { data: users, error: usersError } = await supabase
-          .from('user_profiles')
-          .select('id, email, first_name, middle_name, last_name, full_name, role, designation')
-          .eq('hospital_id', profile.hospital_id)
-          .order('first_name', { ascending: true })
-
-        if (usersError) {
-          console.error('Error loading facility users:', usersError)
-          setError('Failed to load facility users')
-          setLoading(false)
-          return
-        }
-
-        // Load invites for this facility
-        const { data: invites, error: invitesError } = await supabase
-          .from('facility_invites')
-          .select('id, code, designation, invited_email, invited_at, used_by, used_at')
-          .eq('hospital_id', profile.hospital_id)
-
-        if (invitesError) {
-          console.error('Error loading invites:', invitesError)
-          setError('Failed to load facility invites')
-          setLoading(false)
-          return
-        }
-
-        const invitesByUserId = new Map<string, { invited_at: string | null; invite_code: string | null; verified_at: string | null }>()
-        ;(invites || []).forEach((inv) => {
-          if (!inv.used_by) return
-          const existing = invitesByUserId.get(inv.used_by)
-          // Prefer the most recent invite if there are multiple
-          if (!existing || (inv.invited_at && (!existing.invited_at || inv.invited_at > existing.invited_at))) {
-            invitesByUserId.set(inv.used_by, {
-              invited_at: inv.invited_at ?? null,
-              invite_code: inv.code ?? null,
-              verified_at: inv.used_at ?? null,
-            })
-          }
-        })
-
-        // Rows for verified/active users in the facility
-        const userRows: FacilityUserRow[] = (users || []).map((u) => {
-          const inviteInfo = invitesByUserId.get(u.id) || null
-          return {
-            id: u.id,
-            first_name: (u as any).first_name ?? null,
-            middle_name: (u as any).middle_name ?? null,
-            last_name: (u as any).last_name ?? null,
-            full_name: (u as any).full_name ?? null,
-            email: u.email,
-            role: u.role,
-            designation: u.designation,
-            invited_at: inviteInfo?.invited_at ?? null,
-            invite_code: inviteInfo?.invite_code ?? null,
-            verified_at: inviteInfo?.verified_at ?? null,
-          }
-        })
-
-        // Rows for invites sent but not yet verified (no account yet)
-        const pendingInviteRows: FacilityUserRow[] = (invites || [])
-          .filter((inv) => !inv.used_by && inv.invited_email)
-          .map((inv) => ({
-            id: `invite-${inv.id}`,
-            first_name: null,
-            middle_name: null,
-            last_name: null,
-            email: inv.invited_email!,
-            role: '—',
-            designation: inv.designation ?? null,
-            invited_at: inv.invited_at ?? null,
-            invite_code: inv.code ?? null,
-            verified_at: null,
-          }))
-
-        // Combine: verified users first (by name), then pending invites (by date invited, newest first)
-        const sortedUsers = [...userRows].sort((a, b) => {
-          const aName = [a.first_name, a.middle_name, a.last_name].filter(Boolean).join(' ')
-          const bName = [b.first_name, b.middle_name, b.last_name].filter(Boolean).join(' ')
-          return (aName || '—').localeCompare(bName || '—')
-        })
-        const sortedPending = [...pendingInviteRows].sort((a, b) => {
-          const aAt = a.invited_at || ''
-          const bAt = b.invited_at || ''
-          return bAt.localeCompare(aAt)
-        })
-        setRows([...sortedUsers, ...sortedPending])
-        setLoading(false)
-      } catch (err) {
-        console.error('Error loading facility users overview:', err)
-        setError('Failed to load facility users')
+        await loadCaregivers(profile.hospital_id)
+      } catch {
+        setError('Failed to load caregivers')
+      } finally {
         setLoading(false)
       }
     }
-
     load()
   }, [router])
+
+  function openAdd() {
+    setFirstName('')
+    setLastName('')
+    setInitials('')
+    setPassword('')
+    setConfirm('')
+    setSaveError('')
+    setJustAdded('')
+    setAdding(true)
+    setResetting(null)
+  }
+
+  function openReset(c: CaregiverTile) {
+    setResetPassword('')
+    setResetConfirm('')
+    setResetError('')
+    setJustAdded('')
+    setAdding(false)
+    setResetting(c)
+  }
+
+  function canResetTile(c: CaregiverTile): boolean {
+    if (!canManage || !userProfile) return false
+    if (c.id === userProfile.id) return false
+    if (c.role === 'superadmin' || c.designation === 'PCG') return false
+    return c.role === 'nurse' || c.role === 'head_nurse'
+  }
+
+  async function submitReset() {
+    if (!canManage || !resetting) return
+    if (resetPassword.length < 8) {
+      setResetError('Password must be at least 8 characters. Give this to the nurse for staff login.')
+      return
+    }
+    if (resetPassword !== resetConfirm) {
+      setResetError('Passwords do not match.')
+      return
+    }
+    setResetSaving(true)
+    setResetError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setResetError('Your session expired. Sign in again.')
+        return
+      }
+      const res = await fetch('/api/staff/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          user_profile_id: resetting.id,
+          password: resetPassword,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setResetError(json.error || 'Failed to reset password')
+        return
+      }
+      const name = tileFirstName(resetting)
+      setJustAdded(`${name}'s password was reset. Tell them the new password for staff login.`)
+      setResetting(null)
+    } catch {
+      setResetError('Failed to reset password')
+    } finally {
+      setResetSaving(false)
+    }
+  }
+
+  async function submitAdd() {
+    if (!canAdd) return
+    const fn = firstName.trim()
+    const ln = lastName.trim()
+    if (!fn || !ln) {
+      setSaveError('First name and last name are required.')
+      return
+    }
+    if (password.length < 8) {
+      setSaveError('Password must be at least 8 characters. Give this to the nurse for staff login.')
+      return
+    }
+    if (password !== confirm) {
+      setSaveError('Passwords do not match.')
+      return
+    }
+    setSaving(true)
+    setSaveError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setSaveError('Your session expired. Sign in again.')
+        return
+      }
+      const res = await fetch('/api/staff/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          first_name: fn,
+          last_name: ln,
+          initials: initials.trim(),
+          password,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSaveError(json.error || 'Failed to add caregiver')
+        return
+      }
+      if (json.caregiver) {
+        setCaregivers(prev => [...prev, json.caregiver].sort((a, b) =>
+          (a.first_name || a.full_name).localeCompare(b.first_name || b.full_name)
+        ))
+        const addedName = json.caregiver.first_name || json.caregiver.full_name
+        setJustAdded(`${addedName} can now clock in at staff login with the password you set.`)
+      }
+      setAdding(false)
+    } catch {
+      setSaveError('Failed to add caregiver')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -157,19 +239,20 @@ export default function FacilityUsersPage() {
   return (
     <ProtectedRoute>
       <Head>
-        <title>Facility Users | Lasso EHR</title>
+        <title>Caregivers | Lasso EHR</title>
       </Head>
       <AppHeader userProfile={userProfile} />
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-6">
           <Link href="/dashboard" className="text-sm text-gray-600 dark:text-gray-400 hover:text-lasso-teal">
             ← Back to Dashboard
           </Link>
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Facility Users</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Caregivers</h1>
         <p className="text-gray-600 dark:text-gray-400 mb-6">
-          Users assigned to your facility. For each user you can see their name, email, designation, and whether they joined via an invite.
+          People who can clock in at this facility. New nurses appear on staff login as a tile. No invite email.
+          {canManage && ' Forgot a password? Reset it here from any phone — then tell the nurse the new one.'}
         </p>
 
         {error && (
@@ -177,71 +260,218 @@ export default function FacilityUsersPage() {
             <p className="text-red-800 dark:text-red-200">{error}</p>
           </div>
         )}
+        {justAdded && (
+          <div className="mb-6 p-4 bg-teal-50 dark:bg-teal-900/20 border-l-4 border-lasso-teal rounded-md">
+            <p className="text-teal-900 dark:text-teal-100 text-sm">{justAdded}</p>
+          </div>
+        )}
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-900/40">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Email</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Role</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Designation</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Date Invited</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Invite Code</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Date Verified</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                      No users found for this facility.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((row) => {
-                    const fullName = [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(' ') || row.full_name || '—'
-                    const dateInvited = row.invited_at ? new Date(row.invited_at).toLocaleString() : '—'
-                    const dateVerified = row.verified_at ? new Date(row.verified_at).toLocaleString() : '—'
-                    const status =
-                      row.verified_at ? 'Verified' : row.invited_at ? 'Invited (pending)' : 'Active (no invite record)'
+        <div
+          className="grid gap-3"
+          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}
+        >
+          {caregivers.map(c => (
+            <div
+              key={c.id}
+              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex flex-col items-center gap-3"
+            >
+              <div className="w-14 h-14 rounded-full bg-[#2b8878] text-white flex items-center justify-center font-extrabold text-lg flex-shrink-0">
+                {tileInitials(c)}
+              </div>
+              <div className="text-center">
+                <div className="font-semibold text-sm text-gray-900 dark:text-white leading-tight">
+                  {tileFirstName(c)}
+                </div>
+                <div className="text-xs text-gray-400 mt-0.5">
+                  {roleLabel(c.role, c.designation)}
+                </div>
+              </div>
+              {canResetTile(c) && (
+                <button
+                  type="button"
+                  onClick={() => openReset(c)}
+                  className="text-xs font-semibold text-lasso-teal hover:underline"
+                >
+                  Reset password
+                </button>
+              )}
+            </div>
+          ))}
 
-                    return (
-                      <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/60">
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">{fullName}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.email}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 capitalize">{row.role}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{row.designation || '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{dateInvited}</td>
-                        <td className="px-4 py-3 text-sm font-mono text-gray-800 dark:text-gray-100 tracking-widest">
-                          {row.invite_code || '—'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{dateVerified}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <span
-                            className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                              row.verified_at
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
-                                : row.invited_at
-                                  ? 'bg-amber-50 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
-                                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800/60 dark:text-gray-200'
-                            }`}
-                          >
-                            {status}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
+          {canAdd && (
+            <button
+              type="button"
+              onClick={openAdd}
+              className="rounded-xl p-5 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-[#2b8878] hover:text-[#2b8878] min-h-[160px] transition-colors"
+            >
+              <span className="text-4xl font-light leading-none">+</span>
+              <span className="text-sm font-bold">Add caregiver</span>
+            </button>
+          )}
+        </div>
+
+        {!canAdd && caregivers.length === 0 && (
+          <p className="text-sm text-gray-400 mt-6">No caregivers yet. Ask the PCG to add staff.</p>
+        )}
+      </main>
+
+      {adding && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" onClick={() => !saving && setAdding(false)}>
+          <div
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white">Add caregiver</h2>
+              <button type="button" onClick={() => setAdding(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Close">×</button>
+            </div>
+            <form
+              onSubmit={e => {
+                e.preventDefault()
+                submitAdd()
+              }}
+            >
+              <div className="px-5 py-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 mb-1">First name *</label>
+                    <input
+                      value={firstName}
+                      onChange={e => setFirstName(e.target.value)}
+                      autoComplete="given-name"
+                      className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 mb-1">Last name *</label>
+                    <input
+                      value={lastName}
+                      onChange={e => setLastName(e.target.value)}
+                      autoComplete="family-name"
+                      className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 mb-1">Initials</label>
+                  <input
+                    value={initials}
+                    onChange={e => setInitials(e.target.value.toUpperCase().slice(0, 4))}
+                    placeholder="Auto from name if blank"
+                    autoComplete="off"
+                    className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 mb-1">Staff login password *</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">Tell the nurse this password. They use it on staff login — not an email invite.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 mb-1">Confirm password *</label>
+                  <input
+                    type="password"
+                    value={confirm}
+                    onChange={e => setConfirm(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                  />
+                </div>
+                {saveError && <p className="text-sm text-red-500">{saveError}</p>}
+              </div>
+              <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setAdding(false)}
+                  disabled={saving}
+                  className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 text-sm text-white bg-lasso-teal rounded-lg hover:brightness-90 disabled:opacity-40"
+                >
+                  {saving ? 'Adding…' : 'Add caregiver'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      </main>
+      )}
+
+      {resetting && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" onClick={() => !resetSaving && setResetting(null)}>
+          <div
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                Reset password — {tileFirstName(resetting)}
+              </h2>
+              <button type="button" onClick={() => !resetSaving && setResetting(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Close">×</button>
+            </div>
+            <form
+              onSubmit={e => {
+                e.preventDefault()
+                submitReset()
+              }}
+            >
+              <div className="px-5 py-4 space-y-3">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Set a new staff login password and tell {tileFirstName(resetting)} in person or by phone. This does not send an email.
+                </p>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 mb-1">New password *</label>
+                  <input
+                    type="password"
+                    value={resetPassword}
+                    onChange={e => setResetPassword(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 mb-1">Confirm password *</label>
+                  <input
+                    type="password"
+                    value={resetConfirm}
+                    onChange={e => setResetConfirm(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal"
+                  />
+                </div>
+                {resetError && <p className="text-sm text-red-500">{resetError}</p>}
+              </div>
+              <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setResetting(null)}
+                  disabled={resetSaving}
+                  className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetSaving}
+                  className="px-4 py-2 text-sm text-white bg-lasso-teal rounded-lg hover:brightness-90 disabled:opacity-40"
+                >
+                  {resetSaving ? 'Saving…' : 'Reset password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </ProtectedRoute>
   )
 }
-

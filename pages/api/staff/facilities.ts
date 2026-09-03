@@ -3,8 +3,6 @@ import getConfig from 'next/config'
 import { createClient } from '@supabase/supabase-js'
 import { clientIp, rateLimit, rejectTooMany } from '../../../lib/rate-limit'
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
 function serviceRoleKey(): string {
   const { serverRuntimeConfig } = getConfig() || {}
   return serverRuntimeConfig?.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -17,12 +15,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   res.setHeader('Cache-Control', 'no-store')
 
-  const limited = rateLimit(`staff-users:${clientIp(req)}`, 30, 60_000)
+  const limited = rateLimit(`staff-facilities:${clientIp(req)}`, 30, 60_000)
   if (!limited.ok) return rejectTooMany(res, limited.retryAfterSec)
 
-  const { hospital_id } = req.query
-  if (!hospital_id || typeof hospital_id !== 'string' || !UUID_RE.test(hospital_id)) {
-    return res.status(400).json({ error: 'hospital_id is required' })
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+  if (q.length < 2) {
+    return res.status(200).json([])
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -31,18 +29,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: 'Server is not configured' })
   }
 
-  const adminClient = createClient(supabaseUrl, serviceKey)
-  const { data, error } = await adminClient
-    .from('user_profiles')
-    .select('id, full_name, first_name, last_name, staff_initials_text, role')
-    .eq('hospital_id', hospital_id)
-    .in('role', ['nurse', 'head_nurse'])
+  const admin = createClient(supabaseUrl, serviceKey)
+  const { data, error } = await admin
+    .from('hospitals')
+    .select('id, name, facility_type, address, is_active')
+    .ilike('name', `%${q}%`)
     .eq('is_active', true)
-    .order('full_name')
+    .limit(6)
 
   if (error) {
-    console.error('[staff/users] query error:', error.message)
-    return res.status(500).json({ error: 'Failed to load staff' })
+    console.error('[staff/facilities] query error:', error.message)
+    return res.status(500).json({ error: 'Failed to search facilities' })
   }
 
   return res.status(200).json(data ?? [])

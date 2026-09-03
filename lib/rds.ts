@@ -22,9 +22,6 @@ types.setTypeParser(1082, (val: string) => val)
 import { createClient } from '@supabase/supabase-js'
 import getConfig from 'next/config'
 
-// Allow self-signed / AWS-managed TLS certs in Lambda environments
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-
 // ---------------------------------------------------------------------------
 // Connection pool (singleton, reused across Lambda warm invocations)
 // ---------------------------------------------------------------------------
@@ -33,7 +30,11 @@ let pool: Pool | null = null
 
 function getRdsConnectionString(): string {
   const { serverRuntimeConfig } = getConfig() || {}
-  return serverRuntimeConfig?.RDS_CONNECTION_STRING || process.env.RDS_CONNECTION_STRING || ''
+  const raw = serverRuntimeConfig?.RDS_CONNECTION_STRING || process.env.RDS_CONNECTION_STRING || ''
+  // node-pg honors sslmode=require|verify-full from the URI and that wins over Pool.ssl,
+  // which is why rejectUnauthorized: false was ignored after we removed the process-wide
+  // NODE_TLS_REJECT_UNAUTHORIZED=0 bypass. Strip sslmode so TLS policy stays on this pool only.
+  return raw.replace(/([?&])sslmode=[^&]*/gi, '$1').replace(/[?&]$/, '').replace(/\?&/, '?')
 }
 
 function getServiceRoleKey(): string {

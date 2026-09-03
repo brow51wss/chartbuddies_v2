@@ -1,13 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
 import { useReadOnly } from '../contexts/ReadOnlyContext'
+import { clearIdleActivity, useIdleSession } from '../hooks/useIdleSession'
+import { IdleSessionChip, IdleSessionModal } from './IdleSessionUI'
 import { togglePatientStickyBar } from './PatientStickyBar'
 import type { UserProfile } from '../types/auth'
-
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000  // 15 minutes
-const WARN_BEFORE_MS  =  1 * 60 * 1000  // warn 1 minute before logout
 
 interface AppHeaderProps {
   userProfile?: UserProfile | null
@@ -32,15 +31,19 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
   const [exitPassword, setExitPassword] = useState('')
   const [exitError, setExitError] = useState('')
   const [exiting, setExiting] = useState(false)
-  const [showIdleWarning, setShowIdleWarning] = useState(false)
-  const [idleSecondsLeft, setIdleSecondsLeft] = useState(60)
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const warnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const userProfile = userProfileProp ?? fetchedProfile
   const { isReadOnly, enterReadOnly, exitReadOnly } = useReadOnly()
   const canUseReadOnly = userProfile?.role === 'superadmin'
+  const idle = useIdleSession({
+    userId: userProfile?.id,
+    fullName: userProfile?.full_name,
+    firstName: userProfile?.first_name,
+    onExpire: async () => {
+      await signOut()
+      router.push('/auth/login?reason=idle')
+    },
+  })
 
   const handleExitReadOnly = async () => {
     setExitError('')
@@ -77,47 +80,15 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
     return () => { cancelled = true }
   }, [userProfileProp])
 
-  const handleLogout = onLogout ?? (async () => {
+  const handleLogout = async () => {
+    clearIdleActivity(userProfile?.id)
+    if (onLogout) {
+      await onLogout()
+      return
+    }
     await signOut()
     router.push('/auth/login')
-  })
-
-  const clearIdleTimers = useCallback(() => {
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
-    if (warnTimerRef.current) clearTimeout(warnTimerRef.current)
-    if (countdownRef.current) clearInterval(countdownRef.current)
-  }, [])
-
-  const startIdleTimers = useCallback(() => {
-    clearIdleTimers()
-    setShowIdleWarning(false)
-
-    warnTimerRef.current = setTimeout(() => {
-      setIdleSecondsLeft(60)
-      setShowIdleWarning(true)
-      countdownRef.current = setInterval(() => {
-        setIdleSecondsLeft((s) => s - 1)
-      }, 1000)
-    }, IDLE_TIMEOUT_MS - WARN_BEFORE_MS)
-
-    idleTimerRef.current = setTimeout(async () => {
-      clearIdleTimers()
-      setShowIdleWarning(false)
-      await signOut()
-      router.push('/auth/login?reason=idle')
-    }, IDLE_TIMEOUT_MS)
-  }, [clearIdleTimers, router])
-
-  useEffect(() => {
-    const events = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll']
-    const reset = () => startIdleTimers()
-    events.forEach((e) => window.addEventListener(e, reset, { passive: true }))
-    startIdleTimers()
-    return () => {
-      events.forEach((e) => window.removeEventListener(e, reset))
-      clearIdleTimers()
-    }
-  }, [startIdleTimers, clearIdleTimers])
+  }
 
   return (
     <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-app-header">
@@ -139,6 +110,7 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
             )}
           </div>
           <div className="flex items-center space-x-3">
+            {idle.showChip && <IdleSessionChip remainingMs={idle.remainingMs} />}
             {patientId && (
               <button
                 type="button"
@@ -182,7 +154,7 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
                       </span>
                     )}
                   </div>
-                  {!isReadOnly && userProfile?.role === 'superadmin' && (
+                  {!isReadOnly && userProfile?.role === 'superadmin' && !userProfile.hospital_id && (
                     <Link
                       href="/invites"
                       onClick={() => setUserMenuOpen(false)}
@@ -191,13 +163,13 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
                       Send Invite
                     </Link>
                   )}
-                  {!isReadOnly && (userProfile?.role === 'superadmin' || userProfile?.role === 'nurse') && userProfile?.hospital_id && (
+                  {!isReadOnly && (userProfile?.role === 'superadmin' || userProfile?.role === 'nurse' || userProfile?.role === 'head_nurse') && userProfile?.hospital_id && (
                     <Link
                       href="/facility-users"
                       onClick={() => setUserMenuOpen(false)}
                       className="block px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
-                      Facility Users
+                      Caregivers
                     </Link>
                   )}
                   {canUseReadOnly && !isReadOnly && (
@@ -251,23 +223,12 @@ export default function AppHeader({ userProfile: userProfileProp, onLogout, pati
         </div>
       </div>
 
-      {/* Idle timeout warning */}
-      {showIdleWarning && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="idle-warning-title">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
-            <h2 id="idle-warning-title" className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Session Expiring</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              You will be logged out due to inactivity in <span className="font-bold text-red-600">{idleSecondsLeft}s</span>.
-            </p>
-            <button
-              type="button"
-              onClick={() => { startIdleTimers() }}
-              className="w-full px-4 py-2 bg-lasso-teal text-white rounded-lg hover:bg-lasso-blue font-medium"
-            >
-              Stay logged in
-            </button>
-          </div>
-        </div>
+      {idle.showModal && (
+        <IdleSessionModal
+          displayName={idle.displayName}
+          remainingMs={idle.remainingMs}
+          onStay={idle.stayLoggedIn}
+        />
       )}
 
       {/* Exit Read-Only Modal */}

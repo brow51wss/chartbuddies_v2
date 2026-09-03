@@ -1,11 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { signOut } from '../lib/auth'
 import { useReadOnly } from '../contexts/ReadOnlyContext'
+import { clearIdleActivity, useIdleSession } from '../hooks/useIdleSession'
+import { IdleSessionChip, IdleSessionModal } from './IdleSessionUI'
 import type { UserProfile, Patient } from '../types/auth'
-
-const IDLE_TIMEOUT_MS = 60 * 60 * 1000
-const WARN_BEFORE_MS  =  2 * 60 * 1000
 
 function facilityInitials(name: string): string {
   return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'F'
@@ -54,13 +53,17 @@ export default function DashboardLayout({
 }: DashboardLayoutProps) {
   const router = useRouter()
   const { isReadOnly } = useReadOnly()
-  const [showIdleWarning, setShowIdleWarning] = useState(false)
-  const [idleSecondsLeft, setIdleSecondsLeft] = useState(60)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
-  const idleTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const warnTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const countdownRef  = useRef<ReturnType<typeof setInterval> | null>(null)
+  const idle = useIdleSession({
+    userId: userProfile?.id,
+    fullName: userProfile?.full_name,
+    firstName: userProfile?.first_name,
+    onExpire: async () => {
+      await signOut()
+      router.push('/auth/login?reason=idle')
+    },
+  })
 
   // Close user menu on outside click
   useEffect(() => {
@@ -73,48 +76,15 @@ export default function DashboardLayout({
     return () => document.removeEventListener('mousedown', handler)
   }, [userMenuOpen])
 
-  const clearIdleTimers = useCallback(() => {
-    if (idleTimerRef.current)  clearTimeout(idleTimerRef.current)
-    if (warnTimerRef.current)  clearTimeout(warnTimerRef.current)
-    if (countdownRef.current)  clearInterval(countdownRef.current)
-  }, [])
-
-  const startIdleTimers = useCallback(() => {
-    clearIdleTimers()
-    setShowIdleWarning(false)
-
-    warnTimerRef.current = setTimeout(() => {
-      setIdleSecondsLeft(60)
-      setShowIdleWarning(true)
-      countdownRef.current = setInterval(() => setIdleSecondsLeft(s => s - 1), 1000)
-    }, IDLE_TIMEOUT_MS - WARN_BEFORE_MS)
-
-    idleTimerRef.current = setTimeout(async () => {
-      clearIdleTimers()
-      setShowIdleWarning(false)
-      await signOut()
-      router.push('/auth/login?reason=idle')
-    }, IDLE_TIMEOUT_MS)
-  }, [clearIdleTimers, router])
-
-  useEffect(() => {
-    const events = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll']
-    const reset = () => startIdleTimers()
-    events.forEach(e => window.addEventListener(e, reset, { passive: true }))
-    startIdleTimers()
-    return () => {
-      events.forEach(e => window.removeEventListener(e, reset))
-      clearIdleTimers()
-    }
-  }, [startIdleTimers, clearIdleTimers])
-
   const handleSwitchUser = async () => {
+    clearIdleActivity(userProfile?.id)
     await signOut()
     const isStaff = userProfile?.role === 'nurse' || userProfile?.role === 'head_nurse'
     router.push(isStaff ? '/auth/staff-login' : '/auth/login')
   }
 
   const handleLogout = async () => {
+    clearIdleActivity(userProfile?.id)
     await signOut()
     router.push('/auth/login')
   }
@@ -186,6 +156,7 @@ export default function DashboardLayout({
 
         {/* Right tools */}
         <div className="flex items-center gap-2 flex-wrap">
+          {idle.showChip && <IdleSessionChip remainingMs={idle.remainingMs} />}
           {/* Whoami pill */}
           <div className="flex items-center gap-2 bg-teal-50 dark:bg-teal-900/20 rounded-full py-1 pl-4 pr-1 text-sm font-bold text-lasso-teal dark:text-teal-300">
             {firstName && <span className="hidden sm:inline pr-0.5">{firstName}</span>}
@@ -279,31 +250,12 @@ export default function DashboardLayout({
         </main>
       </div>
 
-      {/* ══════════════ IDLE WARNING MODAL ══════════════ */}
-      {showIdleWarning && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="idle-warning-title"
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
-            <h2 id="idle-warning-title" className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              Session Expiring
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              You will be logged out due to inactivity in{' '}
-              <span className="font-bold text-red-600">{idleSecondsLeft}s</span>.
-            </p>
-            <button
-              type="button"
-              onClick={startIdleTimers}
-              className="w-full px-4 py-2 bg-lasso-teal text-white rounded-lg hover:bg-lasso-navy font-medium"
-            >
-              Stay logged in
-            </button>
-          </div>
-        </div>
+      {idle.showModal && (
+        <IdleSessionModal
+          displayName={idle.displayName}
+          remainingMs={idle.remainingMs}
+          onStay={idle.stayLoggedIn}
+        />
       )}
     </div>
   )

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import type { Patient, UserProfile } from '../types/auth'
 import { formatCalendarDate } from '../lib/calendarDate'
 import MedicationsTab from './MedicationsTab'
+import CareNotesTab from './CareNotesTab'
 
 type Tab     = 'profile' | 'meds' | 'notes' | 'vitals'
 type Section = 'identification' | 'contact' | 'clinical'
@@ -397,18 +398,7 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
           TAB: Care Notes
       ════════════════════════════════════════════ */}
       {tab === 'notes' && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-[18px] p-7 shadow-sm">
-          <h3 className="text-[17px] font-extrabold text-gray-900 dark:text-white mb-2 m-0">Care Notes</h3>
-          <p className="text-sm text-gray-400 mb-5 mt-1">
-            View and add progress notes and daily care logs.
-          </p>
-          <Link
-            href={`/patients/${localPatient.id}/progress-notes`}
-            className="inline-flex items-center gap-2 bg-lasso-teal hover:bg-lasso-navy text-white rounded-xl px-5 py-3 text-sm font-bold shadow-sm transition-colors"
-          >
-            Open Progress Notes →
-          </Link>
-        </div>
+        <CareNotesTab patient={localPatient} userProfile={userProfile} />
       )}
 
       {/* ════════════════════════════════════════════
