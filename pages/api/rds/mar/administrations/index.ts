@@ -1,5 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { rdsQuery, resolveCallerFromToken, callerCanAccessHospital } from '../../../../../lib/rds'
+import { isMarRowActiveOnDayColumn } from '../../../../../lib/marMissedDocumentation'
+import { monthYearToYYYYMM } from '../../../../../lib/progress-notes'
+import type { MARMedication } from '../../../../../types/mar'
 
 async function getFormHospitalIdFromMed(medId: string): Promise<string | null> {
   const { rows } = await rdsQuery(
@@ -44,6 +47,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const hospitalId = await getFormHospitalIdFromMed(mar_medication_id)
       if (!hospitalId) return res.status(404).json({ error: 'Medication not found' })
       if (!callerCanAccessHospital(caller, hospitalId)) return res.status(403).json({ error: 'Forbidden' })
+
+      const dayNum = Number(day_number)
+      if (!Number.isInteger(dayNum) || dayNum < 1 || dayNum > 31) {
+        return res.status(400).json({ error: 'Invalid day_number' })
+      }
+
+      const { rows: rangeRows } = await rdsQuery(
+        `SELECT m.start_date, m.stop_date, f.month_year
+         FROM mar_medications m
+         JOIN mar_forms f ON f.id = m.mar_form_id
+         WHERE m.id = $1`,
+        [mar_medication_id],
+      )
+      const range = rangeRows[0]
+      const yyyymm = range ? monthYearToYYYYMM(range.month_year) : null
+      const isClear = (body.status ?? 'Not Given') === 'Not Given'
+      if (yyyymm && !isClear) {
+        const [formYear, formMonth] = yyyymm.split('-').map((n) => parseInt(n, 10))
+        const active = isMarRowActiveOnDayColumn(
+          { start_date: range.start_date, stop_date: range.stop_date } as MARMedication,
+          dayNum,
+          formYear,
+          formMonth,
+        )
+        if (!active) {
+          return res.status(400).json({
+            error: 'Cannot record on a date outside this medication\'s start and stop dates.',
+          })
+        }
+      }
 
       const { rows } = await rdsQuery(
         `INSERT INTO mar_administrations (mar_medication_id, day_number, status, initials, notes, administered_at)

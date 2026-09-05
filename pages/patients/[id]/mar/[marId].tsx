@@ -1536,6 +1536,19 @@ export default function ViewMARForm() {
 
   const updateAdministration = async (medId: string, day: number, status: string, initials: string = '') => {
     if (!userProfile || !marFormId) return
+
+    const medForRange = medications.find((m) => m.id === medId)
+    const parsedMonthForRange = parseMARMonthYear(marForm?.month_year || '')
+    const isClearStatus = status === 'Not Given'
+    if (
+      medForRange &&
+      parsedMonthForRange &&
+      !isClearStatus &&
+      !isMarRowActiveOnDayColumn(medForRange, day, parsedMonthForRange.y, parsedMonthForRange.m)
+    ) {
+      setError('Cannot record on a date outside this medication\'s start and stop dates.')
+      return
+    }
     
     try {
       setSaving(true)
@@ -1575,6 +1588,13 @@ export default function ViewMARForm() {
       if (isDCEntry) {
         const futureDays = []
         for (let futureDay = day + 1; futureDay <= 31; futureDay++) {
+          if (
+            medForRange &&
+            parsedMonthForRange &&
+            !isMarRowActiveOnDayColumn(medForRange, futureDay, parsedMonthForRange.y, parsedMonthForRange.m)
+          ) {
+            continue
+          }
           futureDays.push({
             mar_medication_id: medId,
             day_number: futureDay,

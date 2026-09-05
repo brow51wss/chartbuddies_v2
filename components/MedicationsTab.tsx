@@ -14,8 +14,10 @@ import {
   rdsPatchMarMedication,
   rdsDeleteMarMedication,
   rdsCreateMarMedication,
+  rdsCreateMarForm,
   rdsCreatePrnRecord,
 } from '../lib/rdsApi'
+import { ensureProgressNoteSummaryForMonth } from '../lib/progress-notes'
 import {
   shouldSyncMarPrnRecordToProgressNotes,
   upsertProgressNoteFromPRNRecordRds,
@@ -24,6 +26,8 @@ import {
   removeMarAdminLineFromProgressNotes,
   upsertMarAdminLineInProgressNotes,
 } from '../lib/mar-admin-progress-notes-rds'
+import { isMarRowActiveOnDayColumn } from '../lib/marMissedDocumentation'
+import { formatCalendarDate, parseLocalDateFromYMD, ymdFromDateInput } from '../lib/calendarDate'
 
 type MarView = 'yesterday' | 'today' | 'tomorrow' | 'week' | 'month'
 
@@ -653,6 +657,10 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
       setLogPrnError('Medication name is missing.')
       return
     }
+    if (!isPrnStartedOnToday(loggingPrn)) {
+      setLogPrnError(`Cannot log this PRN before its start date (${formatCalendarDate(loggingPrn.start_date, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}).`)
+      return
+    }
     setLogPrnSaving(true)
     setLogPrnError('')
     try {
@@ -698,9 +706,18 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
     setError('')
     try {
       const forms = await rdsListMarForms(patient.id)
-      const form = forms.find((f: any) => f.month_year === todayMonthYear) ?? null
+      let form = forms.find((f: any) => f.month_year === todayMonthYear) ?? null
+      if (!form) {
+        form = await rdsCreateMarForm({
+          patient_id: patient.id,
+          month_year: todayMonthYear,
+          status: 'active',
+        })
+        if (userProfile?.id) {
+          await ensureProgressNoteSummaryForMonth(patient.id, todayMonthYear, userProfile.id).catch(() => {})
+        }
+      }
       setMarForm(form)
-      if (!form) { setLoading(false); return }
 
       const [meds, prnM, prnR] = await Promise.all([
         rdsListMarMedications(form.id),
@@ -726,7 +743,7 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
     } finally {
       setLoading(false)
     }
-  }, [patient.id, todayMonthYear])
+  }, [patient.id, todayMonthYear, userProfile?.id])
 
   useEffect(() => {
     setMarForm(null); setMedications([]); setAdminMap({})
@@ -785,8 +802,32 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
     setEditingNote('')
   }
 
+  function isMedActiveOnDay(med: any, day: number): boolean {
+    if (day == null || day < 1) return false
+    return isMarRowActiveOnDayColumn(med, day, curYear, curMonth + 1)
+  }
+
+  function inactiveCellTitle(med: any, day: number): string {
+    const start = parseLocalDateFromYMD(med.start_date)
+    const cell = new Date(curYear, curMonth, day, 12, 0, 0, 0)
+    if (start && cell < start) {
+      return `Cannot record before this medication's start date (${formatCalendarDate(med.start_date, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}).`
+    }
+    if (med.stop_date) {
+      return `Cannot record after this medication's stop date (${formatCalendarDate(med.stop_date, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}).`
+    }
+    return 'This medication is not active on this date.'
+  }
+
+  function isPrnStartedOnToday(prn: any): boolean {
+    const start = ymdFromDateInput(prn.start_date)
+    if (!start) return true
+    const todayYmd = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(todayNum).padStart(2, '0')}`
+    return todayYmd >= start
+  }
+
   function openCell(med: any, day: number) {
-    if (med.discontinued || day > todayNum) return
+    if (med.discontinued || day > todayNum || !isMedActiveOnDay(med, day)) return
     const admin = adminForDay(med.id, day)
     const kind = adminKind(admin)
     const notes = admin?.notes || ''
@@ -807,6 +848,11 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
 
   async function submitCellEntry() {
     if (!editingCell || !userProfile || !editingValue) return
+    const medForRange = medications.find(m => m.id === editingCell.medId)
+    if (medForRange && !isMedActiveOnDay(medForRange, editingCell.day)) {
+      alert(inactiveCellTitle(medForRange, editingCell.day))
+      return
+    }
     setCellSaving(true)
     const statusMap: Record<string, string> = { Given: 'Given', DC: 'DC', R: 'Refused', W: 'Withheld' }
     const status = statusMap[editingValue] ?? 'Given'
@@ -904,6 +950,7 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
     for (const day of days) {
       if (day == null) continue
       for (const med of scheduledMeds) {
+        if (!isMedActiveOnDay(med, day)) continue
         if (adminKind(adminForDay(med.id, day))) continue
         if (slotIsPast(med, day)) n++
       }
@@ -912,6 +959,7 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
   }
 
   const dueNext4 = scheduledMeds.filter(m => {
+    if (!isMedActiveOnDay(m, todayNum)) return false
     if (adminKind(adminForDay(m.id, todayNum))) return false
     const mins = medTimeMinutes(m.hour)
     return mins >= nowMinutes && mins < nowMinutes + 4 * 60
@@ -963,19 +1011,7 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
     </div>
   )
 
-  if (!marForm) return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-[18px] p-8 shadow-sm text-center">
-      <div className="text-3xl mb-3">💊</div>
-      <h3 className="font-extrabold text-gray-900 dark:text-white mb-1">No MAR for {todayMonthYear}</h3>
-      <p className="text-sm text-gray-400 mb-5">
-        A Medication Administration Record hasn&apos;t been created for this month yet.
-      </p>
-      <Link href={`/patients/${patient.id}/mar`}
-        className="inline-flex items-center gap-2 bg-lasso-teal hover:bg-lasso-navy text-white rounded-xl px-5 py-3 text-sm font-bold shadow-sm transition-colors">
-        Open MAR to get started →
-      </Link>
-    </div>
-  )
+  if (!marForm) return null
 
   // ── Shared: day-pass list renderer ──────────────────────────────────────────
   function DayPassList({ dayNum, interactive, label }: {
@@ -1009,7 +1045,9 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
         </div>
 
         {scheduledMeds.length === 0 ? (
-          <div className="px-5 py-10 text-center text-sm text-gray-400">No scheduled medications on this MAR.</div>
+          <div className="px-5 py-10 text-center text-sm text-gray-400">
+            No scheduled medications for {label.toLowerCase()}.
+          </div>
         ) : (
           [...scheduledMeds]
             .sort((a, b) => medTimeMinutes(a.hour) - medTimeMinutes(b.hour))
@@ -1019,12 +1057,14 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
               const slotMins = medTimeMinutes(med.hour)
               const isPast   = label === 'Yesterday' || (label === 'Today' && slotMins <= nowMinutes)
               const schedule = dayPassSchedule(med)
-              const canOpenCell = label !== 'Tomorrow' && !med.discontinued
+              const activeOnDay = isMedActiveOnDay(med, dayNum)
+              const canOpenCell = label !== 'Tomorrow' && !med.discontinued && activeOnDay
               const timeLabel = med.hour != null && med.hour !== '' ? fmtHour(med.hour) : undefined
               const pendingKind: StatusPillKind | null = kind
                 ? null
+                : !activeOnDay ? null
                 : isPast ? 'Missed' : (timeLabel ? 'Due' : null)
-              const showRecord = interactive && !kind && !med.discontinued
+              const showRecord = interactive && !kind && !med.discontinued && activeOnDay
 
               return (
                 <div key={med.id} className="flex items-center gap-3.5 px-1 py-[13px] border-b border-gray-100 dark:border-gray-700/40 last:border-0">
@@ -1063,6 +1103,20 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
                         Record
                       </button>
                     )}
+                    {!kind && !activeOnDay && !med.discontinued && (() => {
+                      const start = parseLocalDateFromYMD(med.start_date)
+                      const beforeStart = !!start && new Date(curYear, curMonth, dayNum, 12) < start
+                      return (
+                        <span
+                          className="text-[11px] font-semibold text-gray-400"
+                          title={inactiveCellTitle(med, dayNum)}
+                        >
+                          {beforeStart
+                            ? `Starts ${formatCalendarDate(med.start_date, 'en-US', { month: 'short', day: 'numeric' })}`
+                            : `Stopped ${formatCalendarDate(med.stop_date, 'en-US', { month: 'short', day: 'numeric' })}`}
+                        </span>
+                      )
+                    })()}
                   </span>
                 </div>
               )
@@ -1109,8 +1163,14 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
                   </span>
                   <button
                     type="button"
-                    onClick={() => openLogPrn(med)}
-                    className="flex-shrink-0 border border-lasso-teal text-lasso-teal text-xs font-extrabold px-3 py-2 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors"
+                    onClick={() => { if (isPrnStartedOnToday(med)) openLogPrn(med) }}
+                    disabled={!isPrnStartedOnToday(med)}
+                    title={
+                      isPrnStartedOnToday(med)
+                        ? undefined
+                        : `Cannot log before start date (${formatCalendarDate(med.start_date, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}).`
+                    }
+                    className="flex-shrink-0 border border-lasso-teal text-lasso-teal text-xs font-extrabold px-3 py-2 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   >
                     Log PRN
                   </button>
@@ -1204,7 +1264,8 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
                       const admin = adminForDay(med.id, dayNum)
                       const kind = adminKind(admin)
                       const isFuture = dayNum > todayNum
-                      const canInteract = !med.discontinued && !isFuture
+                      const activeOnDay = isMedActiveOnDay(med, dayNum)
+                      const canInteract = !med.discontinued && !isFuture && activeOnDay
 
                       return (
                         <td
@@ -1212,6 +1273,8 @@ export default function MedicationsTab({ patient, userProfile, onEditDiet }: Pro
                           title={
                             isFuture
                               ? 'Future dates cannot be documented in advance.'
+                              : !activeOnDay && !med.discontinued
+                                ? inactiveCellTitle(med, dayNum)
                               : canInteract
                                 ? 'Click to record Given, DC, Withheld, or Refused'
                                 : undefined

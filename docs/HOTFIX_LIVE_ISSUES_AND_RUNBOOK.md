@@ -153,6 +153,30 @@ Additional items from team notes. **Not** sequenced with §5 items 1–8 above; 
 
 ---
 
+### New backlog intake — Deferred Sentinel follow-throughs (2026-09-05)
+
+**Owner: Marlon.** Cursor will **not** implement these unprompted. Parked after Pass 2 `audits/2026-09-05-networking-touched.md` so they can be picked up later (or after Cowork judgment).
+
+Do **not** treat that report’s 3 CRITICAL / 53 HIGH / 55 MEDIUM as a punch list. Most are carry-over or false positives.
+
+#### Do later (real work)
+
+1. **TODO — RDS TLS pinning.** Install the AWS RDS CA on the Node pool, then set `rejectUnauthorized: true` in `lib/rds.ts`. **Do not** only delete `rejectUnauthorized: false` — that already broke add-resident / patient list (`SELF_SIGNED_CERT_IN_CHAIN`; URI `sslmode` vs `Pool.ssl`). After pinning, run Sentinel `networking-touched`. See also §11.
+2. **DONE (2026-09-05)** — PHI `Cache-Control: no-store` via root `middleware.ts` matcher `/api/:path*`. Cowork-directed; do not add per-route headers.
+3. **TODO — Print CSS `dangerouslySetInnerHTML`.** `pages/patients/[id]/mar/[marId].tsx` and `pages/patients/[id]/progress-notes/view.tsx` inject print `<style>` this way. Replace or sanitize when you next touch print. Out of scope for the Vitals/Appts tab split.
+4. **TODO — Cowork judgment on new PHI APIs.** Fill Pending Manual Review in `audits/2026-09-05-networking-touched.md` (vitals/appointments routes + whether `patient_vitals` / `patient_appointments` on prod RDS before Amplify deploy is acceptable). Prompt is in the 2026-09-05 chat; report file is the handoff.
+
+#### Do not “fix” (scanner noise / already decided)
+
+- Password minimum 8 — ACCEPT RISK (2026-09-02 Cowork SHIP + rate limits).
+- Split `VitalsTab.tsx` / `AppointmentsTab.tsx` only to get under 200 lines.
+- SVG `xmlns="http://www.w3.org/2000/svg"` as insecure HTTP.
+- `STORAGE_KEY` / `__ADD_OTHER__` as hardcoded access gates.
+- Path strings containing `email` or `note` as “sensitive data in the URL.”
+- Staff `/api/staff/facilities` and `/api/staff/users` service-role pattern — already reviewed 2026-09-02. **074** after Amplify deploy is still **LIVE-011**.
+
+---
+
 ### New backlog intake — Patient Binder & MAR review (2026-04-09)
 
 Captured from product review notes/screenshots; default status is **TODO** unless noted otherwise.
@@ -488,7 +512,7 @@ The EHR app (`app.lasso-app.com`) is hosted on AWS Amplify. The database is AWS 
 ## 12) Session Notes
 
 - Billing/e-commerce work is intentionally paused until live stability is restored.
-- Live homepage incidents: **§3** tracker + **§4** line-by-line actions. Product work: **§5** (ordered 1–8 + extended backlog + **MAR & Patient Binder — team intake 2026-05-12**). Dev observations: **§6**. Partner checklist: **§6a** (2026-04-18).
+- Live homepage incidents: **§3** tracker + **§4** line-by-line actions. Product work: **§5** (ordered 1–8 + extended backlog + **Deferred Sentinel follow-throughs 2026-09-05** + **MAR & Patient Binder — team intake 2026-05-12**). Dev observations: **§6**. Partner checklist: **§6a** (2026-04-18).
 
 ---
 

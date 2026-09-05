@@ -4,8 +4,10 @@ import type { Patient, UserProfile } from '../types/auth'
 import { formatCalendarDate } from '../lib/calendarDate'
 import MedicationsTab from './MedicationsTab'
 import CareNotesTab from './CareNotesTab'
+import VitalsTab from './VitalsTab'
+import AppointmentsTab from './AppointmentsTab'
 
-type Tab     = 'profile' | 'meds' | 'notes' | 'vitals'
+type Tab     = 'profile' | 'meds' | 'notes' | 'vitals' | 'appts'
 type Section = 'identification' | 'contact' | 'clinical'
 
 interface Props {
@@ -25,10 +27,11 @@ const inputCls =
 const labelCls = 'block text-xs font-bold text-gray-400 mb-1'
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'profile', label: 'Profile'       },
-  { key: 'meds',    label: 'Medications'   },
-  { key: 'notes',   label: 'Care Notes'    },
-  { key: 'vitals',  label: 'Vitals & Appts'},
+  { key: 'profile', label: 'Profile'     },
+  { key: 'meds',    label: 'Medications' },
+  { key: 'notes',   label: 'Care Notes'  },
+  { key: 'vitals',  label: 'Vitals'      },
+  { key: 'appts',   label: 'Appts'       },
 ]
 
 export default function DashboardPatientDetail({ patient, userProfile, onArchive, onSavePatient }: Props) {
@@ -402,14 +405,17 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
       )}
 
       {/* ════════════════════════════════════════════
-          TAB: Vitals & Appts
+          TAB: Vitals
       ════════════════════════════════════════════ */}
       {tab === 'vitals' && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-[18px] p-7 shadow-sm text-center py-16">
-          <div className="text-4xl mb-3">🩺</div>
-          <h3 className="font-extrabold text-gray-900 dark:text-white mb-1">Vitals &amp; Appointments</h3>
-          <p className="text-sm text-gray-400">Coming soon — this module is in development.</p>
-        </div>
+        <VitalsTab patient={localPatient} userProfile={userProfile} />
+      )}
+
+      {/* ════════════════════════════════════════════
+          TAB: Appointments
+      ════════════════════════════════════════════ */}
+      {tab === 'appts' && (
+        <AppointmentsTab patient={localPatient} userProfile={userProfile} />
       )}
     </div>
   )

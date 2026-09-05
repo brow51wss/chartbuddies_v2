@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { rdsQuery, rdsTransaction, resolveCallerFromToken, callerCanAccessHospital } from '../../../../../lib/rds'
+import { ymdFromDateInput } from '../../../../../lib/calendarDate'
 
 async function getFormHospitalId(formId: string): Promise<string | null> {
   const { rows } = await rdsQuery('SELECT hospital_id FROM mar_forms WHERE id = $1', [formId])
@@ -40,6 +41,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const hospitalId = await getFormHospitalId(mar_form_id)
       if (!hospitalId) return res.status(404).json({ error: 'MAR form not found' })
       if (!callerCanAccessHospital(caller, hospitalId)) return res.status(403).json({ error: 'Forbidden' })
+
+      const recordDate = ymdFromDateInput(date)
+      const prnStart = ymdFromDateInput(body.start_date)
+      if (recordDate && prnStart && recordDate < prnStart) {
+        return res.status(400).json({
+          error: 'Cannot log this PRN before its start date.',
+        })
+      }
 
       // Determine next entry_number within this form
       const { rows: countRows } = await rdsQuery(

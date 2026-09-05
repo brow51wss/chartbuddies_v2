@@ -58,6 +58,7 @@
 - Role-based access control — `isReadOnly` context flag; must gate all write paths server-side via RLS, not just client-side
 - Physician phone / contact data — PII embedded in MAR forms; sync between `patients` table and `mar_forms` must not expose data in transit logs
 - Supabase auth — JWT-based session; tokens must not appear in URLs, logs, or error reporters
+- Dual vitals sources — `patient_vitals` (dashboard Vitals tab) is a supplemental, ad-hoc, point-in-time nursing log. `mar_vital_signs` remains the canonical chart-of-record for MAR-scheduled vitals. These are two separate tables with no automatic reconciliation — any report, export, or chart view must clearly label which source it's pulling from and must not treat `patient_vitals` as a replacement for the MAR chart.
 
 ---
 

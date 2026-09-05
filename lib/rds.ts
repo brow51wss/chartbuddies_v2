@@ -2,7 +2,8 @@
  * RDS connection layer for PHI tables.
  *
  * All PHI tables (patients, mar_forms, mar_medications, mar_administrations,
- * mar_prn_records, mar_prn_medications, mar_vital_signs, progress_note_entries)
+ * mar_prn_records, mar_prn_medications, mar_vital_signs, progress_note_entries,
+ * patient_vitals, patient_appointments)
  * are stored in AWS RDS PostgreSQL. Non-PHI tables remain in Supabase.
  *
  * Access control: every public-facing helper verifies the caller's Supabase

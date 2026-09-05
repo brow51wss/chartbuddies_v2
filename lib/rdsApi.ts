@@ -291,3 +291,41 @@ export async function rdsPatchProgressNote(noteId: string, body: Record<string, 
 export async function rdsDeleteProgressNote(noteId: string): Promise<void> {
   return rdsApiFetch(`/api/rds/progress-notes/${noteId}`, { method: 'DELETE' })
 }
+
+// ---------------------------------------------------------------------------
+// Resident vitals log (dashboard Vitals tab — not MAR chart vitals)
+// ---------------------------------------------------------------------------
+
+export async function rdsListPatientVitals(patientId: string): Promise<any[]> {
+  return rdsApiFetch(`/api/rds/vitals?patient_id=${patientId}`)
+}
+
+export async function rdsCreatePatientVital(body: Record<string, any>): Promise<any> {
+  return rdsApiFetch('/api/rds/vitals', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function rdsDeletePatientVital(vitalId: string): Promise<void> {
+  return rdsApiFetch(`/api/rds/vitals/${vitalId}`, { method: 'DELETE' })
+}
+
+// ---------------------------------------------------------------------------
+// Resident appointments (dashboard Appointments tab)
+// ---------------------------------------------------------------------------
+
+export async function rdsListPatientAppointments(patientId: string): Promise<any[]> {
+  return rdsApiFetch(`/api/rds/appointments?patient_id=${patientId}`)
+}
+
+export async function rdsCreatePatientAppointment(body: Record<string, any>): Promise<any> {
+  return rdsApiFetch('/api/rds/appointments', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function rdsDeletePatientAppointment(appointmentId: string): Promise<void> {
+  return rdsApiFetch(`/api/rds/appointments/${appointmentId}`, { method: 'DELETE' })
+}
