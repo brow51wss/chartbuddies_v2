@@ -169,7 +169,10 @@ export default function Dashboard() {
             userProfile={userProfile}
             onArchive={handleArchivePatient}
             onSavePatient={async (patientId, payload) => {
-              const updated = await handleSavePatientEdits({ patientId, payload })
+              const updated = await handleSavePatientEdits({
+                patientId,
+                payload,
+              } as EditPatientInfoSaveArgs)
               setPatients(prev => prev.map(p => p.id === patientId ? { ...p, ...updated } : p))
               return updated
             }}

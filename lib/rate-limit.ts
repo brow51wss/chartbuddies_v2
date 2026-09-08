@@ -6,9 +6,9 @@ const buckets = new Map<string, Bucket>()
 
 function prune(now: number) {
   if (buckets.size < 500) return
-  for (const [key, bucket] of buckets) {
+  buckets.forEach((bucket, key) => {
     if (now >= bucket.resetAt) buckets.delete(key)
-  }
+  })
 }
 
 export function clientIp(req: NextApiRequest): string {
