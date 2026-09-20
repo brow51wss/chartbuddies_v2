@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import Link from 'next/link'
 import type { Patient, UserProfile } from '../types/auth'
 import type { ProgressNoteEntry } from '../types/progress-notes'
 import { formatCalendarDate, localTodayYMD } from '../lib/calendarDate'
 import { rdsCreateProgressNote, rdsDeleteProgressNote, rdsListProgressNotes } from '../lib/rdsApi'
+import MonthlySummaryPanel from './MonthlySummaryPanel'
+
+type CareNotesView = 'notes' | 'summary'
 
 interface Props {
   patient: Patient
@@ -113,6 +115,7 @@ function NoteBody({ raw }: { raw: string | null | undefined }) {
 
 export default function CareNotesTab({ patient, userProfile }: Props) {
   const canManage = userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin'
+  const [view, setView] = useState<CareNotesView>('notes')
   const [notes, setNotes] = useState<ProgressNoteEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -229,13 +232,7 @@ export default function CareNotesTab({ patient, userProfile }: Props) {
         <h3 className="text-[17px] font-extrabold text-gray-900 dark:text-white m-0 tracking-tight">
           Care Notes
         </h3>
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/patients/${patient.id}/progress-notes`}
-            className="text-sm font-bold text-[#2b8878] hover:text-[#1f6559]"
-          >
-            Open full notes →
-          </Link>
+        {view === 'notes' && (
           <button
             type="button"
             onClick={openAdd}
@@ -243,9 +240,35 @@ export default function CareNotesTab({ patient, userProfile }: Props) {
           >
             + Add note
           </button>
-        </div>
+        )}
       </div>
 
+      <div className="inline-flex bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700 rounded-[11px] p-[3px] mb-4">
+        {([
+          ['notes', 'Notes'],
+          ['summary', 'Monthly summary'],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setView(key)}
+            className={`px-4 py-2 rounded-[9px] text-sm font-bold transition-colors ${
+              view === key
+                ? 'bg-[#2b8878] text-white'
+                : 'text-gray-400 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'summary' && (
+        <MonthlySummaryPanel patient={patient} userProfile={userProfile} />
+      )}
+
+      {view === 'notes' && (
+      <>
       <p className="text-xs text-gray-400 mb-4">
         Manual notes and MAR PRN doses share this list. PRN-linked notes stay mapped to the MAR and cannot be deleted here.
       </p>
@@ -319,6 +342,8 @@ export default function CareNotesTab({ patient, userProfile }: Props) {
           </div>
         </div>
       ))}
+      </>
+      )}
 
       {adding && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" onClick={() => setAdding(false)}>

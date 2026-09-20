@@ -43,7 +43,7 @@ Suggested branch name:
 | LIVE-008 | closed | high | Edit Patient modal (patient photo section) | Two sequential errors on phone-icon click: (1) "Patient not found or access denied" — patient lookup used Supabase (patients migrated to RDS); (2) "Failed to create capture link" — `patient_photo_capture_tokens` had a stale FK `patient_id → patients.id` in Supabase with no data. | All users trying to add patient photo via phone | 2026-06-11 | dev | Fix 1: switched lookup to `rdsQuery`. Fix 2: `ALTER TABLE patient_photo_capture_tokens DROP CONSTRAINT patient_photo_capture_tokens_patient_id_fkey;` in Supabase SQL editor. |
 | LIVE-009 | closed | critical | Edit Patient modal → Save changes | "Request failed: 403" when saving patient details after uploading a photo directly (file picker). Base64 data URL was embedded in PATCH request body, exceeding AWS WAF body-size limit. | All users uploading patient photos via file picker | 2026-06-11 | dev | Refactored direct upload to use S3 presigned PUT URL. `PatientPhotoCaptureField.handleFile` now uploads blob directly to S3 via `/api/patient-photo-upload-url` and stores only `s3:<key>` in form state. `/api/signature-image` extended to proxy `patient-photos/` keys. Phone capture POST handler also updated to store `s3:<key>` instead of re-downloading image from S3 as base64. Commits: `d6ad6fb`, `c1ab1f0`. |
 | LIVE-010 | closed | critical | Edit Patient modal → Save changes | "Request failed: 403" when editing ANY patient field (diagnosis, diet, etc.) on a patient whose photo was previously stored as a base64 data URL (captured before LIVE-009 fix). The stale data URL was unconditionally included in every PATCH payload regardless of whether the photo changed. | All users editing patients with pre-existing photos stored as data URLs | 2026-06-12 | dev | `buildPatientProfileUpdatePayload` now only includes `patient_photo` in the PATCH payload when the value is `null` (explicit clear) or starts with `s3:` (new upload). Pre-existing data URLs are already in the DB and are never re-sent. `patient_photo` made optional in `PatientProfileUpdatePayload` type. |
-| LIVE-011 | new | high | Supabase `hospitals` + staff login | After Amplify deploy of staff `/api/staff/facilities`, immediately run `supabase-migrations/074_revoke_anon_hospitals_select.sql` so anon cannot read `invite_code`. Do not run 074 before that deploy. | All (public anon key) | 2026-09-03 | PCG / Marlon | Cowork SHIP follow-through. Second follow-up: replace in-memory rate limiter with distributed (Upstash). |
+| LIVE-011 | closed | high | Supabase `hospitals` + staff login | After Amplify deploy of staff `/api/staff/facilities`, immediately run `supabase-migrations/074_revoke_anon_hospitals_select.sql` so anon cannot read `invite_code`. Do not run 074 before that deploy. | All (public anon key) | 2026-09-03 | PCG / Marlon | Closed 2026-09-08: Amplify Deployment 133 (`13a0c04`) live; `/api/staff/facilities` confirmed on prod; `REVOKE SELECT ON public.hospitals FROM anon` ran in Supabase SQL editor (Success); anon REST now `42501 permission denied for table hospitals`; staff login + Medications / Vitals / Appts smoke-checked. Follow-up (not blocking): replace in-memory rate limiter with distributed (Upstash). |
 
 ---
 
@@ -165,6 +165,14 @@ Do **not** treat that report’s 3 CRITICAL / 53 HIGH / 55 MEDIUM as a punch lis
 2. **DONE (2026-09-05)** — PHI `Cache-Control: no-store` via root `middleware.ts` matcher `/api/:path*`. Cowork-directed; do not add per-route headers.
 3. **TODO — Print CSS `dangerouslySetInnerHTML`.** `pages/patients/[id]/mar/[marId].tsx` and `pages/patients/[id]/progress-notes/view.tsx` inject print `<style>` this way. Replace or sanitize when you next touch print. Out of scope for the Vitals/Appts tab split.
 4. **TODO — Cowork judgment on new PHI APIs.** Fill Pending Manual Review in `audits/2026-09-05-networking-touched.md` (vitals/appointments routes + whether `patient_vitals` / `patient_appointments` on prod RDS before Amplify deploy is acceptable). Prompt is in the 2026-09-05 chat; report file is the handoff.
+5. **TODO — PCG `/auth/login` is not behind our API rate limiter.** Confirmed 2026-09-10 in Chrome DevTools (intentional bad password on `app.lasso-app.com`). Browser POSTs straight to `https://<project-ref>.supabase.co/auth/v1/token?grant_type=password`. Amplify `/api/*` middleware never sees it. Failed body is `{ "code": "invalid_credentials", "message": "Invalid login credentials" }` (no user-enumeration split). Payload shows email + password in Inspector on that machine — expected for password grant, not a server leak. Residual risk: guesses use **Supabase** throttle/lockout only. Staff clock-in is a different path (`/api/staff/signin`). Do not “fix” by hiding the project ref. If we harden later: CAPTCHA / Supabase auth rate limits / or proxy the grant through our API so *our* limiter applies. Related: distributed limiter (Upstash) still a follow-up on LIVE-011 notes.
+6. **TODO — Disable Magic Links** (owner reminder 2026-09-10). Supabase Dashboard → Authentication → Sign In / Providers → **Email** (and/or Auth settings): turn **off** magic link / email OTP sign-in. Lasso is password + PCG-provisioned accounts; a magic link is another public Auth door (same class as leftover `signUp`). Public email **sign up** is already off; this is the remaining email-link login. Do not turn off **Enable email provider** (that kills password login). After launch, if we want password-reset email only, keep recovery emails and keep magic-link **sign-in** off.
+
+#### Remember — PCG login inspector (2026-09-10)
+
+- **Do not treat the Supabase project ref as a secret** (`cijnontgrzzkuiiakngs` in `NEXT_PUBLIC_SUPABASE_URL`). It is public because the browser must call that host; it is also in the JS bundle, every Auth/REST request, and JWT `ref`. Hiding it (custom domain or auth proxy) is cosmetics / architecture, not a security control. Safety is RLS, anon key staying anon, service role never in the client, and **074**.
+- **`apikey` / `Authorization: Bearer` on the failed token request are the public anon key**, not a user session and not the service role. Same value in both headers is normal for the Supabase JS client.
+- Failed login cookies: Cloudflare `__cf_bm` only. No session issued.
 
 #### Do not “fix” (scanner noise / already decided)
 
@@ -173,7 +181,54 @@ Do **not** treat that report’s 3 CRITICAL / 53 HIGH / 55 MEDIUM as a punch lis
 - SVG `xmlns="http://www.w3.org/2000/svg"` as insecure HTTP.
 - `STORAGE_KEY` / `__ADD_OTHER__` as hardcoded access gates.
 - Path strings containing `email` or `note` as “sensitive data in the URL.”
-- Staff `/api/staff/facilities` and `/api/staff/users` service-role pattern — already reviewed 2026-09-02. **074** after Amplify deploy is still **LIVE-011**.
+- Staff `/api/staff/facilities` and `/api/staff/users` service-role pattern — already reviewed 2026-09-02. **074** applied 2026-09-08; **LIVE-011** closed.
+
+---
+
+### New backlog intake — Launch readiness meeting (2026-09-15)
+
+Source: Jonathan / Cece / Marlon review (`Lasso_Launch_Readiness_and_Compliance_*`). Status **TODO** unless noted. **Launch / market MAR + progress notes only after L-08 (monthly summary) is in and retested.**
+
+#### Launch blockers (product)
+
+| ID | Status | Owner | Task |
+|---|---|---|---|
+| L-01 | PARTIAL | Dev | **Profile inline edit drops keystrokes** — fixed locally 2026-09-20: field components lifted out of `DashboardPatientDetail` so inputs no longer remount per key. Verified name + email keep focus. **Staff retest still required.** |
+| L-02 | PARTIAL | Dev | **Profile: cannot edit another section until the first is saved** — locked sections now fade (opacity) with “Save or cancel …” copy. Edit stays disabled until Save/Cancel. **Staff retest still required.** |
+| L-03 | TODO | Dev | **Profile subsequent edits don’t stick** — second change to email / phone / street keeps the first new value. |
+| L-04 | TODO | Dev | **Phone field accepts extra digits** — enforce the formatted length. |
+| L-05 | PARTIAL | Dev | **DOB year** — 4-digit limit + range 1900–today on Profile inline dates and add/edit patient date fields (`min`/`max` + reject overflow years). Calendar year-click UX may still be OS-native. **Staff retest still required.** |
+| L-06 | TODO | Dev | **Restore MAR / chart initials and signatures** (digital OK). Progress-note sign-off stays. PCG or substitute must be able to sign notes. Then resubmit / retest. |
+| L-07 | TODO | Dev | **Keep dashboard Vitals; remove Appointments from current launch scope** (Cece: vitals are MAR/status tracking; appts out). *Mismatch: Vitals + Appts tabs already shipped — hide/remove Appts only.* |
+| L-08 | PARTIAL | Dev + Jonathan | **Restore comprehensive monthly progress-note summary** under Care Notes → **Monthly summary** (same DOH fields as the old Page 2 form; explicit Save; no copy-forward except weight-diff vs last month). Jonathan may restyle. **Retest still required — market gate.** |
+| L-09 | TODO | Dev | **Remove old-MAR comparison links** from the live UI: **Open full MAR**, **Full record**, and the old progress-notes path used only for comparison. Idle “leave page?” on that old MAR goes away with the links. |
+
+#### Launch blockers (security / compliance leftovers)
+
+| ID | Status | Owner | Task |
+|---|---|---|---|
+| L-10 | PARTIAL | Marlon / Dev | **Pen-test follow-through.** Meeting said bulk is done. Still open vs this repo: Ban the self-signup PCG (do not delete); confirm 075 stays applied; **Disable Magic Links** (runbook §5 #6); leftover orphan-table inventory. Do not claim “unhackable.” |
+| L-11 | TODO | Dev + clinical | **Orphan-field inventory** — list DB columns the new UX never reads/writes (example: unused med **parameters**). Archive/historical months are **not** orphan. Decide keep-for-print vs drop. Amazon / schema review: unused fields cannot sit idle. |
+| L-12 | TODO | Dev | **Idle logout UX** — HIPAA idle timeout is required; no silent “screen still up until next click.” Confirm `useIdleSession` warning is visible enough (countdown). Jonathan saw logout on Switch user / Dashboard after idle. |
+| L-13 | NOTE | Product | **No admin impersonation.** Switch user must not sign in as staff without their password. Already the intended HIPAA rule — do not add “switch to staff as admin.” |
+
+#### Not launch-blocking (said in the room)
+
+| ID | Status | Owner | Task |
+|---|---|---|---|
+| L-14 | TODO | Marketing / Jonathan | Remove fake **Priya / DON quote** from the marketing or review doc (still on the page they shared). |
+| L-15 | DEFERRED | Product | **Carry non-expired meds/PRNs into the next month** with creation defaults. Agreed they should; deferred while the new UI was the priority. New UI should not offer a future month. |
+| L-16 | TODO | Jonathan | **Stripe:** create a **separate Lasso** Stripe account (same login/bank OK). Register domain (already owned). Target: Zoom ~2 weeks after 2026-09-15 (Marlon in Jersey the week after the meeting). |
+| L-17 | TODO | Marlon / Dev | Wire payments to the **existing pricing spreadsheet**. Freemium = later conversation, not this ship. |
+| L-18 | TODO | Marlon | Schedule the **post-Jersey Zoom** for Stripe + pricing. |
+| L-19 | OUT OF SCOPE | — | Full inspection binder (personnel, CPR, etc.). Lasso launch = MAR + progress notes + monthly summary. Paper binder remains for the rest. |
+
+#### Explicitly not bugs (do not “fix”)
+
+- **Open full MAR / Full record** behavior — old MAR on purpose; **remove the links** (L-09), don’t polish the old chart.
+- **Leave this page** on the old MAR — dies with L-09.
+- **Patient info** on the old MAR — obsolete; dashboard profile is the source.
+- Historical / archived months — not orphan data; keep.
 
 ---
 
@@ -512,7 +567,7 @@ The EHR app (`app.lasso-app.com`) is hosted on AWS Amplify. The database is AWS 
 ## 12) Session Notes
 
 - Billing/e-commerce work is intentionally paused until live stability is restored.
-- Live homepage incidents: **§3** tracker + **§4** line-by-line actions. Product work: **§5** (ordered 1–8 + extended backlog + **Deferred Sentinel follow-throughs 2026-09-05** + **MAR & Patient Binder — team intake 2026-05-12**). Dev observations: **§6**. Partner checklist: **§6a** (2026-04-18).
+- Live homepage incidents: **§3** tracker + **§4** line-by-line actions. Product work: **§5** (ordered 1–8 + extended backlog + **Deferred Sentinel follow-throughs 2026-09-05** + **Launch readiness meeting 2026-09-15** + **MAR & Patient Binder — team intake 2026-05-12**). Dev observations: **§6**. Partner checklist: **§6a** (2026-04-18).
 
 ---
 

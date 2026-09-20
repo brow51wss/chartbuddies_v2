@@ -238,6 +238,10 @@ export async function rdsGetProgressNoteSummary(
   )
 }
 
+export async function rdsListProgressNoteSummaries(patientId: string): Promise<any[]> {
+  return rdsApiFetch(`/api/rds/progress-note-summaries?patient_id=${patientId}`)
+}
+
 export async function rdsGetLatestProgressNoteSummaryWeightUnit(
   patientId: string,
 ): Promise<{ weight_unit?: string } | null> {

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import type { Patient, UserProfile } from '../types/auth'
-import { formatCalendarDate } from '../lib/calendarDate'
+import { formatCalendarDate, localTodayYMD, PROFILE_DATE_MIN_YMD, sanitizeFourDigitYearDate, ymdFromDateInput } from '../lib/calendarDate'
 import MedicationsTab from './MedicationsTab'
 import CareNotesTab from './CareNotesTab'
 import VitalsTab from './VitalsTab'
@@ -34,6 +34,154 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'appts',   label: 'Appts'       },
 ]
 
+function ProfileTextField({
+  field,
+  label,
+  value,
+  onChange,
+  className,
+  hint,
+  placeholder,
+}: {
+  field: keyof Patient
+  label: string
+  value: string
+  onChange: (field: keyof Patient, value: string) => void
+  className?: string
+  hint?: string
+  placeholder?: string
+}) {
+  return (
+    <div className={className}>
+      <label className={labelCls}>
+        {label}
+        {hint ? <span className="font-normal opacity-60"> {hint}</span> : null}
+      </label>
+      <input
+        type="text"
+        value={value}
+        onChange={e => onChange(field, e.target.value)}
+        placeholder={placeholder}
+        className={inputCls}
+      />
+    </div>
+  )
+}
+
+function ProfileDateField({
+  field,
+  label,
+  value,
+  onChange,
+  min = PROFILE_DATE_MIN_YMD,
+  max,
+}: {
+  field: keyof Patient
+  label: string
+  value: string
+  onChange: (field: keyof Patient, value: string) => void
+  min?: string
+  max?: string
+}) {
+  const display = ymdFromDateInput(value)
+  const ceiling = max || localTodayYMD()
+  return (
+    <div>
+      <label className={labelCls}>{label}</label>
+      <input
+        type="date"
+        value={display}
+        min={min}
+        max={ceiling}
+        onChange={e => {
+          const next = sanitizeFourDigitYearDate(e.target.value, {
+            min,
+            max: ceiling,
+            badInput: e.target.validity.badInput,
+          })
+          if (next === null) return
+          onChange(field, next)
+        }}
+        className={inputCls}
+      />
+    </div>
+  )
+}
+
+function ProfileRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <dt className="font-bold text-gray-400 self-start pt-0.5">{label}</dt>
+      <dd className="m-0">{children}</dd>
+    </>
+  )
+}
+
+function ProfileSectionFooter({
+  section,
+  canManage,
+  canSave,
+  editingSection,
+  saving,
+  saveError,
+  onStart,
+  onCancel,
+  onSave,
+}: {
+  section: Section
+  canManage: boolean
+  canSave: boolean
+  editingSection: Section | null
+  saving: boolean
+  saveError: string
+  onStart: (section: Section) => void
+  onCancel: () => void
+  onSave: (section: Section) => void
+}) {
+  if (!canManage || !canSave) return null
+
+  if (editingSection === section) {
+    return (
+      <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
+        {saveError && (
+          <p className="text-xs text-red-500 flex-1">{saveError}</p>
+        )}
+        <div className="flex gap-2 ml-auto">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => onSave(section)}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-bold bg-lasso-teal hover:bg-lasso-navy text-white rounded-xl transition-colors disabled:opacity-50 min-w-[72px]"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
+      <button
+        type="button"
+        onClick={() => onStart(section)}
+        disabled={editingSection !== null}
+        className="px-3.5 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        Edit
+      </button>
+    </div>
+  )
+}
+
 export default function DashboardPatientDetail({ patient, userProfile, onArchive, onSavePatient }: Props) {
   const [tab, setTab]                         = useState<Tab>('profile')
   const [editingSection, setEditingSection]   = useState<Section | null>(null)
@@ -43,27 +191,30 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
   // Local optimistic patient state so edits reflect instantly without prop drilling
   const [localPatient, setLocalPatient]       = useState<Patient>(patient)
 
-  // Sync if parent swaps to a different patient
-  if (localPatient.id !== patient.id) setLocalPatient(patient)
+  useEffect(() => {
+    setLocalPatient(patient)
+    setEditingSection(null)
+    setDraft({})
+    setSaveError('')
+  }, [patient.id])
 
   const allergies = parseList(localPatient.allergies)
   const diagnoses  = parseList(localPatient.diagnosis)
   const canManage  = userProfile?.role === 'head_nurse' || userProfile?.role === 'superadmin'
 
-  // ── Draft helpers ──────────────────────────────────────────────────────────
-  function startEdit(section: Section) {
+  const startEdit = useCallback((section: Section) => {
     setSaveError('')
     setDraft({ ...localPatient })
     setEditingSection(section)
-  }
+  }, [localPatient])
 
-  function cancelEdit() {
+  const cancelEdit = useCallback(() => {
     setEditingSection(null)
     setDraft({})
     setSaveError('')
-  }
+  }, [])
 
-  async function saveSection(section: Section) {
+  const saveSection = useCallback(async (section: Section) => {
     if (!onSavePatient) return
     setSaving(true)
     setSaveError('')
@@ -77,94 +228,51 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
     } finally {
       setSaving(false)
     }
-  }
+  }, [onSavePatient, localPatient.id, draft])
 
-  function set(field: keyof Patient, value: string) {
+  const setField = useCallback((field: keyof Patient, value: string) => {
     setDraft(prev => ({ ...prev, [field]: value }))
-  }
+  }, [])
 
-  // ── Section footer (Edit / Save+Cancel) ───────────────────────────────────
-  function SectionFooter({ section }: { section: Section }) {
-    if (!canManage || !onSavePatient) return null
-
-    if (editingSection === section) {
-      return (
-        <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
-          {saveError && (
-            <p className="text-xs text-red-500 flex-1">{saveError}</p>
-          )}
-          <div className="flex gap-2 ml-auto">
-            <button
-              type="button"
-              onClick={cancelEdit}
-              disabled={saving}
-              className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => saveSection(section)}
-              disabled={saving}
-              className="px-4 py-2 text-sm font-bold bg-lasso-teal hover:bg-lasso-navy text-white rounded-xl transition-colors disabled:opacity-50 min-w-[72px]"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        </div>
-      )
-    }
-
+  function sectionFooter(section: Section) {
     return (
-      <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
-        <button
-          type="button"
-          onClick={() => startEdit(section)}
-          disabled={editingSection !== null}
-          className="px-3.5 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          Edit
-        </button>
-      </div>
+      <ProfileSectionFooter
+        section={section}
+        canManage={canManage}
+        canSave={Boolean(onSavePatient)}
+        editingSection={editingSection}
+        saving={saving}
+        saveError={saveError}
+        onStart={startEdit}
+        onCancel={cancelEdit}
+        onSave={saveSection}
+      />
     )
   }
 
-  // ── Shared input atoms ─────────────────────────────────────────────────────
-  function TextField({ field, label }: { field: keyof Patient; label: string }) {
-    return (
-      <div>
-        <label className={labelCls}>{label}</label>
-        <input
-          type="text"
-          value={(draft[field] as string) ?? ''}
-          onChange={e => set(field, e.target.value)}
-          className={inputCls}
-        />
-      </div>
-    )
+  function profileSectionClass(section: Section) {
+    const locked = editingSection != null && editingSection !== section
+    const active = editingSection === section
+    return [
+      'bg-white dark:bg-gray-800 border rounded-[18px] p-6 shadow-sm transition-all',
+      locked
+        ? 'border-gray-100 dark:border-gray-700 opacity-40 pointer-events-none'
+        : active
+          ? 'border-[#2b8878]/50 ring-2 ring-[#2b8878]/15'
+          : 'border-gray-100 dark:border-gray-700',
+    ].join(' ')
   }
 
-  function DateField({ field, label }: { field: keyof Patient; label: string }) {
+  function LockedHint({ section }: { section: Section }) {
+    if (!editingSection || editingSection === section) return null
+    const openLabel =
+      editingSection === 'identification' ? 'Identification'
+      : editingSection === 'contact' ? 'Contact'
+      : 'Clinical'
     return (
-      <div>
-        <label className={labelCls}>{label}</label>
-        <input
-          type="date"
-          value={(draft[field] as string) ?? ''}
-          onChange={e => set(field, e.target.value)}
-          className={inputCls}
-        />
-      </div>
-    )
-  }
-
-  // ── Read-only value row ────────────────────────────────────────────────────
-  function Row({ label, children }: { label: string; children: React.ReactNode }) {
-    return (
-      <>
-        <dt className="font-bold text-gray-400 self-start pt-0.5">{label}</dt>
-        <dd className="m-0">{children}</dd>
-      </>
+      <p className="text-xs text-gray-400 mb-3">
+        Save or cancel {openLabel} to edit this section.
+      </p>
     )
   }
 
@@ -225,18 +333,19 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
         <div className="space-y-5">
 
           {/* ── Identification ── */}
-          <section className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-[18px] p-6 shadow-sm">
+          <section className={profileSectionClass('identification')}>
             <h3 className="text-[13px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-4 m-0">Identification</h3>
+            <LockedHint section="identification" />
 
             {editingSection === 'identification' ? (
               <div className="grid gap-4 sm:grid-cols-2">
-                <TextField field="patient_name"   label="Full name" />
-                <DateField  field="date_of_birth"  label="Date of birth" />
+                <ProfileTextField field="patient_name" label="Full name" value={(draft.patient_name as string) ?? ''} onChange={setField} />
+                <ProfileDateField field="date_of_birth" label="Date of birth" value={(draft.date_of_birth as string) ?? ''} onChange={setField} />
                 <div>
                   <label className={labelCls}>Sex</label>
                   <select
                     value={(draft.sex as string) ?? ''}
-                    onChange={e => set('sex', e.target.value)}
+                    onChange={e => setField('sex', e.target.value)}
                     className={inputCls}
                   >
                     <option value="">Select…</option>
@@ -245,62 +354,61 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
                     <option value="Other">Other</option>
                   </select>
                 </div>
-                <DateField field="admission_date" label="Admission date" />
+                <ProfileDateField field="admission_date" label="Admission date" value={(draft.admission_date as string) ?? ''} onChange={setField} />
               </div>
             ) : (
               <dl className="grid text-sm" style={{ gridTemplateColumns: '160px 1fr', rowGap: '12px' }}>
-                <Row label="Record #">
+                <ProfileRow label="Record #">
                   <span className="text-gray-900 dark:text-white font-mono text-xs">{localPatient.record_number || '—'}</span>
-                </Row>
-                <Row label="Full name">
+                </ProfileRow>
+                <ProfileRow label="Full name">
                   <span className="text-gray-900 dark:text-white">{localPatient.patient_name || '—'}</span>
-                </Row>
-                <Row label="Date of birth">
+                </ProfileRow>
+                <ProfileRow label="Date of birth">
                   <span className="text-gray-900 dark:text-white">{formatCalendarDate(localPatient.date_of_birth) || '—'}</span>
-                </Row>
-                <Row label="Sex">
+                </ProfileRow>
+                <ProfileRow label="Sex">
                   <span className="text-gray-900 dark:text-white">{localPatient.sex || '—'}</span>
-                </Row>
-                <Row label="Admission date">
+                </ProfileRow>
+                <ProfileRow label="Admission date">
                   <span className="text-gray-900 dark:text-white">
                     {localPatient.admission_date ? formatCalendarDate(localPatient.admission_date) : '—'}
                   </span>
-                </Row>
+                </ProfileRow>
                 {localPatient.facility_name && (
-                  <Row label="Facility">
+                  <ProfileRow label="Facility">
                     <span className="text-gray-900 dark:text-white">{localPatient.facility_name}</span>
-                  </Row>
+                  </ProfileRow>
                 )}
               </dl>
             )}
 
-            <SectionFooter section="identification" />
+            {sectionFooter('identification')}
           </section>
 
           {/* ── Contact ── */}
-          <section className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-[18px] p-6 shadow-sm">
+          <section className={profileSectionClass('contact')}>
             <h3 className="text-[13px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-4 m-0">Contact</h3>
+            <LockedHint section="contact" />
 
             {editingSection === 'contact' ? (
               <div className="grid gap-4 sm:grid-cols-2">
-                <TextField field="home_phone"      label="Phone" />
-                <TextField field="email"           label="Email" />
-                <div className="sm:col-span-2">
-                  <TextField field="street_address" label="Street address" />
-                </div>
-                <TextField field="city"            label="City" />
-                <TextField field="state"           label="State" />
-                <TextField field="zip_code"        label="ZIP code" />
+                <ProfileTextField field="home_phone" label="Phone" value={(draft.home_phone as string) ?? ''} onChange={setField} />
+                <ProfileTextField field="email" label="Email" value={(draft.email as string) ?? ''} onChange={setField} />
+                <ProfileTextField className="sm:col-span-2" field="street_address" label="Street address" value={(draft.street_address as string) ?? ''} onChange={setField} />
+                <ProfileTextField field="city" label="City" value={(draft.city as string) ?? ''} onChange={setField} />
+                <ProfileTextField field="state" label="State" value={(draft.state as string) ?? ''} onChange={setField} />
+                <ProfileTextField field="zip_code" label="ZIP code" value={(draft.zip_code as string) ?? ''} onChange={setField} />
               </div>
             ) : (
               <dl className="grid text-sm" style={{ gridTemplateColumns: '160px 1fr', rowGap: '12px' }}>
-                <Row label="Phone">
+                <ProfileRow label="Phone">
                   <span className="text-gray-900 dark:text-white">{localPatient.home_phone || '—'}</span>
-                </Row>
-                <Row label="Email">
+                </ProfileRow>
+                <ProfileRow label="Email">
                   <span className="text-gray-900 dark:text-white">{localPatient.email || '—'}</span>
-                </Row>
-                <Row label="Address">
+                </ProfileRow>
+                <ProfileRow label="Address">
                   {localPatient.street_address || localPatient.city || localPatient.state || localPatient.zip_code ? (
                     <span className="text-gray-900 dark:text-white">
                       {[localPatient.street_address, localPatient.city, localPatient.state, localPatient.zip_code]
@@ -309,37 +417,37 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
                   ) : (
                     <span className="text-gray-400">—</span>
                   )}
-                </Row>
+                </ProfileRow>
               </dl>
             )}
 
-            <SectionFooter section="contact" />
+            {sectionFooter('contact')}
           </section>
 
           {/* ── Clinical ── */}
-          <section className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-[18px] p-6 shadow-sm">
+          <section className={profileSectionClass('clinical')}>
             <h3 className="text-[13px] font-extrabold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-4 m-0">Clinical</h3>
+            <LockedHint section="clinical" />
 
             {editingSection === 'clinical' ? (
               <div className="grid gap-4 sm:grid-cols-2">
-                <TextField field="physician_name"  label="Physician" />
-                <TextField field="physician_phone" label="Physician phone" />
-                <TextField field="diet"            label="Diet" />
-                <div className="sm:col-span-2">
-                  <label className={labelCls}>Allergies <span className="font-normal opacity-60">(comma-separated)</span></label>
-                  <input
-                    type="text"
-                    value={(draft.allergies as string) ?? ''}
-                    onChange={e => set('allergies', e.target.value)}
-                    placeholder="e.g. Penicillin, Latex"
-                    className={inputCls}
-                  />
-                </div>
+                <ProfileTextField field="physician_name" label="Physician" value={(draft.physician_name as string) ?? ''} onChange={setField} />
+                <ProfileTextField field="physician_phone" label="Physician phone" value={(draft.physician_phone as string) ?? ''} onChange={setField} />
+                <ProfileTextField field="diet" label="Diet" value={(draft.diet as string) ?? ''} onChange={setField} />
+                <ProfileTextField
+                  className="sm:col-span-2"
+                  field="allergies"
+                  label="Allergies"
+                  hint="(comma-separated)"
+                  placeholder="e.g. Penicillin, Latex"
+                  value={(draft.allergies as string) ?? ''}
+                  onChange={setField}
+                />
                 <div className="sm:col-span-2">
                   <label className={labelCls}>Diagnoses <span className="font-normal opacity-60">(comma-separated)</span></label>
                   <textarea
                     value={(draft.diagnosis as string) ?? ''}
-                    onChange={e => set('diagnosis', e.target.value)}
+                    onChange={e => setField('diagnosis', e.target.value)}
                     rows={3}
                     placeholder="e.g. Type 2 Diabetes, Hypertension"
                     className={inputCls + ' resize-none'}
@@ -348,18 +456,18 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
               </div>
             ) : (
               <dl className="grid text-sm" style={{ gridTemplateColumns: '160px 1fr', rowGap: '12px' }}>
-                <Row label="Physician">
+                <ProfileRow label="Physician">
                   <span className="text-gray-900 dark:text-white">{localPatient.physician_name || '—'}</span>
-                </Row>
-                <Row label="Physician phone">
+                </ProfileRow>
+                <ProfileRow label="Physician phone">
                   <span className="text-gray-900 dark:text-white">{localPatient.physician_phone || '—'}</span>
-                </Row>
-                <Row label="Diet">
+                </ProfileRow>
+                <ProfileRow label="Diet">
                   {localPatient.diet
                     ? <span className="text-gray-900 dark:text-white">{localPatient.diet}</span>
                     : <span className="text-gray-400">None set</span>}
-                </Row>
-                <Row label="Allergies">
+                </ProfileRow>
+                <ProfileRow label="Allergies">
                   {allergies.length > 0
                     ? allergies.map(a => (
                         <span key={a} className="inline-block bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-[9px] px-2.5 py-1 text-xs font-semibold mr-1.5 mb-1">
@@ -367,8 +475,8 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
                         </span>
                       ))
                     : <span className="text-gray-400">None recorded</span>}
-                </Row>
-                <Row label="Diagnoses">
+                </ProfileRow>
+                <ProfileRow label="Diagnoses">
                   {diagnoses.length > 0
                     ? diagnoses.map(d => (
                         <span key={d} className="inline-block bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-[9px] px-2.5 py-1 text-xs font-semibold mr-1.5 mb-1">
@@ -376,11 +484,11 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
                         </span>
                       ))
                     : <span className="text-gray-400">None recorded</span>}
-                </Row>
+                </ProfileRow>
               </dl>
             )}
 
-            <SectionFooter section="clinical" />
+            {sectionFooter('clinical')}
           </section>
 
         </div>

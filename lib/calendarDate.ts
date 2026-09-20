@@ -34,6 +34,28 @@ export function localTodayYMD(): string {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
 }
 
+/** Earliest year we accept on profile / clinical date fields. */
+export const PROFILE_DATE_MIN_YMD = '1900-01-01'
+
+/**
+ * Accept a date-input value only when the year is exactly 4 digits and in range.
+ * Returns the previous-safe value: `null` means reject (keep current), `''` is a clear.
+ */
+export function sanitizeFourDigitYearDate(
+  raw: string,
+  opts?: { min?: string; max?: string; badInput?: boolean },
+): string | null {
+  if (opts?.badInput) return null
+  const ymd = ymdFromDateInput(raw)
+  if (!ymd) return ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null
+  const year = parseInt(ymd.slice(0, 4), 10)
+  if (year < 1900 || year > 9999) return null
+  if (opts?.min && ymd < opts.min) return null
+  if (opts?.max && ymd > opts.max) return null
+  return ymd
+}
+
 export function formatCalendarDate(
   raw: string | null | undefined,
   locales?: Intl.LocalesArgument,
