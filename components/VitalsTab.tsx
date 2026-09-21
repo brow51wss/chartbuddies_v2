@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Patient, UserProfile } from '../types/auth'
 import { localTodayYMD } from '../lib/calendarDate'
 import { rdsCreatePatientVital, rdsDeletePatientVital, rdsListPatientVitals } from '../lib/rdsApi'
+import NumericDateInput from './NumericDateInput'
 
 interface Props {
   patient: Patient
@@ -238,7 +239,7 @@ export default function VitalsTab({ patient, userProfile }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-400 mb-1">Date *</label>
-                  <input type="date" value={draft.date} onChange={e => setDraft(p => ({ ...p, date: e.target.value }))} className={inputCls} />
+                  <NumericDateInput value={draft.date} onChange={ymd => setDraft(p => ({ ...p, date: ymd }))} className={inputCls} />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-400 mb-1">Time *</label>

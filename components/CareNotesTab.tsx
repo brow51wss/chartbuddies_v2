@@ -4,6 +4,7 @@ import type { ProgressNoteEntry } from '../types/progress-notes'
 import { formatCalendarDate, localTodayYMD } from '../lib/calendarDate'
 import { rdsCreateProgressNote, rdsDeleteProgressNote, rdsListProgressNotes } from '../lib/rdsApi'
 import MonthlySummaryPanel from './MonthlySummaryPanel'
+import NumericDateInput from './NumericDateInput'
 
 type CareNotesView = 'notes' | 'summary'
 
@@ -358,10 +359,9 @@ export default function CareNotesTab({ patient, userProfile }: Props) {
             <div className="px-5 py-4 space-y-3">
               <div>
                 <label className="block text-xs font-bold text-gray-400 mb-1">Date *</label>
-                <input
-                  type="date"
+                <NumericDateInput
                   value={draftDate}
-                  onChange={e => setDraftDate(e.target.value)}
+                  onChange={setDraftDate}
                   className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal"
                 />
               </div>

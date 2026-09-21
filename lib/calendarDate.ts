@@ -49,8 +49,7 @@ export function sanitizeFourDigitYearDate(
   const ymd = ymdFromDateInput(raw)
   if (!ymd) return ''
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null
-  const year = parseInt(ymd.slice(0, 4), 10)
-  if (year < 1900 || year > 9999) return null
+  if (!parseLocalDateFromYMD(ymd)) return null
   if (opts?.min && ymd < opts.min) return null
   if (opts?.max && ymd > opts.max) return null
   return ymd

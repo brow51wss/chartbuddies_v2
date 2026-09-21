@@ -9,6 +9,7 @@ import {
   rdsUpsertProgressNoteSummary,
 } from '../lib/rdsApi'
 import { MonthPickerButton, type MonthPickerItem } from './MonthPickerButton'
+import NumericDateInput from './NumericDateInput'
 
 const INPUT =
   'w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-lasso-teal disabled:opacity-60'
@@ -414,7 +415,7 @@ export default function MonthlySummaryPanel({ patient, userProfile }: Props) {
               </div>
               <div>
                 <label className={LABEL}>Date</label>
-                <input type="date" value={form.physician_notified_date ?? ''} onChange={e => update('physician_notified_date', e.target.value)} className={INPUT} />
+                <NumericDateInput value={form.physician_notified_date ?? ''} onChange={ymd => update('physician_notified_date', ymd)} className={INPUT} />
               </div>
             </div>
             <div className="mb-3">
@@ -586,7 +587,7 @@ export default function MonthlySummaryPanel({ patient, userProfile }: Props) {
             </div>
             <div className="mb-3">
               <label className={LABEL}>Date MD Notified</label>
-              <input type="date" value={form.date_md_notified ?? ''} onChange={e => update('date_md_notified', e.target.value)} className={INPUT} />
+              <NumericDateInput value={form.date_md_notified ?? ''} onChange={ymd => update('date_md_notified', ymd)} className={INPUT} />
             </div>
             <div className="mb-3">
               <label className={LABEL}>Actions</label>
@@ -607,7 +608,7 @@ export default function MonthlySummaryPanel({ patient, userProfile }: Props) {
               </div>
               <div>
                 <label className={LABEL}>Date physician notified</label>
-                <input type="date" value={form.date_physician_notified ?? ''} onChange={e => update('date_physician_notified', e.target.value)} className={INPUT} />
+                <NumericDateInput value={form.date_physician_notified ?? ''} onChange={ymd => update('date_physician_notified', ymd)} className={INPUT} />
               </div>
             </div>
             <label className={LABEL}>Describe Type and Actions Taken</label>
@@ -626,7 +627,7 @@ export default function MonthlySummaryPanel({ patient, userProfile }: Props) {
               </div>
               <div>
                 <label className={LABEL}>Date</label>
-                <input type="date" value={form.signature_date ?? ''} onChange={e => update('signature_date', e.target.value)} className={INPUT} />
+                <NumericDateInput value={form.signature_date ?? ''} onChange={ymd => update('signature_date', ymd)} className={INPUT} />
               </div>
             </div>
             <label className={LABEL}>Signature</label>

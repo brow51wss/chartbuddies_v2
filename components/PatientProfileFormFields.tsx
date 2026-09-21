@@ -3,7 +3,8 @@ import {
   PHYSICIAN_SELECTION_BLOCKED_HINT,
   canEditPhysicianFields,
 } from '../lib/patientProfileWizardValidation'
-import { localTodayYMD, PROFILE_DATE_MIN_YMD, sanitizeFourDigitYearDate } from '../lib/calendarDate'
+import { localTodayYMD, PROFILE_DATE_MIN_YMD } from '../lib/calendarDate'
+import NumericDateInput from './NumericDateInput'
 
 export const patientProfileInputClass =
   'w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white'
@@ -200,14 +201,11 @@ export function PatientProfileFormFields({
   const showClinical = mode.type === 'full' || mode.step === 2
   const physicianFieldsLocked = showClinical && !canEditPhysicianFields(v)
   const dateMax = localTodayYMD()
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const next = sanitizeFourDigitYearDate(e.target.value, {
-      min: PROFILE_DATE_MIN_YMD,
-      max: dateMax,
-      badInput: e.target.validity.badInput,
-    })
-    if (next === null) return
-    onChange(e)
+  const emitDate = (name: 'dateOfBirth' | 'dateOfAdmission', ymd: string) => {
+    onChange({
+      target: { name, value: ymd },
+      currentTarget: { name, value: ymd },
+    } as React.ChangeEvent<HTMLInputElement>)
   }
   const hasValue = (value: string) => value.trim().length > 0
   const digitCount = (value: string) => value.replace(/\D/g, '').length
@@ -333,15 +331,13 @@ export function PatientProfileFormFields({
                       Date of Birth (DOB)<span className="text-red-500 ml-0.5">*</span>
                     </label>
                     <div className="relative min-w-0 w-full overflow-x-clip">
-                      <input
-                        type="date"
+                      <NumericDateInput
                         id={PATIENT_PROFILE_FIELD_IDS.dateOfBirth}
-                        name="dateOfBirth"
                         value={v.dateOfBirth}
-                        onChange={handleDateChange}
-                        required={mode.type === 'full'}
                         min={PROFILE_DATE_MIN_YMD}
                         max={dateMax}
+                        disabled={disabled}
+                        onChange={ymd => emitDate('dateOfBirth', ymd)}
                         className={`${patientProfileInputClass} min-w-0 w-full pr-8 ${highlightClass('dateOfBirth')}`}
                       />
                       <FieldCompleteCheck show={shouldShowCheck('dateOfBirth')} />
@@ -389,15 +385,13 @@ export function PatientProfileFormFields({
                       Date of Admission<span className="text-red-500 ml-0.5">*</span>
                     </label>
                     <div className="relative min-w-0 w-full overflow-x-clip">
-                      <input
-                        type="date"
+                      <NumericDateInput
                         id={PATIENT_PROFILE_FIELD_IDS.dateOfAdmission}
-                        name="dateOfAdmission"
                         value={v.dateOfAdmission}
-                        onChange={handleDateChange}
-                        required={mode.type === 'full'}
                         min={PROFILE_DATE_MIN_YMD}
                         max={dateMax}
+                        disabled={disabled}
+                        onChange={ymd => emitDate('dateOfAdmission', ymd)}
                         className={`${patientProfileInputClass} min-w-0 w-full pr-8 ${highlightClass('dateOfAdmission')}`}
                       />
                       <FieldCompleteCheck show={shouldShowCheck('dateOfAdmission')} />

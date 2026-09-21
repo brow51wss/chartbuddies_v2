@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import type { Patient, UserProfile } from '../types/auth'
-import { formatCalendarDate, localTodayYMD, PROFILE_DATE_MIN_YMD, sanitizeFourDigitYearDate, ymdFromDateInput } from '../lib/calendarDate'
+import { formatCalendarDate, localTodayYMD, PROFILE_DATE_MIN_YMD } from '../lib/calendarDate'
+import NumericDateInput from './NumericDateInput'
 import MedicationsTab from './MedicationsTab'
 import CareNotesTab from './CareNotesTab'
 import VitalsTab from './VitalsTab'
@@ -83,25 +84,15 @@ function ProfileDateField({
   min?: string
   max?: string
 }) {
-  const display = ymdFromDateInput(value)
   const ceiling = max || localTodayYMD()
   return (
     <div>
       <label className={labelCls}>{label}</label>
-      <input
-        type="date"
-        value={display}
+      <NumericDateInput
+        value={value}
         min={min}
         max={ceiling}
-        onChange={e => {
-          const next = sanitizeFourDigitYearDate(e.target.value, {
-            min,
-            max: ceiling,
-            badInput: e.target.validity.badInput,
-          })
-          if (next === null) return
-          onChange(field, next)
-        }}
+        onChange={ymd => onChange(field, ymd)}
         className={inputCls}
       />
     </div>
