@@ -67,3 +67,4 @@
 | Date | Trigger | Findings | Status |
 |---|---|---|---|
 | 2026-05-23 | initialized | _(pending first Sentinel scan)_ | _(pending verdict)_ |
+| 2026-09-30 | sdk-added | 3 Critical · 44 High · 58 Medium | PARTIAL (Cowork auditor): Stripe not go-live until webhook write checks, duplicate/stale sub handling, fail-open past_due fixed; signature-image unauthenticated PHI proxy, early-access-leads hardcoded code, 6-char password floor FAIL |

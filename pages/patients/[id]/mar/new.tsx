@@ -17,6 +17,8 @@ import {
 import type { Patient } from '../../../../types/auth'
 import type { MARMedication, MARAdministration, MARPRNRecord, MARVitalSigns } from '../../../../types/mar'
 import { formatCalendarDate } from '../../../../lib/calendarDate'
+import { usPhoneDigits } from '../../../../lib/patientProfileWizardValidation'
+import UsPhoneInput from '../../../../components/UsPhoneInput'
 
 export default function NewMARForm() {
   const router = useRouter()
@@ -174,6 +176,10 @@ export default function NewMARForm() {
 
   const handleSave = async (status: 'draft' | 'submitted') => {
     if (!patient || !userProfile) return
+    if (usPhoneDigits(patientInfo.physicianPhone).length !== 10) {
+      setError('Physician phone must be exactly 10 digits.')
+      return
+    }
 
     setSaving(true)
     setError('')
@@ -474,10 +480,9 @@ export default function NewMARForm() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Physician Phone *
                   </label>
-                  <input
-                    type="tel"
+                  <UsPhoneInput
                     value={patientInfo.physicianPhone}
-                    onChange={(e) => setPatientInfo({ ...patientInfo, physicianPhone: e.target.value })}
+                    onChange={(next) => setPatientInfo({ ...patientInfo, physicianPhone: next })}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   />

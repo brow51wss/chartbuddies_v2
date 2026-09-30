@@ -196,7 +196,7 @@ Source: Jonathan / Cece / Marlon review (`Lasso_Launch_Readiness_and_Compliance_
 | L-01 | PARTIAL | Dev | **Profile inline edit drops keystrokes** — fixed locally 2026-09-20: field components lifted out of `DashboardPatientDetail` so inputs no longer remount per key. Verified name + email keep focus. **Staff retest still required.** |
 | L-02 | PARTIAL | Dev | **Profile: cannot edit another section until the first is saved** — locked sections now fade (opacity) with “Save or cancel …” copy. Edit stays disabled until Save/Cancel. **Staff retest still required.** |
 | L-03 | TODO | Dev | **Profile subsequent edits don’t stick** — second change to email / phone / street keeps the first new value. |
-| L-04 | TODO | Dev | **Phone field accepts extra digits** — enforce the formatted length. |
+| L-04 | DONE | Dev | **Phone fields: US 10 digits only.** Shared `UsPhoneInput` — digits only, max 10 (leading country-code `1` stripped on paste), display `(XXX) XXX-XXXX`. Wired on Profile Contact/Clinical, add/edit resident, old-MAR physician phone, and early-access. Home phone required 10; physician phone empty or 10. |
 | L-05 | DONE | Dev | **Date fields** use numeric MM / DD / YYYY (digits only; month≤2, day≤2, year exactly 4) on Profile, add/edit resident, add/edit med & PRN, Care Notes, monthly summary, and Vitals. Existing per-field rules kept (DOB 1900–today; med stop ≥ start). Calendar icon still available. |
 | L-06 | TODO | Dev | **Restore MAR / chart initials and signatures** (digital OK). Progress-note sign-off stays. PCG or substitute must be able to sign notes. Then resubmit / retest. |
 | L-07 | TODO | Dev | **Keep dashboard Vitals; remove Appointments from current launch scope** (Cece: vitals are MAR/status tracking; appts out). *Mismatch: Vitals + Appts tabs already shipped — hide/remove Appts only.* |
@@ -219,7 +219,7 @@ Source: Jonathan / Cece / Marlon review (`Lasso_Launch_Readiness_and_Compliance_
 | L-14 | TODO | Marketing / Jonathan | Remove fake **Priya / DON quote** from the marketing or review doc (still on the page they shared). |
 | L-15 | DEFERRED | Product | **Carry non-expired meds/PRNs into the next month** with creation defaults. Agreed they should; deferred while the new UI was the priority. New UI should not offer a future month. |
 | L-16 | TODO | Jonathan | **Stripe:** create a **separate Lasso** Stripe account (same login/bank OK). Register domain (already owned). Target: Zoom ~2 weeks after 2026-09-15 (Marlon in Jersey the week after the meeting). |
-| L-17 | TODO | Marlon / Dev | Wire payments to the **existing pricing spreadsheet**. Freemium = later conversation, not this ship. |
+| L-17 | PARTIAL | Marlon / Dev | **Billing/seats wired in code:** 14-day trial (076 applied). No grandfather. Trial max 2 nurses (extras greyed out). Cowork B-2/B-3/B-4 fixed in code: webhook write must succeed or Stripe gets 500; no second Checkout on a live sub; unpaid/canceled has no access; `past_due` has a 7-day grace (`077`). Still need: **run 077**, deploy Amplify, Jonathan’s Stripe prices, env, webhook. Freemium = later. |
 | L-18 | TODO | Marlon | Schedule the **post-Jersey Zoom** for Stripe + pricing. |
 | L-19 | OUT OF SCOPE | — | Full inspection binder (personnel, CPR, etc.). Lasso launch = MAR + progress notes + monthly summary. Paper binder remains for the rest. |
 

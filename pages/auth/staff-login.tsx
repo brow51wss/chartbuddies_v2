@@ -12,6 +12,7 @@ type StaffTile = {
   last_name: string | null
   staff_initials_text: string | null
   role: string
+  seat_locked?: boolean
 }
 
 type Step = 'facility' | 'staff' | 'success'
@@ -103,6 +104,7 @@ export default function StaffLogin() {
   }
 
   const openModal = (staff: StaffTile) => {
+    if (staff.seat_locked) return
     setSelectedStaff(staff)
     setPassword('')
     setLoginError('')
@@ -282,7 +284,12 @@ export default function StaffLogin() {
                 <button
                   key={staff.id}
                   onClick={() => openModal(staff)}
-                  className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex flex-col items-center gap-3 hover:border-gray-400 dark:hover:border-gray-500 hover:shadow-md transition-all"
+                  disabled={staff.seat_locked}
+                  className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex flex-col items-center gap-3 transition-all ${
+                    staff.seat_locked
+                      ? 'opacity-40 grayscale cursor-not-allowed'
+                      : 'hover:border-gray-400 dark:hover:border-gray-500 hover:shadow-md'
+                  }`}
                 >
                   <div className="w-14 h-14 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center font-bold text-lg text-gray-700 dark:text-gray-200 flex-shrink-0">
                     {getInitials(staff)}
@@ -292,7 +299,7 @@ export default function StaffLogin() {
                       {getFirstName(staff)}
                     </div>
                     <div className="text-xs text-gray-400 mt-0.5">
-                      {getRoleLabel(staff.role)}
+                      {staff.seat_locked ? 'Not in free trial' : getRoleLabel(staff.role)}
                     </div>
                   </div>
                 </button>

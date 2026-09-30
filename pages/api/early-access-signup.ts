@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
+import { formatPatientPhoneInput, isCompleteUsPhone } from '../../lib/patientProfileWizardValidation'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -17,8 +18,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!email || typeof email !== 'string' || !email.includes('@')) {
     return res.status(400).json({ error: 'A valid email address is required.' })
   }
-  if (!phone || typeof phone !== 'string' || phone.trim().length < 7) {
-    return res.status(400).json({ error: 'Phone number is required.' })
+  if (!phone || typeof phone !== 'string' || !isCompleteUsPhone(phone)) {
+    return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' })
   }
 
   try {
@@ -27,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { error } = await supabase.from('early_access_leads').insert({
       full_name: full_name.trim(),
       email: email.trim().toLowerCase(),
-      phone: phone.trim(),
+      phone: formatPatientPhoneInput(phone),
       facility: facility?.trim() || null,
     })
 

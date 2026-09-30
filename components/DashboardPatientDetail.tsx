@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import type { Patient, UserProfile } from '../types/auth'
 import { formatCalendarDate, localTodayYMD, PROFILE_DATE_MIN_YMD } from '../lib/calendarDate'
+import { usPhoneDigits } from '../lib/patientProfileWizardValidation'
 import NumericDateInput from './NumericDateInput'
+import UsPhoneInput from './UsPhoneInput'
 import MedicationsTab from './MedicationsTab'
 import CareNotesTab from './CareNotesTab'
 import VitalsTab from './VitalsTab'
@@ -63,6 +65,29 @@ function ProfileTextField({
         value={value}
         onChange={e => onChange(field, e.target.value)}
         placeholder={placeholder}
+        className={inputCls}
+      />
+    </div>
+  )
+}
+
+function ProfilePhoneField({
+  field,
+  label,
+  value,
+  onChange,
+}: {
+  field: keyof Patient
+  label: string
+  value: string
+  onChange: (field: keyof Patient, value: string) => void
+}) {
+  return (
+    <div>
+      <label className={labelCls}>{label}</label>
+      <UsPhoneInput
+        value={value}
+        onChange={(next) => onChange(field, next)}
         className={inputCls}
       />
     </div>
@@ -207,6 +232,20 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
 
   const saveSection = useCallback(async (section: Section) => {
     if (!onSavePatient) return
+    if (section === 'contact') {
+      const home = usPhoneDigits(String(draft.home_phone ?? ''))
+      if (home.length > 0 && home.length !== 10) {
+        setSaveError('Phone must be exactly 10 digits.')
+        return
+      }
+    }
+    if (section === 'clinical') {
+      const phy = usPhoneDigits(String(draft.physician_phone ?? ''))
+      if (phy.length > 0 && phy.length !== 10) {
+        setSaveError('Physician phone must be exactly 10 digits, or leave it blank.')
+        return
+      }
+    }
     setSaving(true)
     setSaveError('')
     try {
@@ -384,7 +423,7 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
 
             {editingSection === 'contact' ? (
               <div className="grid gap-4 sm:grid-cols-2">
-                <ProfileTextField field="home_phone" label="Phone" value={(draft.home_phone as string) ?? ''} onChange={setField} />
+                <ProfilePhoneField field="home_phone" label="Phone" value={(draft.home_phone as string) ?? ''} onChange={setField} />
                 <ProfileTextField field="email" label="Email" value={(draft.email as string) ?? ''} onChange={setField} />
                 <ProfileTextField className="sm:col-span-2" field="street_address" label="Street address" value={(draft.street_address as string) ?? ''} onChange={setField} />
                 <ProfileTextField field="city" label="City" value={(draft.city as string) ?? ''} onChange={setField} />
@@ -423,7 +462,7 @@ export default function DashboardPatientDetail({ patient, userProfile, onArchive
             {editingSection === 'clinical' ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <ProfileTextField field="physician_name" label="Physician" value={(draft.physician_name as string) ?? ''} onChange={setField} />
-                <ProfileTextField field="physician_phone" label="Physician phone" value={(draft.physician_phone as string) ?? ''} onChange={setField} />
+                <ProfilePhoneField field="physician_phone" label="Physician phone" value={(draft.physician_phone as string) ?? ''} onChange={setField} />
                 <ProfileTextField field="diet" label="Diet" value={(draft.diet as string) ?? ''} onChange={setField} />
                 <ProfileTextField
                   className="sm:col-span-2"

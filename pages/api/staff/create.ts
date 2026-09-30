@@ -2,6 +2,11 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import getConfig from 'next/config'
 import { createClient } from '@supabase/supabase-js'
 import { randomBytes } from 'crypto'
+import {
+  allowedNurseSeats,
+  countActiveNurses,
+  getOrCreateFacilitySubscription,
+} from '../../../lib/facilityBilling'
 
 function serviceRoleKey(): string {
   const { serverRuntimeConfig } = getConfig() || {}
@@ -70,6 +75,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   if (password.length < 8) {
     return res.status(400).json({ error: 'Password must be at least 8 characters' })
+  }
+
+  try {
+    const { subscription, tableMissing } = await getOrCreateFacilitySubscription(
+      admin,
+      caller.hospital_id,
+      caller.id
+    )
+    if (!tableMissing && subscription) {
+      const used = await countActiveNurses(admin, caller.hospital_id)
+      const allowed = allowedNurseSeats(subscription)
+      if (used >= allowed) {
+        return res.status(402).json({
+          error: `This facility already has ${used} of ${allowed} nurse seats. Add a $4.99/month seat on Billing before creating another nurse.`,
+          seatsUsed: used,
+          seatsAllowed: allowed,
+        })
+      }
+    }
+  } catch (err: any) {
+    console.error('[staff/create] seat check', err?.message || err)
+    return res.status(500).json({ error: 'Could not verify nurse seats. Try again.' })
   }
 
   const initials = initialsFromNames(firstName, lastName, body.initials || '')

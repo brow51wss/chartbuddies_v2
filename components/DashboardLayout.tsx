@@ -135,6 +135,15 @@ export default function DashboardLayout({
                   ⚙ Admin settings
                 </button>
               )}
+              {userProfile?.role === 'superadmin' && Boolean(userProfile.hospital_id) && (
+                <button
+                  type="button"
+                  onClick={() => { setUserMenuOpen(false); router.push('/billing') }}
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  Billing
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => { setUserMenuOpen(false); handleSwitchUser() }}

@@ -1,5 +1,7 @@
 import Head from 'next/head'
 import { useState, FormEvent } from 'react'
+import UsPhoneInput from '../components/UsPhoneInput'
+import { isCompleteUsPhone } from '../lib/patientProfileWizardValidation'
 
 type FormState = 'idle' | 'loading' | 'success' | 'error'
 
@@ -71,6 +73,11 @@ function EarlyAccessForm() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (!isCompleteUsPhone(form.phone)) {
+      setErrorMsg('Phone number must be exactly 10 digits.')
+      setState('error')
+      return
+    }
     setState('loading')
     setErrorMsg('')
     try {
@@ -147,10 +154,12 @@ function EarlyAccessForm() {
           <label className="block text-xs font-semibold text-gray-700 mb-1.5" htmlFor="phone">
             Phone Number <span className="text-red-500">*</span>
           </label>
-          <input
-            id="phone" name="phone" type="tel" required
-            placeholder="(555) 000-0000"
-            value={form.phone} onChange={handleChange}
+          <UsPhoneInput
+            id="phone"
+            name="phone"
+            required
+            value={form.phone}
+            onChange={(next) => setForm((prev) => ({ ...prev, phone: next }))}
             disabled={state === 'loading'}
             className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-lasso-navy/30 focus:border-lasso-navy disabled:opacity-60"
           />
@@ -200,6 +209,11 @@ function InvertedEarlyAccessForm() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (!isCompleteUsPhone(form.phone)) {
+      setErrorMsg('Phone number must be exactly 10 digits.')
+      setState('error')
+      return
+    }
     setState('loading')
     setErrorMsg('')
     try {
@@ -261,8 +275,15 @@ function InvertedEarlyAccessForm() {
         </div>
         <div>
           <label className={labelCls} htmlFor="inv-phone">Phone Number <span className="text-red-400">*</span></label>
-          <input id="inv-phone" name="phone" type="tel" required placeholder="(555) 000-0000"
-            value={form.phone} onChange={handleChange} disabled={state === 'loading'} className={inputCls} />
+          <UsPhoneInput
+            id="inv-phone"
+            name="phone"
+            required
+            value={form.phone}
+            onChange={(next) => setForm((prev) => ({ ...prev, phone: next }))}
+            disabled={state === 'loading'}
+            className={inputCls}
+          />
         </div>
         <div>
           <label className={labelCls} htmlFor="inv-facility">Facility Name <span className="text-white/40 font-normal">(optional)</span></label>

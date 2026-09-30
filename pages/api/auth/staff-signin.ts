@@ -2,6 +2,13 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import getConfig from 'next/config'
 import { createClient } from '@supabase/supabase-js'
 import { clientIp, rateLimit, rejectTooMany } from '../../../lib/rate-limit'
+import {
+  allowedNurseSeats,
+  facilityHasAccess,
+  getFacilitySubscription,
+  isNurseSeatRole,
+  seatedNurseIds,
+} from '../../../lib/facilityBilling'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -45,7 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { data: profile, error: profileError } = await adminClient
     .from('user_profiles')
-    .select('email, is_active, role')
+    .select('email, is_active, role, hospital_id')
     .eq('id', user_profile_id)
     .single()
 
@@ -68,6 +75,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (authError || !authData.session) {
     return res.status(401).json({ error: 'Incorrect password. Please try again.' })
+  }
+
+  if (profile.hospital_id) {
+    try {
+      const { subscription, tableMissing } = await getFacilitySubscription(adminClient, profile.hospital_id)
+      if (!tableMissing && !facilityHasAccess(subscription)) {
+        return res.status(402).json({
+          error: 'This facility’s trial has ended. Ask the PCG to subscribe before staff can sign in.',
+        })
+      }
+      if (!tableMissing && subscription && isNurseSeatRole(profile.role)) {
+        const { data: nurses } = await adminClient
+          .from('user_profiles')
+          .select('id, created_at')
+          .eq('hospital_id', profile.hospital_id)
+          .in('role', ['nurse', 'head_nurse'])
+          .eq('is_active', true)
+        const seated = seatedNurseIds(nurses || [], allowedNurseSeats(subscription))
+        if (!seated.has(user_profile_id)) {
+          return res.status(402).json({
+            error: 'This nurse seat is not included in the free 2-nurse trial. Ask the PCG to add a paid seat.',
+          })
+        }
+      }
+    } catch (err: any) {
+      console.error('[staff-signin] billing check', err?.message || err)
+    }
   }
 
   return res.status(200).json({

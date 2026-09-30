@@ -6,6 +6,7 @@ import ProtectedRoute from '../components/ProtectedRoute'
 import AppHeader from '../components/AppHeader'
 import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile } from '../lib/auth'
+import { INCLUDED_NURSE_SEATS, isNurseSeatRole, seatedNurseIds } from '../lib/facilityBilling'
 import type { UserProfile } from '../types/auth'
 
 interface CaregiverTile {
@@ -16,6 +17,7 @@ interface CaregiverTile {
   staff_initials_text: string | null
   role: string
   designation: string | null
+  created_at?: string
 }
 
 function tileInitials(c: CaregiverTile): string {
@@ -58,14 +60,24 @@ export default function FacilityUsersPage() {
   const [resetConfirm, setResetConfirm] = useState('')
   const [resetSaving, setResetSaving] = useState(false)
   const [resetError, setResetError] = useState('')
+  const [seatSummary, setSeatSummary] = useState('')
+  const [seatsFull, setSeatsFull] = useState(false)
+  const [seatsAllowed, setSeatsAllowed] = useState(INCLUDED_NURSE_SEATS)
 
   const canManage = userProfile?.role === 'superadmin' && Boolean(userProfile.hospital_id)
   const canAdd = canManage
+  const seatedIds = seatedNurseIds(
+    caregivers.filter((c) => isNurseSeatRole(c.role)).map((c) => ({
+      id: c.id,
+      created_at: c.created_at || c.id,
+    })),
+    seatsAllowed
+  )
 
   async function loadCaregivers(hospitalId: string) {
     const { data, error: loadError } = await supabase
       .from('user_profiles')
-      .select('id, full_name, first_name, last_name, staff_initials_text, role, designation, is_active')
+      .select('id, full_name, first_name, last_name, staff_initials_text, role, designation, is_active, created_at')
       .eq('hospital_id', hospitalId)
       .eq('is_active', true)
       .order('first_name', { ascending: true })
@@ -88,6 +100,21 @@ export default function FacilityUsersPage() {
       setUserProfile(profile)
       try {
         await loadCaregivers(profile.hospital_id)
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token && profile.role === 'superadmin') {
+          const res = await fetch('/api/billing/status', {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          })
+          const json = await res.json().catch(() => ({}))
+          if (res.ok && typeof json.nurseSeatsUsed === 'number') {
+            const allowed = Number(json.nurseSeatsAllowed) || INCLUDED_NURSE_SEATS
+            setSeatsAllowed(allowed)
+            setSeatSummary(
+              `${json.nurseSeatsUsed} of ${allowed} nurse seats used. Free trial includes 2 nurses; extras are greyed out.`
+            )
+            setSeatsFull(json.canAddNurse === false)
+          }
+        }
       } catch {
         setError('Failed to load caregivers')
       } finally {
@@ -217,6 +244,14 @@ export default function FacilityUsersPage() {
         ))
         const addedName = json.caregiver.first_name || json.caregiver.full_name
         setJustAdded(`${addedName} can now clock in at staff login with the password you set.`)
+        setSeatSummary((prev) => {
+          const match = prev.match(/^(\d+) of (\d+)/)
+          if (!match) return prev
+          const used = Number(match[1]) + 1
+          const allowed = Number(match[2])
+          setSeatsFull(used >= allowed)
+          return `${used} of ${allowed} nurse seats used`
+        })
       }
       setAdding(false)
     } catch {
@@ -250,10 +285,20 @@ export default function FacilityUsersPage() {
         </div>
 
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Caregivers</h1>
-        <p className="text-gray-600 dark:text-gray-400 mb-6">
+        <p className="text-gray-600 dark:text-gray-400 mb-2">
           People who can clock in at this facility. New nurses appear on staff login as a tile. No invite email.
           {canManage && ' Forgot a password? Reset it here from any phone — then tell the nurse the new one.'}
         </p>
+        {seatSummary && (
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+            {seatSummary}{' '}
+            {canManage && (
+              <Link href="/billing" className="text-lasso-teal font-semibold hover:underline">
+                Billing
+              </Link>
+            )}
+          </p>
+        )}
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-md">
@@ -270,10 +315,14 @@ export default function FacilityUsersPage() {
           className="grid gap-3"
           style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}
         >
-          {caregivers.map(c => (
+          {caregivers.map(c => {
+            const overSeat = isNurseSeatRole(c.role) && !seatedIds.has(c.id)
+            return (
             <div
               key={c.id}
-              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex flex-col items-center gap-3"
+              className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex flex-col items-center gap-3 ${
+                overSeat ? 'opacity-40 grayscale' : ''
+              }`}
             >
               <div className="w-14 h-14 rounded-full bg-[#2b8878] text-white flex items-center justify-center font-extrabold text-lg flex-shrink-0">
                 {tileInitials(c)}
@@ -283,10 +332,10 @@ export default function FacilityUsersPage() {
                   {tileFirstName(c)}
                 </div>
                 <div className="text-xs text-gray-400 mt-0.5">
-                  {roleLabel(c.role, c.designation)}
+                  {overSeat ? 'Over 2-nurse trial limit' : roleLabel(c.role, c.designation)}
                 </div>
               </div>
-              {canResetTile(c) && (
+              {canResetTile(c) && !overSeat && (
                 <button
                   type="button"
                   onClick={() => openReset(c)}
@@ -296,9 +345,10 @@ export default function FacilityUsersPage() {
                 </button>
               )}
             </div>
-          ))}
+            )
+          })}
 
-          {canAdd && (
+          {canAdd && !seatsFull && (
             <button
               type="button"
               onClick={openAdd}
@@ -307,6 +357,14 @@ export default function FacilityUsersPage() {
               <span className="text-4xl font-light leading-none">+</span>
               <span className="text-sm font-bold">Add caregiver</span>
             </button>
+          )}
+          {canAdd && seatsFull && (
+            <Link
+              href="/billing"
+              className="rounded-xl p-5 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 min-h-[160px]"
+            >
+              <span className="text-sm font-bold text-center">Nurse seats full. Add a $4.99 seat</span>
+            </Link>
           )}
         </div>
 

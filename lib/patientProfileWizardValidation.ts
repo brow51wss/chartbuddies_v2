@@ -27,6 +27,19 @@ function digitCount(value: string): number {
   return value.replace(/\D/g, '').length
 }
 
+/** US national number only: drop a leading country-code 1, then keep at most 10 digits. */
+export function usPhoneDigits(value: string): string {
+  let digits = value.replace(/\D/g, '')
+  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1)
+  return digits.slice(0, 10)
+}
+
+export function isCompleteUsPhone(value: string, allowEmpty = false): boolean {
+  const digits = usPhoneDigits(value)
+  if (!digits) return allowEmpty
+  return digits.length === 10
+}
+
 function isEmailLike(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 }
@@ -43,7 +56,7 @@ const US_STATE_CODES = new Set([
 export const DEFAULT_PATIENT_STATE = 'HI'
 
 export function formatPatientPhoneInput(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 10)
+  const digits = usPhoneDigits(value)
   if (digits.length <= 3) return digits
   if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
@@ -61,7 +74,7 @@ export function validatePatientStep1ContactFields(v: PatientProfileFormValues): 
 
   if (!v.homePhone.trim()) {
     errors.homePhone = 'Home phone is required.'
-  } else if (digitCount(v.homePhone) !== 10) {
+  } else if (!isCompleteUsPhone(v.homePhone)) {
     errors.homePhone = 'Home phone must contain 10 digits.'
   }
 
@@ -84,7 +97,7 @@ export function validatePatientStep1ContactFields(v: PatientProfileFormValues): 
 /** Optional physician phone on step 2 (validated on save, not for step-1 gating). */
 export function validatePhysicianPhoneField(v: PatientProfileFormValues): PatientProfileFieldErrors {
   const errors: PatientProfileFieldErrors = {}
-  if (v.physicianPhone.trim() && digitCount(v.physicianPhone) !== 10) {
+  if (v.physicianPhone.trim() && !isCompleteUsPhone(v.physicianPhone, true)) {
     errors.physicianPhone = 'Physician phone must contain 10 digits, or leave it blank.'
   }
   return errors

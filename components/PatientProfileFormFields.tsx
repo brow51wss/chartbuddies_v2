@@ -2,9 +2,11 @@ import React from 'react'
 import {
   PHYSICIAN_SELECTION_BLOCKED_HINT,
   canEditPhysicianFields,
+  usPhoneDigits,
 } from '../lib/patientProfileWizardValidation'
 import { localTodayYMD, PROFILE_DATE_MIN_YMD } from '../lib/calendarDate'
 import NumericDateInput from './NumericDateInput'
+import UsPhoneInput from './UsPhoneInput'
 
 export const patientProfileInputClass =
   'w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-lasso-teal focus:border-lasso-teal dark:bg-gray-700 dark:border-gray-600 dark:text-white'
@@ -207,8 +209,13 @@ export function PatientProfileFormFields({
       currentTarget: { name, value: ymd },
     } as React.ChangeEvent<HTMLInputElement>)
   }
+  const emitPhone = (name: 'homePhone' | 'physicianPhone', value: string) => {
+    onChange({
+      target: { name, value },
+      currentTarget: { name, value },
+    } as React.ChangeEvent<HTMLInputElement>)
+  }
   const hasValue = (value: string) => value.trim().length > 0
-  const digitCount = (value: string) => value.replace(/\D/g, '').length
   const isEmailLike = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
   const isZipLike = (value: string) => {
     const digits = value.replace(/\D/g, '')
@@ -239,7 +246,7 @@ export function PatientProfileFormFields({
         return hasValue(value)
       case 'homePhone':
       case 'physicianPhone':
-        return digitCount(value) >= 10
+        return usPhoneDigits(value).length === 10
       case 'email':
         return isEmailLike(value)
       default:
@@ -510,18 +517,13 @@ export function PatientProfileFormFields({
                   Home Phone<span className="text-red-500 ml-0.5">*</span>
                 </label>
                 <div className="relative">
-                  <input
-                    type="tel"
+                  <UsPhoneInput
                     id={PATIENT_PROFILE_FIELD_IDS.homePhone}
                     name="homePhone"
                     value={v.homePhone}
-                    onChange={onChange}
+                    onChange={(next) => emitPhone('homePhone', next)}
                     required={mode.type === 'full'}
-                    inputMode="numeric"
-                    maxLength={14}
                     className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('homePhone')}`}
-                    placeholder="(555) 555-5555"
-                    autoComplete="tel"
                   />
                   <FieldCompleteCheck show={shouldShowCheck('homePhone')} />
                 </div>
@@ -643,18 +645,13 @@ export function PatientProfileFormFields({
                 Physician phone
               </label>
               <div className="relative">
-                <input
-                  type="tel"
+                <UsPhoneInput
                   id={PATIENT_PROFILE_FIELD_IDS.physicianPhone}
                   name="physicianPhone"
                   value={v.physicianPhone}
-                  onChange={onChange}
+                  onChange={(next) => emitPhone('physicianPhone', next)}
                   disabled={disabled || physicianFieldsLocked}
-                  inputMode="numeric"
-                  maxLength={14}
                   className={`${patientProfileInputClass} ${showCompletionChecks ? 'pr-10' : ''} ${highlightClass('physicianPhone')} ${physicianFieldsLocked ? 'cursor-not-allowed opacity-60' : ''}`}
-                  placeholder="(555) 555-5555"
-                  autoComplete="tel"
                 />
                 <FieldCompleteCheck show={shouldShowCheck('physicianPhone')} />
               </div>

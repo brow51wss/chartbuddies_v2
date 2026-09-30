@@ -15,6 +15,10 @@ const nextConfig = {
     AWS_S3_REGION: process.env.AWS_S3_REGION || 'us-east-2',
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
     RDS_CONNECTION_STRING: process.env.RDS_CONNECTION_STRING || '',
+    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
+    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || '',
+    STRIPE_PRICE_FACILITY: process.env.STRIPE_PRICE_FACILITY || '',
+    STRIPE_PRICE_EXTRA_NURSE: process.env.STRIPE_PRICE_EXTRA_NURSE || '',
   },
 }
 

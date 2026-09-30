@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { getCurrentUserProfile } from '../lib/auth'
+import { supabase } from '../lib/supabase'
+import { isFacilityPcg, isPlatformAdmin } from '../lib/facilityBilling'
 import type { UserProfile } from '../types/auth'
 
 interface ProtectedRouteProps {
@@ -27,9 +29,23 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
         }
         // All users must complete signature/initials setup before accessing the app
         const onOnboardingPage = router.pathname === '/onboarding'
-        if (!onOnboardingPage && (!profile.staff_signature || !profile.staff_initials)) {
+        const onBillingPage = router.pathname === '/billing'
+        if (!onOnboardingPage && !onBillingPage && (!profile.staff_signature || !profile.staff_initials)) {
           window.location.replace('/onboarding')
           return
+        }
+        if (!onBillingPage && !isPlatformAdmin(profile) && profile.hospital_id) {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session?.access_token) {
+            const accessRes = await fetch('/api/billing/access', {
+              headers: { Authorization: `Bearer ${session.access_token}` },
+            })
+            const access = await accessRes.json().catch(() => ({ allowed: true }))
+            if (accessRes.ok && access.allowed === false) {
+              window.location.replace(isFacilityPcg(profile) ? '/billing' : '/auth/staff-login?reason=billing')
+              return
+            }
+          }
         }
         setUserProfile(profile)
       } finally {
