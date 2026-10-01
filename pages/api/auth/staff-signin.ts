@@ -80,12 +80,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (profile.hospital_id) {
     try {
       const { subscription, tableMissing } = await getFacilitySubscription(adminClient, profile.hospital_id)
-      if (!tableMissing && !facilityHasAccess(subscription)) {
+      if (tableMissing || !facilityHasAccess(subscription)) {
         return res.status(402).json({
           error: 'This facility’s trial has ended. Ask the PCG to subscribe before staff can sign in.',
         })
       }
-      if (!tableMissing && subscription && isNurseSeatRole(profile.role)) {
+      if (subscription && isNurseSeatRole(profile.role)) {
         const { data: nurses } = await adminClient
           .from('user_profiles')
           .select('id, created_at')
@@ -101,6 +101,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     } catch (err: any) {
       console.error('[staff-signin] billing check', err?.message || err)
+      return res.status(500).json({ error: 'Could not verify billing access. Try again.' })
     }
   }
 

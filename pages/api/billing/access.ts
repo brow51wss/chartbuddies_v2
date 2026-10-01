@@ -19,7 +19,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const { subscription, tableMissing } = await getFacilitySubscription(auth.admin, auth.profile.hospital_id)
-    if (tableMissing) return res.status(200).json({ allowed: true, reason: 'unconfigured' })
+    if (tableMissing) {
+      return res.status(200).json({ allowed: false, reason: 'unconfigured' })
+    }
     return res.status(200).json({
       allowed: facilityHasAccess(subscription),
       status: subscription?.status ?? null,

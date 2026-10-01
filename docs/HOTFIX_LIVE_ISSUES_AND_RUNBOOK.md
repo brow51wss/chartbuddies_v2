@@ -222,6 +222,46 @@ Source: Jonathan / Cece / Marlon review (`Lasso_Launch_Readiness_and_Compliance_
 | L-17 | PARTIAL | Marlon / Dev | **Billing/seats wired in code:** 14-day trial (076 applied). No grandfather. Trial max 2 nurses (extras greyed out). Cowork B-2/B-3/B-4 fixed in code: webhook write must succeed or Stripe gets 500; no second Checkout on a live sub; unpaid/canceled has no access; `past_due` has a 7-day grace (`077`). Still need: **run 077**, deploy Amplify, Jonathan’s Stripe prices, env, webhook. Freemium = later. |
 | L-18 | TODO | Marlon | Schedule the **post-Jersey Zoom** for Stripe + pricing. |
 | L-19 | OUT OF SCOPE | — | Full inspection binder (personnel, CPR, etc.). Lasso launch = MAR + progress notes + monthly summary. Paper binder remains for the rest. |
+| L-20 | TODO | Marlon | **Revisit nurse + PCG profile on Caregivers / facility roster.** After billing smoke (2026-09-30): tiles today show name + role + password reset only. Come back to **signature**, **email address**, and **phone number** for PCG and nurses (view/edit, where they live, who can change them). Do not treat as a launch blocker until Marlon reviews. |
+
+#### Billing operator checklist — Marlon only (2026-09-30 / 2026-10-01)
+
+Cowork billing **code** pass (re-verify #2). Runtime checks are Marlon’s. **Order:** B-OP-1 (077 on live) → Amplify deploy of billing → B-OP-2 / B-OP-3 can be before or after deploy → B-OP-4 and B-OP-5 only after Amplify is Deployed.
+
+- [x] **B-OP-1 — DONE 2026-10-01.** Confirm 077 on live Supabase (before Amplify). Combined check: 076 table, RLS, billing policy, trigger, all columns incl. `past_due_since`, and 32 hospitals = 32 billing rows all returned `true`. SQL editor:
+
+```sql
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'facility_subscriptions'
+  AND column_name = 'past_due_since';
+```
+
+Pass = one row, `past_due_since`, type `timestamp with time zone`.
+
+- [ ] **B-OP-2 — Stripe Billing Portal (sandbox).** Settings → Billing → Customer portal. Turn **off** customers changing subscription **quantities**. Turn **on** paying **open invoices** (an `unpaid` sub sends the PCG to the Portal; paying the open invoice is the only way back). Cancel: keep **at period end**. Save.
+
+- [x] **B-OP-3 — DONE 2026-10-01.** Found a third leftover SELECT policy `anon_read_active_hospitals` (role `anon`, not in the repo; 074 had only revoked the table grant). Dropped with `DROP POLICY IF EXISTS anon_read_active_hospitals ON public.hospitals;`. Re-check now shows exactly the two expected policies. `hospitals` SELECT policies only. SQL editor:
+
+```sql
+SELECT policyname, cmd
+FROM pg_policies
+WHERE schemaname = 'public'
+  AND tablename = 'hospitals'
+  AND cmd = 'SELECT'
+ORDER BY policyname;
+```
+
+Pass = exactly two SELECT policies: `Superadmins see all hospitals` (platform admin, `hospital_id IS NULL`) and `Users see own hospital`. Extra SELECT policies = stop and tell Cursor.
+
+- [ ] **B-OP-4 — Test-mode happy path** (after Amplify). Sandbox, test card `4242 4242 4242 4242`. Subscribe → add seat (confirm modal) → cancel (period end) → undo / Keep subscription → lapse with a Stripe **test clock** → resubscribe. No real card. `/billing` as facility PCG.
+
+- [ ] **B-OP-5 — Test-mode failed card / grace.** Same sandbox. Failed card → `past_due` → confirm **7-day grace** still has access → after 7 days **lockout**. Use a Stripe test clock + a declining test card (e.g. `4000 0000 0000 0341`).
+
+Parked product decision (not a checklist item): duplicate-sub auto-cancel still uses Stripe **account credit** (`prorate: true`), not a card refund. Marlon + Jonathan decide later.
+
+Owner: Marlon. Status: **TODO**.
 
 #### Explicitly not bugs (do not “fix”)
 

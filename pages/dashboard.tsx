@@ -29,6 +29,12 @@ export default function Dashboard() {
   }, [patients, selectedPatientId])
 
   useEffect(() => {
+    if (!router.isReady || router.query.addResident !== '1') return
+    setShowAddPatientModal(true)
+    router.replace('/dashboard', undefined, { shallow: true })
+  }, [router.isReady, router.query.addResident])
+
+  useEffect(() => {
     const loadData = async () => {
       const profile = await getCurrentUserProfile()
       if (!profile) {

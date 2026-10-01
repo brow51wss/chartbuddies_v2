@@ -11,7 +11,7 @@ import {
   isPlatformAdmin,
   trialDaysRemaining,
 } from '../../../lib/facilityBilling'
-import { isStripeConfigured } from '../../../lib/stripeServer'
+import { getStripe, isStripeConfigured } from '../../../lib/stripeServer'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
@@ -41,12 +41,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({
         unconfigured: true,
         stripeConfigured: isStripeConfigured(),
-        allowed: true,
+        allowed: false,
       })
     }
 
     const nurseCount = await countActiveNurses(auth.admin, auth.profile.hospital_id)
     const seats = allowedNurseSeats(subscription)
+
+    let cancelAtPeriodEnd = false
+    let currentPeriodEnd: string | null = null
+    if (subscription.stripe_subscription_id && isStripeConfigured()) {
+      try {
+        const stripeSub = await getStripe().subscriptions.retrieve(subscription.stripe_subscription_id)
+        cancelAtPeriodEnd = Boolean((stripeSub as { cancel_at_period_end?: boolean }).cancel_at_period_end)
+        const anySub = stripeSub as {
+          current_period_end?: number
+          items?: { data?: { current_period_end?: number }[] }
+        }
+        const periodUnix =
+          (typeof anySub.current_period_end === 'number' && anySub.current_period_end) ||
+          anySub.items?.data?.[0]?.current_period_end ||
+          null
+        if (periodUnix) currentPeriodEnd = new Date(periodUnix * 1000).toISOString()
+      } catch (err: any) {
+        console.error('[billing/status] stripe retrieve', err?.message || err)
+      }
+    }
+
     return res.status(200).json({
       hospitalId: subscription.hospital_id,
       status: subscription.status,
@@ -63,6 +84,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       hasStripeCustomer: Boolean(subscription.stripe_customer_id),
       hasStripeSubscription: Boolean(subscription.stripe_subscription_id),
       stripeConfigured: isStripeConfigured(),
+      cancelAtPeriodEnd,
+      currentPeriodEnd,
     })
   } catch (err: any) {
     console.error('[billing/status]', err?.message || err)

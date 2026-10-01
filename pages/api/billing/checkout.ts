@@ -42,24 +42,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
-    const extraSeats = Number.isFinite(extraRequested)
-      ? Math.max(0, Math.floor(extraRequested))
-      : subscription.extra_nurse_seats || 0
-
+    let customerId = subscription.stripe_customer_id
     const stripe = getStripe()
     const prices = stripeRuntimeConfig()
-    let customerId = subscription.stripe_customer_id
 
     if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: auth.profile.email,
-        name: auth.profile.full_name,
-        metadata: {
-          hospital_id: auth.profile.hospital_id,
-          billing_user_id: auth.profile.id,
-        },
-      })
-      customerId = customer.id
+      try {
+        const customer = await stripe.customers.create(
+          {
+            email: auth.profile.email,
+            name: auth.profile.full_name,
+            metadata: {
+              hospital_id: auth.profile.hospital_id,
+              billing_user_id: auth.profile.id,
+            },
+          },
+          { idempotencyKey: `lasso-customer-${auth.profile.hospital_id}` }
+        )
+        customerId = customer.id
+      } catch (err: any) {
+        const listed = await stripe.customers.list({ email: auth.profile.email, limit: 10 })
+        const match = listed.data.find((c) => c.metadata?.hospital_id === auth.profile.hospital_id)
+        if (!match) throw err
+        customerId = match.id
+      }
       const wrote = await auth.admin
         .from('facility_subscriptions')
         .update({
@@ -71,6 +77,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await assertSubscriptionWrite(wrote)
     }
 
+    const existingSubs = await stripe.subscriptions.list({
+      customer: customerId,
+      status: 'all',
+      limit: 100,
+    })
+    const liveSub = existingSubs.data.find((sub) =>
+      sub.status === 'active' ||
+      sub.status === 'trialing' ||
+      sub.status === 'past_due' ||
+      sub.status === 'incomplete' ||
+      sub.status === 'unpaid' ||
+      sub.status === 'paused'
+    )
+    if (liveSub) {
+      return res.status(409).json({
+        error: 'This facility already has a subscription. Use Manage payment method.',
+        needsPortal: true,
+      })
+    }
+
+    const extraSeats = Number.isFinite(extraRequested)
+      ? Math.max(0, Math.floor(extraRequested))
+      : subscription.extra_nurse_seats || 0
+
     const lineItems: { price: string; quantity: number }[] = [
       { price: prices.priceFacility, quantity: 1 },
     ]
@@ -78,24 +108,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       lineItems.push({ price: prices.priceExtraNurse, quantity: extraSeats })
     }
 
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      customer: customerId,
-      client_reference_id: auth.profile.hospital_id,
-      line_items: lineItems,
-      success_url: `${appBaseUrl()}/billing?checkout=success`,
-      cancel_url: `${appBaseUrl()}/billing?checkout=canceled`,
-      metadata: {
-        hospital_id: auth.profile.hospital_id,
-        billing_user_id: auth.profile.id,
-      },
-      subscription_data: {
+    const session = await stripe.checkout.sessions.create(
+      {
+        mode: 'subscription',
+        customer: customerId,
+        client_reference_id: auth.profile.hospital_id,
+        line_items: lineItems,
+        success_url: `${appBaseUrl()}/billing?checkout=success`,
+        cancel_url: `${appBaseUrl()}/billing?checkout=canceled`,
         metadata: {
           hospital_id: auth.profile.hospital_id,
           billing_user_id: auth.profile.id,
         },
+        subscription_data: {
+          metadata: {
+            hospital_id: auth.profile.hospital_id,
+            billing_user_id: auth.profile.id,
+          },
+        },
       },
-    })
+      {
+        idempotencyKey: `lasso-checkout-${auth.profile.hospital_id}-${subscription.status}-${subscription.stripe_subscription_id || 'none'}-${extraSeats}`,
+      }
+    )
 
     return res.status(200).json({ url: session.url })
   } catch (err: any) {

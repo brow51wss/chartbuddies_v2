@@ -35,16 +35,30 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
           return
         }
         if (!onBillingPage && !isPlatformAdmin(profile) && profile.hospital_id) {
+          const billingRedirect = isFacilityPcg(profile) ? '/billing' : '/auth/staff-login?reason=billing'
           const { data: { session } } = await supabase.auth.getSession()
-          if (session?.access_token) {
-            const accessRes = await fetch('/api/billing/access', {
-              headers: { Authorization: `Bearer ${session.access_token}` },
-            })
-            const access = await accessRes.json().catch(() => ({ allowed: true }))
-            if (accessRes.ok && access.allowed === false) {
-              window.location.replace(isFacilityPcg(profile) ? '/billing' : '/auth/staff-login?reason=billing')
-              return
+          if (!session?.access_token) {
+            window.location.replace(billingRedirect)
+            return
+          }
+
+          const checkAccess = async () => {
+            try {
+              const accessRes = await fetch('/api/billing/access', {
+                headers: { Authorization: `Bearer ${session.access_token}` },
+              })
+              const access = await accessRes.json().catch(() => ({ allowed: false }))
+              return accessRes.ok && access.allowed === true
+            } catch {
+              return false
             }
+          }
+
+          let allowed = await checkAccess()
+          if (!allowed) allowed = await checkAccess()
+          if (!allowed) {
+            window.location.replace(billingRedirect)
+            return
           }
         }
         setUserProfile(profile)

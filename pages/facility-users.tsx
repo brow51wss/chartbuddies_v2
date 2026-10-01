@@ -3,7 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import ProtectedRoute from '../components/ProtectedRoute'
-import AppHeader from '../components/AppHeader'
+import AppShellHeader from '../components/AppShellHeader'
 import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile } from '../lib/auth'
 import { INCLUDED_NURSE_SEATS, isNurseSeatRole, seatedNurseIds } from '../lib/facilityBilling'
@@ -43,6 +43,7 @@ function roleLabel(role: string, designation: string | null): string {
 export default function FacilityUsersPage() {
   const router = useRouter()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [facilityName, setFacilityName] = useState('')
   const [caregivers, setCaregivers] = useState<CaregiverTile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -99,6 +100,12 @@ export default function FacilityUsersPage() {
       }
       setUserProfile(profile)
       try {
+        const { data: hospital } = await supabase
+          .from('hospitals')
+          .select('name')
+          .eq('id', profile.hospital_id)
+          .single()
+        setFacilityName(hospital?.name ?? '')
         await loadCaregivers(profile.hospital_id)
         const { data: { session } } = await supabase.auth.getSession()
         if (session?.access_token && profile.role === 'superadmin') {
@@ -276,14 +283,9 @@ export default function FacilityUsersPage() {
       <Head>
         <title>Caregivers | Lasso EHR</title>
       </Head>
-      <AppHeader userProfile={userProfile} />
+      <div className="min-h-screen bg-[#f4f7f7] dark:bg-gray-900">
+      <AppShellHeader userProfile={userProfile} facilityName={facilityName} />
       <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <Link href="/dashboard" className="text-sm text-gray-600 dark:text-gray-400 hover:text-lasso-teal">
-            ← Back to Dashboard
-          </Link>
-        </div>
-
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Caregivers</h1>
         <p className="text-gray-600 dark:text-gray-400 mb-2">
           People who can clock in at this facility. New nurses appear on staff login as a tile. No invite email.
@@ -530,6 +532,7 @@ export default function FacilityUsersPage() {
           </div>
         </div>
       )}
+      </div>
     </ProtectedRoute>
   )
 }

@@ -68,3 +68,7 @@
 |---|---|---|---|
 | 2026-05-23 | initialized | _(pending first Sentinel scan)_ | _(pending verdict)_ |
 | 2026-09-30 | sdk-added | 3 Critical · 44 High · 58 Medium | PARTIAL (Cowork auditor): Stripe not go-live until webhook write checks, duplicate/stale sub handling, fail-open past_due fixed; signature-image unauthenticated PHI proxy, early-access-leads hardcoded code, 6-char password floor FAIL |
+| 2026-09-30 | networking-touched | 3 Critical · 44 High · 57 Medium (+3 Cowork HIGH) | PARTIAL (Cowork auditor): B-2/B-4 PASS, B-3 partial (two-tab race); run 077 before deploy (schema drift fails open); read-only mode controls lost in header swap; add-seat confirm still missing |
+| 2026-09-30 | networking-touched (re-verify) | fixes 1–5 re-checked | PARTIAL (Cowork): 2/3/4/5 PASS, server side of 1 PASS; ProtectedRoute still fails open on /api/billing/access error |
+| 2026-10-01 | networking-touched (re-verify #2) | last billing HIGH + lows | PASS (code, Cowork): ProtectedRoute fails closed; open = refund-vs-credit decision, 077 + Portal runtime checks, non-billing FAILs (signature-image, LAX926, pw min 6) |
+| 2026-10-01 | networking-touched (re-verify #3) | offline billing check | PASS (Cowork): checkAccess try/catch → redirect, no blank page |

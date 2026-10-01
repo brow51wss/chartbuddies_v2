@@ -83,16 +83,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       caller.hospital_id,
       caller.id
     )
-    if (!tableMissing && subscription) {
-      const used = await countActiveNurses(admin, caller.hospital_id)
-      const allowed = allowedNurseSeats(subscription)
-      if (used >= allowed) {
-        return res.status(402).json({
-          error: `This facility already has ${used} of ${allowed} nurse seats. Add a $4.99/month seat on Billing before creating another nurse.`,
-          seatsUsed: used,
-          seatsAllowed: allowed,
-        })
-      }
+    if (tableMissing || !subscription) {
+      return res.status(503).json({ error: 'Billing is not configured. Cannot add a nurse until the facility plan is available.' })
+    }
+    const used = await countActiveNurses(admin, caller.hospital_id)
+    const allowed = allowedNurseSeats(subscription)
+    if (used >= allowed) {
+      return res.status(402).json({
+        error: `This facility already has ${used} of ${allowed} nurse seats. Add a $4.99/month seat on Billing before creating another nurse.`,
+        seatsUsed: used,
+        seatsAllowed: allowed,
+      })
     }
   } catch (err: any) {
     console.error('[staff/create] seat check', err?.message || err)

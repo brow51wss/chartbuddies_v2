@@ -38,8 +38,7 @@ export function isFacilityPcg(profile: { role: string; hospital_id: string | nul
 
 export function isMissingBillingTable(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false
-  const message = (error.message || '').toLowerCase()
-  return error.code === '42P01' || error.code === 'PGRST205' || message.includes('facility_subscriptions')
+  return error.code === '42P01' || error.code === 'PGRST205'
 }
 
 export function allowedNurseSeats(sub: FacilitySubscription): number {

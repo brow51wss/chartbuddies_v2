@@ -55,7 +55,19 @@ async function applySubscription(stripeSub: Stripe.Subscription) {
   const existing = (existingRow as FacilitySubscription | null) ?? null
 
   if (!acceptsIncomingSub(existing, stripeSub.id)) {
-    console.warn('[billing/webhook] ignored event for non-current subscription', stripeSub.id)
+    const liveDuplicate =
+      stripeSub.status === 'active' ||
+      stripeSub.status === 'trialing' ||
+      stripeSub.status === 'past_due' ||
+      stripeSub.status === 'incomplete' ||
+      stripeSub.status === 'unpaid' ||
+      stripeSub.status === 'paused'
+    if (liveDuplicate) {
+      console.error('[billing/webhook] canceling non-current live subscription', stripeSub.id)
+      await getStripe().subscriptions.cancel(stripeSub.id, { prorate: true })
+    } else {
+      console.error('[billing/webhook] ignored event for non-current subscription', stripeSub.id)
+    }
     return
   }
 
