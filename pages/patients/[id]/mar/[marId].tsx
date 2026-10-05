@@ -83,7 +83,7 @@ function InitialsOrSignatureDisplay({
   if (imgSrc) {
     return (
       <>
-        <img
+        <SecureImg
           src={imgSrc}
           alt={variant === 'initials' ? 'Initials' : 'Signature'}
           className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
@@ -112,7 +112,7 @@ function InitialsOrSignatureDisplay({
       const drawnSrc = `/api/signature-image?key=${encodeURIComponent(drawnField.slice(3))}`
       return (
         <>
-          <img
+          <SecureImg
             src={drawnSrc}
             alt={variant === 'initials' ? 'Initials' : 'Signature'}
             className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
@@ -270,6 +270,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { MonthPickerButton } from '../../../../components/MonthPickerButton'
 import { ModuleHeader } from '../../../../components/ModuleHeader'
+import SecureImg from '../../../../components/SecureImg'
 
 /**
  * Do not translate table rows while dragging. Multi-time meds use several `<tr>`s but only one sortable id;
@@ -861,7 +862,6 @@ export default function ViewMARForm() {
   const marFormId = Array.isArray(marId) ? marId[0] : marId
   const patientFormId = Array.isArray(patientId) ? patientId[0] : patientId
   const [marForm, setMarForm] = useState<MARForm | null>(null)
-  const [patientPhoto, setPatientPhoto] = useState<string | null>(null)
   const [medications, setMedications] = useState<MARMedication[]>([])
   /** On-screen MAR grid only; print always uses full `medications`. Multi-select: routine / vitals / PRN chart rows. */
   const [marTableCategoryVisible, setMarTableCategoryVisible] =
@@ -3245,18 +3245,6 @@ export default function ViewMARForm() {
 
       setMarForm(formData)
 
-      // Fetch patient photo separately (not stored on the MAR form snapshot)
-      if (formData?.patient_id) {
-        ;(async () => {
-          try {
-            const p = await rdsGetPatient(formData.patient_id)
-            if (p?.patient_photo) setPatientPhoto(p.patient_photo)
-          } catch {
-            // photo is optional — fail silently
-          }
-        })()
-      }
-
       const sortedMeds = (medsData || []).sort((a: any, b: any) => {
         if (a.display_order != null && b.display_order != null) return a.display_order - b.display_order
         if (a.display_order != null) return -1
@@ -3726,7 +3714,6 @@ export default function ViewMARForm() {
                     created_at: '',
                     diagnosis: marForm.diagnosis ?? null,
                     sex: (marForm.sex as PatientSummaryCardPatient['sex']) ?? null,
-                    patient_photo: patientPhoto,
                   }}
                   progressNotesHref={
                     marForm.patient_id && marForm.month_year
@@ -7049,7 +7036,7 @@ export default function ViewMARForm() {
                                     const bgClass = avatarBgs[(val.charCodeAt(0) + (val.charCodeAt(1) || 0)) % avatarBgs.length]
                                     if (isImage) {
                                       const src = val.startsWith('s3:') ? `/api/signature-image?key=${encodeURIComponent(val.slice(3))}` : val
-                                      return <img src={src} alt="initials" className="h-6 w-6 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
+                                      return <SecureImg src={src} alt="initials" className="h-6 w-6 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
                                     }
                                     return (
                                       <span className={`inline-flex items-center justify-center h-6 w-6 rounded-full ${bgClass} text-white text-[10px] font-bold shrink-0 select-none`}>

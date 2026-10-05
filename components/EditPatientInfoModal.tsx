@@ -9,7 +9,6 @@ import {
   PatientProfileFormFields,
   type PatientProfileFormValues,
 } from './PatientProfileFormFields'
-import { PatientPhotoCaptureField } from './PatientPhotoCaptureField'
 import {
   DEFAULT_PATIENT_STATE,
   formatPatientPhoneInput,
@@ -39,7 +38,6 @@ export type PatientProfileUpdatePayload = {
   home_phone: string | null
   email: string | null
   admission_date: string | null
-  patient_photo?: string | null
 }
 
 export type EditPatientInfoSaveArgs = {
@@ -89,8 +87,7 @@ function emptyPatientFormValues(): PatientProfileFormValues {
 function buildPatientProfileUpdatePayload(
   form: PatientProfileFormValues,
   patientName: string,
-  facilityDisplayName: string | null | undefined,
-  patientPhoto: string | null
+  facilityDisplayName: string | null | undefined
 ): PatientProfileUpdatePayload {
   const payload: PatientProfileUpdatePayload = {
     patient_name: patientName,
@@ -109,12 +106,6 @@ function buildPatientProfileUpdatePayload(
     home_phone: form.homePhone.trim() || null,
     email: form.email.trim() || null,
     admission_date: form.dateOfAdmission || null,
-  }
-
-  // Only include patient_photo when it's a new s3: key or an explicit clear (null).
-  // Never re-send an existing data URL — it's already in the DB and would exceed WAF limits.
-  if (patientPhoto === null || (typeof patientPhoto === 'string' && patientPhoto.startsWith('s3:'))) {
-    payload.patient_photo = patientPhoto
   }
 
   return payload
@@ -136,7 +127,6 @@ export default function EditPatientInfoModal({
 }: Props) {
   const [form, setForm] = useState<PatientProfileFormValues | null>(null)
   const [ageDisplay, setAgeDisplay] = useState('')
-  const [patientPhoto, setPatientPhoto] = useState<string | null>(null)
   const [step, setStep] = useState<1 | 2>(1)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -150,7 +140,6 @@ export default function EditPatientInfoModal({
   const resetState = useCallback(() => {
     setForm(null)
     setAgeDisplay('')
-    setPatientPhoto(null)
     setStep(1)
     setLoading(false)
     setSaving(false)
@@ -178,7 +167,6 @@ export default function EditPatientInfoModal({
       setModalError('')
       setForm(emptyPatientFormValues())
       setAgeDisplay('')
-      setPatientPhoto(null)
       setStep(1)
       setFieldErrors({})
       setHighlightedField(null)
@@ -197,7 +185,6 @@ export default function EditPatientInfoModal({
     setModalError('')
     setForm(null)
     setAgeDisplay('')
-    setPatientPhoto(null)
     setStep(1)
     setFieldErrors({})
     setHighlightedField(null)
@@ -211,7 +198,6 @@ export default function EditPatientInfoModal({
 
         const patient = data as Patient
         setForm(patientToProfileFormValues(patient))
-        setPatientPhoto(patient.patient_photo ?? null)
         setAgeDisplay(computeAgeFromISODate(patient.date_of_birth?.slice(0, 10) || ''))
       } catch (err: unknown) {
         if (cancelled) return
@@ -320,7 +306,7 @@ export default function EditPatientInfoModal({
       return
     }
 
-    const payload = buildPatientProfileUpdatePayload(form, patientName, facilityDisplayName, patientPhoto)
+    const payload = buildPatientProfileUpdatePayload(form, patientName, facilityDisplayName)
     saveInFlightRef.current = true
     setSaving(true)
     setModalError('')
@@ -393,17 +379,6 @@ export default function EditPatientInfoModal({
             <p className="text-sm text-gray-600 dark:text-gray-300">{loadingText}</p>
           ) : form ? (
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
-              {mode === 'edit' && patientId && (
-                <aside className="mx-auto shrink-0 lg:mx-0 lg:pt-1">
-                  <PatientPhotoCaptureField
-                    patientId={patientId}
-                    value={patientPhoto}
-                    onChange={setPatientPhoto}
-                    disabled={saving}
-                    readOnly={readOnly}
-                  />
-                </aside>
-              )}
               <div className="min-w-0 flex-1">
                 <PatientProfileFormFields
                   values={form}

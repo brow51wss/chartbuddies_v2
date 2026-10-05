@@ -164,23 +164,6 @@ export default function PatientStickyBar({
             )}
 
             <div className="mb-5 flex flex-col gap-4 rounded-xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center">
-              {patientDetails?.patient_photo ? (
-                <img
-                  src={
-                    patientDetails.patient_photo.startsWith('s3:')
-                      ? `/api/signature-image?key=${encodeURIComponent(patientDetails.patient_photo.slice(3))}`
-                      : patientDetails.patient_photo
-                  }
-                  alt={`${resolvedPatientName || 'Patient'} photo`}
-                  className="h-24 w-24 shrink-0 rounded-full border border-white/20 object-cover"
-                />
-              ) : (
-                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/60">
-                  <svg className="h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0ZM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7Z" />
-                  </svg>
-                </div>
-              )}
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-wide text-lasso-blue/90">Full Name</p>
                 <p className="break-words text-2xl font-semibold text-white">{resolvedPatientName || 'Unknown Patient'}</p>

@@ -34,6 +34,7 @@ import type { UserProfile, Patient } from '../../../../types/auth'
 import type { ProgressNoteEntry, ProgressNoteMonthlySummary } from '../../../../types/progress-notes'
 import { MonthPickerButton } from '../../../../components/MonthPickerButton'
 import { ModuleHeader } from '../../../../components/ModuleHeader'
+import SecureImg from '../../../../components/SecureImg'
 
 const SIGNATURE_FONTS_LINK_ID = 'progress-notes-signature-fonts'
 function ensureSignatureFontsLoaded(font: string) {
@@ -89,7 +90,7 @@ function InitialsOrSignatureDisplay({
   if (imgSrc) {
     return (
       <>
-        <img
+        <SecureImg
           src={imgSrc}
           alt={variant === 'initials' ? 'Initials' : 'Signature'}
           className={`lasso-signature-mark lasso-signature-mark--image lasso-signature-mark--${variant}`}
@@ -898,7 +899,6 @@ export default function ProgressNotesPage() {
                     created_at: patient.created_at ?? '',
                     diagnosis: patient.diagnosis ?? null,
                     sex: patient.sex ?? null,
-                    patient_photo: patient.patient_photo ?? null,
                   }}
                   marHref={
                     latestMarFormId && patientId

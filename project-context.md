@@ -72,3 +72,5 @@
 | 2026-09-30 | networking-touched (re-verify) | fixes 1–5 re-checked | PARTIAL (Cowork): 2/3/4/5 PASS, server side of 1 PASS; ProtectedRoute still fails open on /api/billing/access error |
 | 2026-10-01 | networking-touched (re-verify #2) | last billing HIGH + lows | PASS (code, Cowork): ProtectedRoute fails closed; open = refund-vs-credit decision, 077 + Portal runtime checks, non-billing FAILs (signature-image, LAX926, pw min 6) |
 | 2026-10-01 | networking-touched (re-verify #3) | offline billing check | PASS (Cowork): checkAccess try/catch → redirect, no blank page |
+| 2026-10-05 | networking-touched | 3 Critical · 40 High · 52 Medium (+3 Cowork HIGH) | PARTIAL (Cowork): signature-image auth PASS; push OK after 078 drop of photo-capture DB functions + prod key-format check; next: signature impersonation trigger, facility-history authz |
+| 2026-10-05 | networking-touched (re-verify) | — | PASS (Cowork): 3a–3d verified on disk, cross-facility branch correct, 078 OK; push to main OK. Open: HIGH #2 impersonation, membership history, patient_photo column/S3 cleanup |

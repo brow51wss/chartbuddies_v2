@@ -34,7 +34,6 @@ interface DeletedPatient {
   diagnosis: string | null
   created_at: string
   deleted_at: string
-  patient_photo?: string | null
   home_phone?: string | null
 }
 

@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         'patient_name','record_number','date_of_birth','sex','diagnosis','diet',
         'allergies','physician_name','physician_phone','facility_name',
         'street_address','city','state','zip_code','home_phone','email',
-        'admission_date','patient_photo','deleted_at',
+        'admission_date','deleted_at',
       ]
       const sets: string[] = []
       const params: any[] = []

@@ -41,9 +41,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           hospital_id, patient_name, record_number, date_of_birth, sex,
           diagnosis, diet, allergies, physician_name, physician_phone,
           facility_name, street_address, city, state, zip_code,
-          home_phone, email, admission_date, patient_photo, created_by
+          home_phone, email, admission_date, created_by
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19
         ) RETURNING *`,
         [
           hospitalId, body.patient_name, body.record_number, body.date_of_birth, body.sex,
@@ -52,7 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           body.facility_name ?? null, body.street_address ?? null,
           body.city ?? null, body.state ?? null, body.zip_code ?? null,
           body.home_phone ?? null, body.email ?? null,
-          body.admission_date ?? null, body.patient_photo ?? null,
+          body.admission_date ?? null,
           caller.userId,
         ],
       )

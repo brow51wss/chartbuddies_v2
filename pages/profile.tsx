@@ -7,6 +7,7 @@ import AppHeader from '../components/AppHeader'
 import { supabase } from '../lib/supabase'
 import { getCurrentUserProfile, signOut } from '../lib/auth'
 import { useReadOnly } from '../contexts/ReadOnlyContext'
+import SecureImg from '../components/SecureImg'
 import type { UserProfile } from '../types/auth'
 
 export default function Profile() {
@@ -267,7 +268,7 @@ export default function Profile() {
                       return imgSrc ? (
                         <div>
                           <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current signature</span>
-                          <img
+                          <SecureImg
                             src={imgSrc}
                             alt="Your signature"
                             className="max-h-14 rounded bg-white dark:bg-gray-700"
@@ -295,7 +296,7 @@ export default function Profile() {
                       return imgSrc ? (
                         <div>
                           <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Current initials</span>
-                          <img
+                          <SecureImg
                             src={imgSrc}
                             alt="Your initials"
                             className="max-h-10 rounded bg-white dark:bg-gray-700"

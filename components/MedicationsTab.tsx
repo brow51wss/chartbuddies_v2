@@ -29,6 +29,7 @@ import {
 import { isMarRowActiveOnDayColumn } from '../lib/marMissedDocumentation'
 import { formatCalendarDate, parseLocalDateFromYMD, ymdFromDateInput } from '../lib/calendarDate'
 import NumericDateInput from './NumericDateInput'
+import SecureImg from './SecureImg'
 
 type MarView = 'yesterday' | 'today' | 'tomorrow' | 'week' | 'month'
 
@@ -159,7 +160,7 @@ function CellAvatar({ value }: { value: string | null | undefined }) {
     <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-lasso-teal text-white font-extrabold leading-none overflow-hidden"
       style={{ fontSize: '8px' }}>
       {imgSrc ? (
-        <img src={imgSrc} alt="" className="w-full h-full object-cover" />
+        <SecureImg src={imgSrc} alt="" className="w-full h-full object-cover" />
       ) : (
         label
       )}

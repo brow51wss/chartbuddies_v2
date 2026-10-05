@@ -2,14 +2,10 @@ import React from 'react'
 import type { Patient } from '../types/auth'
 import { formatCalendarDate } from '../lib/calendarDate'
 
-/** Public URL when `patient_photo` is empty (sync with `public/images/`). */
-export const PATIENT_SUMMARY_PHOTO_PLACEHOLDER = '/images/patient-photo-placeholder.png'
-
 export type PatientSummaryCardPatient = Pick<
   Patient,
   'patient_name' | 'date_of_birth' | 'created_at' | 'diagnosis'
 > & {
-  patient_photo?: string | null
   sex?: 'Male' | 'Female' | 'Other' | null
   home_phone?: string | null
 }
@@ -52,19 +48,12 @@ export function PatientSummaryCard({
   'aria-label': ariaLabel,
   className = '',
 }: Props) {
-  const rawPhoto = patient.patient_photo?.trim()
-  const photoSrc = rawPhoto
-    ? rawPhoto.startsWith('s3:')
-      ? `/api/signature-image?key=${encodeURIComponent(rawPhoto.slice(3))}`
-      : rawPhoto
-    : PATIENT_SUMMARY_PHOTO_PLACEHOLDER
-
   const nameParts = patient.patient_name.trim().split(/\s+/)
   const firstName = nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : nameParts[0]
   const lastName  = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
 
   const nameClass =
-    'mt-3 w-full text-center text-sm font-normal leading-snug text-gray-900 dark:text-white'
+    'w-full text-center text-sm font-normal leading-snug text-gray-900 dark:text-white'
 
   const nameContent = (
     <>
@@ -75,20 +64,16 @@ export function PatientSummaryCard({
 
   const inner = (
     <>
-      <div className="flex w-full flex-col items-center">
-        <img
-          src={photoSrc}
-          alt={showPatientName ? '' : patient.patient_name}
-          className="h-[100px] w-[100px] shrink-0 rounded-full object-cover border border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-700"
-        />
-        {showPatientName &&
-          (nameHeading === 'h2' ? (
+      {showPatientName && (
+        <div className="flex w-full flex-col items-center">
+          {nameHeading === 'h2' ? (
             <h2 className={nameClass}>{nameContent}</h2>
           ) : (
             <h3 className={nameClass}>{nameContent}</h3>
-          ))}
-      </div>
-      <dl className={`w-full divide-y divide-gray-100 dark:divide-gray-700 text-sm ${footer != null ? 'flex-1' : ''} ${showPatientName ? 'mt-4' : 'mt-3'}`}>
+          )}
+        </div>
+      )}
+      <dl className={`w-full divide-y divide-gray-100 dark:divide-gray-700 text-sm ${footer != null ? 'flex-1' : ''} ${showPatientName ? 'mt-4' : ''}`}>
         {showDob && (
           <div className="flex items-center justify-between py-2">
             <dt className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
