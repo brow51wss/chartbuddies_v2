@@ -13,10 +13,24 @@ export const config = {
   api: { bodyParser: false },
 }
 
+/**
+ * Stripe events are normally well under 100 KB. Do not rely on the AWS WAF size rule here: it was
+ * blocking legitimate Stripe events (>~8 KB) and is being switched to Count (runbook L-26). This
+ * app-level cap is the control: it rejects oversized bodies before reading them into memory,
+ * and before any signature check.
+ */
+const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024
+
+class WebhookBodyTooLargeError extends Error {}
+
 async function rawBody(req: NextApiRequest): Promise<Buffer> {
   const chunks: Buffer[] = []
+  let total = 0
   for await (const chunk of req) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+    const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
+    total += buf.length
+    if (total > MAX_WEBHOOK_BODY_BYTES) throw new WebhookBodyTooLargeError('Webhook body too large')
+    chunks.push(buf)
   }
   return Buffer.concat(chunks)
 }
@@ -124,6 +138,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     event = getStripe().webhooks.constructEvent(body, signature, webhookSecret)
   } catch (err: any) {
+    if (err instanceof WebhookBodyTooLargeError) {
+      console.error('[billing/webhook] body too large')
+      return res.status(413).json({ error: 'Payload too large' })
+    }
     console.error('[billing/webhook] signature', err?.message || err)
     return res.status(400).json({ error: 'Invalid signature' })
   }

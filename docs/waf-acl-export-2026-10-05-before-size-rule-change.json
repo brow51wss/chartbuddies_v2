@@ -1,0 +1,114 @@
+{
+  "Name": "CreatedByAmplify-d5y00cjggcy5e-75aeccec-77cf-4102-81f3-43593d76c35e",
+  "Id": "493bc630-cf67-479d-8e03-83a0578eb504",
+  "ARN": "arn:aws:wafv2:us-east-1:<AWS_ACCOUNT_ID>:global/webacl/CreatedByAmplify-d5y00cjggcy5e-75aeccec-77cf-4102-81f3-43593d76c35e/493bc630-cf67-479d-8e03-83a0578eb504",
+  "DefaultAction": {
+    "Allow": {}
+  },
+  "Description": "WebACL for Amplify App d5y00cjggcy5e",
+  "Rules": [
+    {
+      "Name": "AWS-AWSManagedRulesAmazonIpReputationList",
+      "Priority": 0,
+      "Statement": {
+        "ManagedRuleGroupStatement": {
+          "VendorName": "AWS",
+          "Name": "AWSManagedRulesAmazonIpReputationList"
+        }
+      },
+      "OverrideAction": {
+        "None": {}
+      },
+      "VisibilityConfig": {
+        "SampledRequestsEnabled": true,
+        "CloudWatchMetricsEnabled": true,
+        "MetricName": "AWS-AWSManagedRulesAmazonIpReputationList"
+      }
+    },
+    {
+      "Name": "AWS-AWSManagedRulesCommonRuleSet",
+      "Priority": 1,
+      "Statement": {
+        "ManagedRuleGroupStatement": {
+          "VendorName": "AWS",
+          "Name": "AWSManagedRulesCommonRuleSet",
+          "ScopeDownStatement": {
+            "NotStatement": {
+              "Statement": {
+                "ByteMatchStatement": {
+                  "SearchString": "/api/billing/webhook",
+                  "FieldToMatch": {
+                    "UriPath": {}
+                  },
+                  "TextTransformations": [
+                    {
+                      "Priority": 0,
+                      "Type": "NONE"
+                    }
+                  ],
+                  "PositionalConstraint": "EXACTLY"
+                }
+              }
+            }
+          }
+        }
+      },
+      "OverrideAction": {
+        "None": {}
+      },
+      "VisibilityConfig": {
+        "SampledRequestsEnabled": true,
+        "CloudWatchMetricsEnabled": true,
+        "MetricName": "AWS-AWSManagedRulesCommonRuleSet"
+      }
+    },
+    {
+      "Name": "AWS-AWSManagedRulesKnownBadInputsRuleSet",
+      "Priority": 2,
+      "Statement": {
+        "ManagedRuleGroupStatement": {
+          "VendorName": "AWS",
+          "Name": "AWSManagedRulesKnownBadInputsRuleSet"
+        }
+      },
+      "OverrideAction": {
+        "None": {}
+      },
+      "VisibilityConfig": {
+        "SampledRequestsEnabled": true,
+        "CloudWatchMetricsEnabled": true,
+        "MetricName": "AWS-AWSManagedRulesKnownBadInputsRuleSet"
+      }
+    },
+    {
+      "Name": "AWS-AWSManagedRulesSQLiRuleSet",
+      "Priority": 3,
+      "Statement": {
+        "ManagedRuleGroupStatement": {
+          "VendorName": "AWS",
+          "Name": "AWSManagedRulesSQLiRuleSet"
+        }
+      },
+      "OverrideAction": {
+        "None": {}
+      },
+      "VisibilityConfig": {
+        "SampledRequestsEnabled": true,
+        "CloudWatchMetricsEnabled": true,
+        "MetricName": "AWS-AWSManagedRulesSQLiRuleSet"
+      }
+    }
+  ],
+  "VisibilityConfig": {
+    "SampledRequestsEnabled": true,
+    "CloudWatchMetricsEnabled": true,
+    "MetricName": "Amplify-d5y00cjggcy5e"
+  },
+  "Capacity": 1127,
+  "ManagedByFirewallManager": false,
+  "LabelNamespace": "awswaf:<AWS_ACCOUNT_ID>:webacl:CreatedByAmplify-d5y00cjggcy5e-75aeccec-77cf-4102-81f3-43593d76c35e:",
+  "RetrofittedByFirewallManager": false,
+  "OnSourceDDoSProtectionConfig": {
+    "ALBLowReputationMode": "ACTIVE_UNDER_DDOS"
+  }
+}
