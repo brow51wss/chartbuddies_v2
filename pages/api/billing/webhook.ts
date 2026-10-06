@@ -68,6 +68,14 @@ async function applySubscription(stripeSub: Stripe.Subscription) {
   if (loadError) throw loadError
   const existing = (existingRow as FacilitySubscription | null) ?? null
 
+  // Not one of our facilities: no hospital_id on the subscription and no row for this customer.
+  // Answer 200 so Stripe stops retrying. A subscription that DOES carry a hospital_id but has no
+  // row is a real data problem and still falls through to the write below (500, Stripe retries).
+  if (!existing && !hospitalId) {
+    console.error('[billing/webhook] ignored event for unknown customer', customerId)
+    return
+  }
+
   if (!acceptsIncomingSub(existing, stripeSub.id)) {
     const liveDuplicate =
       stripeSub.status === 'active' ||
